@@ -35,6 +35,7 @@ Rules:
 - When building one of the linked projects, work inside `repos/<name>` and use that project's own build and test commands.
 - Don't edit `.specify/templates` or `.specify/scripts` unless asked. Update them with `specify integration upgrade`.
 - `plan.md` must name the target repo(s) (`repos/<name>`). `/speckit-implement` writes code only inside those submodules, never in the metarepo.
+- For backend work, the "Project Structure" section of `plan.md` must use the layout and import boundaries in `project-rules/backend-architecture.md`. Don't invent a different structure.
 
 ## Pushing code and opening PRs
 
