@@ -1,11 +1,11 @@
 ---
 name: clone-repo
-description: Add one or more git repositories (by URL) to the metarepo as git submodules under repos/. Use when the user gives a GitHub/GitLab/Azure DevOps/Bitbucket repo URL and wants it added, linked, pulled in, or made available in this workspace.
+description: Clone one or more git repositories (by URL) into the metarepo under repos/. Use when the user gives a GitHub/GitLab/Azure DevOps/Bitbucket repo URL and wants it added, linked, pulled in, or made available in this workspace.
 ---
 
-# Add repo as a submodule under `repos/`
+# Clone a repo into `repos/`
 
-Repositories are linked as **git submodules** at `repos/<repo-name>`. The metarepo records only the URL (in `.gitmodules`) and the pinned commit, not the repo's files.
+Linked repositories are **plain git clones** at `repos/<repo-name>`. `repos/*` is gitignored, so the metarepo doesn't track them; each clone keeps its own history and `origin`.
 
 ## Steps
 
@@ -16,18 +16,18 @@ Repositories are linked as **git submodules** at `repos/<repo-name>`. The metare
    skills/clone-repo/clone-repo.sh <git-url> [folder-name]
    ```
 
-   If the submodule is already registered, the script runs `git submodule update --init` for it instead.
-3. Tell the user the path (`repos/<name>`) and that `.gitmodules` plus `repos/<name>` are staged and ready to commit. Commit only if the user asks.
+   If `repos/<name>` is already a clone of that URL, the script runs `git fetch` instead.
+3. Tell the user the path (`repos/<name>`). There's nothing to commit in the metarepo.
 
 ## Related commands
 
-- Fresh checkout of the metarepo: `git submodule update --init --recursive`
-- Move every submodule to its latest remote commit: `git submodule update --remote`
-- Remove a submodule (ask first): `git submodule deinit -f repos/<name> && git rm -f repos/<name>`
+- Fresh checkout of the metarepo: re-run the script for each project listed in `README.md` ("Projects governed by this repo").
+- Update a clone: `git -C repos/<name> pull --ff-only`
+- Remove a clone (ask first): `rm -rf repos/<name>`
 
 ## Rules
 
-- Never add submodules anywhere other than `repos/`.
+- Never clone anywhere other than `repos/`.
 - Don't put credentials in URLs; rely on the user's existing git auth (SSH keys / credential manager). If auth fails, tell the user rather than asking for tokens.
 - Never delete or force-replace an existing folder; ask the user first.
 - Use the folder-name argument only when two repos share the same name.

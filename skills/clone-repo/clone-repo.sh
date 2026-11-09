@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Add a git repository as a submodule at <metarepo>/repos/<name>.
+# Clone a git repository into <metarepo>/repos/<name> (a plain local clone, ignored by the metarepo).
 # Usage: clone-repo.sh <git-url> [folder-name]
-# If the submodule is already registered, it is initialised/updated instead.
+# If the folder is already a clone of the same URL, it fetches the latest changes instead.
 set -euo pipefail
 
 url="${1:-}"
@@ -25,13 +25,16 @@ case "$name" in
   ""|.|..|*/*) echo "Error: invalid folder name '$name'" >&2; exit 2 ;;
 esac
 
-path="repos/$name"
-if git -C "$root" config -f .gitmodules --get "submodule.$path.url" >/dev/null 2>&1; then
-  echo "Submodule already registered: $path — initialising/updating"
-  git -C "$root" submodule update --init -- "$path"
-elif [ -e "$root/$path" ]; then
-  echo "Error: $root/$path exists but is not a registered submodule" >&2; exit 1
+dir="$root/repos/$name"
+if [ -e "$dir/.git" ]; then
+  existing="$(git -C "$dir" remote get-url origin 2>/dev/null || true)"
+  [ "${existing%.git}" = "${url%.git}" ] \
+    || { echo "Error: $dir is already a clone of '$existing', not '$url'" >&2; exit 1; }
+  echo "Already cloned: repos/$name — fetching latest"
+  git -C "$dir" fetch origin --prune
+elif [ -e "$dir" ]; then
+  echo "Error: $dir exists but is not a git repository" >&2; exit 1
 else
-  git -C "$root" submodule add -- "$url" "$path"
+  git clone -- "$url" "$dir"
 fi
-echo "Ready: $root/$path (commit .gitmodules and $path to record it)"
+echo "Ready: $dir"

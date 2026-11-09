@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Branch, commit, push and open a PR for changes inside a linked submodule (repos/<name>).
+# Branch, commit, push and open a PR for changes inside a linked repository clone (repos/<name>).
 #
 # Usage:
 #   create-pr.sh <repo-name> --branch <branch> --message <commit-msg>
 #                [--title <pr-title>] [--body-file <file>] [--base main] [--draft] [--no-pr]
 #
-# - Works only on submodules registered under repos/ in .gitmodules.
-# - Pushes to that submodule's own `origin`, so code always lands in the right repository.
+# - Works only on git clones under repos/ (created with skills/clone-repo/clone-repo.sh).
+# - Pushes to that repository's own `origin`, so code always lands in the right repository.
 # - Never pushes to the base branch and never force-pushes.
 set -euo pipefail
 
@@ -36,10 +36,9 @@ case "$body_file" in ""|/*) ;; *) body_file="$PWD/$body_file" ;; esac
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 root="$(cd "$script_dir/../.." && pwd -P)"
 path="repos/$name"
-git -C "$root" config -f "$root/.gitmodules" --get "submodule.$path.url" >/dev/null 2>&1 \
-  || die "$path is not a registered submodule (add it with skills/clone-repo/clone-repo.sh)"
+case "$name" in ""|.|..|*/*) die "invalid repo name: $name" ;; esac
 dir="$root/$path"
-[ -e "$dir/.git" ] || die "$path is not initialised (run: git submodule update --init $path)"
+[ -e "$dir/.git" ] || die "$path is not a git clone (add it with skills/clone-repo/clone-repo.sh <git-url>)"
 cd "$dir"
 
 remote_url="$(git remote get-url origin)"

@@ -12,20 +12,20 @@ Central store for the AI-assisted development assets shared by the Benefit proje
 
 ## Projects governed by this repo
 
-- [benefit-fe](https://github.com/OWNER/benefit-fe) — React frontend
-- [benefit-be](https://github.com/OWNER/benefit-be) — Python backend
+- [benefit-fe](https://github.com/elinasarvari/benefit-fe) — React frontend
+- [benefit-be](https://github.com/elinasarvari/benefit-be) — Python backend
 
 Each project's `CLAUDE.md` points back to the rules in `project-rules/`.
 
 ## Linked repositories
 
-Project repos are git submodules under `repos/`. Ask Claude Code or GitHub Copilot to "add <url>", or run directly:
+Project repos are plain git clones under `repos/` (gitignored, so the metarepo doesn't track them). Ask Claude Code or GitHub Copilot to "add <url>", or run directly:
 
 ```bash
-skills/clone-repo/clone-repo.sh https://github.com/OWNER/benefit-fe.git
+skills/clone-repo/clone-repo.sh https://github.com/elinasarvari/benefit-fe.git
 ```
 
-After cloning this metarepo, fetch them with `git submodule update --init --recursive`.
+After cloning this metarepo, run the script once for each project listed above.
 
 `.claude/skills` and `.github/skills` are symlinks to `skills/`, so both tools discover the same skills.
 
@@ -37,4 +37,4 @@ Code generated with Spec Kit is written inside `repos/<name>`. To ship it, ask t
 skills/create-pr/create-pr.sh benefit-fe --branch feature/001-login --message "feat(login): add login page" --title "feat(login): add login page"
 ```
 
-This branches from `origin/main` in that submodule, commits, pushes to the submodule's own remote and opens a PR against `main` (requires `gh auth login`).
+This branches from `origin/main` in that clone, commits, pushes to the clone's own remote and opens a PR against `main` (requires `gh auth login`).

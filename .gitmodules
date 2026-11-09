@@ -1,6 +1,0 @@
-[submodule "repos/benefit-be"]
-	path = repos/benefit-be
-	url = https://github.com/elinasarvari/benefit-be.git
-[submodule "repos/benefit-fe"]
-	path = repos/benefit-fe
-	url = https://github.com/elinasarvari/benefit-fe.git

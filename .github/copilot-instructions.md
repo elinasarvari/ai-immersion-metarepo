@@ -4,15 +4,15 @@ Central store for shared AI-assisted development assets (see README.md for folde
 
 ## Linked repositories (`repos/`)
 
-- External repositories are linked as **git submodules** at `repos/<repo-name>`. The metarepo records only the URL and pinned commit (`.gitmodules`), not their files.
+- External repositories are **plain git clones** at `repos/<repo-name>`. `repos/*` is gitignored, so the metarepo doesn't track them.
 - When the user gives one or more repo URLs to add, link or pull in, use the **clone-repo** skill (`skills/clone-repo/SKILL.md`):
   ```bash
   skills/clone-repo/clone-repo.sh <git-url> [folder-name]
   ```
-  If the submodule is already registered, the script initialises/updates it instead.
-- After a fresh checkout of the metarepo, run `git submodule update --init --recursive` to fetch them.
-- Never add submodules outside `repos/`, never embed credentials in URLs, and never remove a submodule without asking.
-- When working inside a linked repo, follow that repo's own `CLAUDE.md` / rules plus the matching file in `project-rules/`. Commits for that project are made inside `repos/<name>`; then commit the updated pointer in the metarepo.
+  If the folder is already a clone of that URL, the script fetches the latest changes instead.
+- After a fresh checkout of the metarepo, run the script once for each project listed in README.md.
+- Never clone outside `repos/`, never embed credentials in URLs, and never delete a clone without asking.
+- When working inside a linked repo, follow that repo's own `CLAUDE.md` / rules plus the matching file in `project-rules/`. Commits for that project are made inside `repos/<name>`; the metarepo has nothing to commit for them.
 
 ## Spec-driven development (GitHub Spec Kit)
 
@@ -34,7 +34,7 @@ Rules:
 - Run the `.specify/scripts/bash/*.sh` scripts exactly as the skills say. Don't create feature folders by hand.
 - When building one of the linked projects, work inside `repos/<name>` and use that project's own build and test commands.
 - Don't edit `.specify/templates` or `.specify/scripts` unless asked. Update them with `specify integration upgrade`.
-- `plan.md` must name the target repo(s) (`repos/<name>`). `/speckit-implement` writes code only inside those submodules, never in the metarepo.
+- `plan.md` must name the target repo(s) (`repos/<name>`). `/speckit-implement` writes code only inside those clones, never in the metarepo.
 - For backend work, the "Project Structure" section of `plan.md` must use the layout and import boundaries in `project-rules/backend-architecture.md`. Don't invent a different structure.
 
 ## Pushing code and opening PRs
@@ -46,10 +46,10 @@ skills/create-pr/create-pr.sh <repo-name> --branch feature/<NNN-feature> --messa
   --title "<pr title>" --body-file <pr-body.md> [--draft]
 ```
 
-- It runs inside `repos/<name>` and pushes to that submodule's own `origin`, then opens a PR against `main` with `gh` (requires `gh auth login`).
+- It runs inside `repos/<name>` and pushes to that clone's own `origin`, then opens a PR against `main` with `gh` (requires `gh auth login`).
 - Branch name = Spec Kit feature folder name with a type prefix (`feature/003-user-login`). Use the same branch in every repo the feature touches, with one PR per repo, and link the PRs to each other.
 - Confirm the repo, branch, files and PR title with the user before pushing. Never push to `main`, force-push or skip hooks.
-- The metarepo commits only `specs/` and, after the PRs merge, the updated submodule pointer (`git submodule update --remote repos/<name>`).
+- The metarepo commits only `specs/`. After the PRs merge, refresh each clone with `git -C repos/<name> pull --ff-only` on `main`.
 
 ## Skills
 
