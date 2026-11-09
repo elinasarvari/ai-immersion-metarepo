@@ -11,10 +11,11 @@ Context for a new Claude Code session started in this repo. Start by reading thi
 - A second completeness review added feature 009 (delivery factory and demo readiness) and closed
   gaps in 000–008 with defaults. The team confirms or overrules them in PR review: see "Spec
   review round 2" in `specs/README.md`.
-- The team pages (pitch, tech stack, build process) predate round 2: they still show specs
-  000–008, constitution v1.3.0, a policy filter by date and "8–10 rules" (the spec has 6).
-- PR #2 (`feature/project-rules`) changes `project-rules/testing.md`; check its test naming
-  against constitution Principle V (`test_FR_NNN_nn_...`) before merging.
+- The four team pages were updated for round 2 (specs 000–009, constitution v1.4.1, one
+  workflow type, delivery factory in the demo).
+- `project-rules/testing.md` is being changed by a teammate in PR #2 (`feature/project-rules`).
+  Don't edit it; its test-naming style differs from constitution Principle V
+  (`test_FR_NNN_nn_...`), which the PR #2 author is aware of.
 - Not started: submodules `repos/benefit-be` and `repos/benefit-fe` (README still has `OWNER`
   placeholders), `/speckit-plan` for any feature, the Day 1 contracts PR.
 
