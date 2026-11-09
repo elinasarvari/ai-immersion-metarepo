@@ -1,6 +1,2 @@
 .DS_Store
 .env
-
-# cloned repositories (keep the folder)
-repos/*
-!repos/.gitkeep

@@ -17,12 +17,24 @@ Central store for the AI-assisted development assets shared by the Benefit proje
 
 Each project's `CLAUDE.md` points back to the rules in `project-rules/`.
 
-## Cloning repositories
+## Linked repositories
 
-Cloned repos live in `repos/` (git-ignored). Ask Claude Code or GitHub Copilot to "clone <url>", or run directly:
+Project repos are git submodules under `repos/`. Ask Claude Code or GitHub Copilot to "add <url>", or run directly:
 
 ```bash
 skills/clone-repo/clone-repo.sh https://github.com/OWNER/benefit-fe.git
 ```
 
+After cloning this metarepo, fetch them with `git submodule update --init --recursive`.
+
 `.claude/skills` and `.github/skills` are symlinks to `skills/`, so both tools discover the same skills.
+
+## Pushing changes and opening PRs
+
+Code generated with Spec Kit is written inside `repos/<name>`. To ship it, ask the agent to "create a PR", or run:
+
+```bash
+skills/create-pr/create-pr.sh benefit-fe --branch feature/001-login --message "feat(login): add login page" --title "feat(login): add login page"
+```
+
+This branches from `origin/main` in that submodule, commits, pushes to the submodule's own remote and opens a PR against `main` (requires `gh auth login`).

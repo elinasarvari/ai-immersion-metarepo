@@ -3,3 +3,10 @@
 - TypeScript strict mode; no `any` without a comment.
 - Co-locate tests (`Component.test.tsx`) using Vitest + Testing Library.
 - Data fetching lives in `src/api/`; components never call `fetch` directly.
+- Prefer React 19 Actions (`useActionState`, `useFormStatus`, `useOptimistic`) over manual form state for submissions.
+- Use the `use()` hook with Suspense boundaries for async data instead of manual loading flags.
+- Pass `ref` directly as a prop; don't wrap components in `forwardRef`.
+- Mark Client Components explicitly with `'use client'`; default to Server Components for data-heavy work.
+- Wrap non-urgent state updates in `startTransition`/`useDeferredValue` to keep the UI responsive.
+- Build accessible UI by default: semantic HTML, keyboard navigation, ARIA attributes (WCAG 2.1 AA).
+- Skip manual memoization (`useMemo`/`useCallback`/`React.memo`) unless profiling shows the React Compiler isn't already handling it.
