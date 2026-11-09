@@ -200,6 +200,12 @@ doesn't match the agreed contract; confirm each is reported and the PR is blocke
   benefit-fe generates its client from that file at a pinned benefit-be commit, and the contract
   test fails if either side is out of date.
 - **FR-000-27**: All dates and day counts MUST use the America/Chicago time zone.
+- **FR-000-28**: Every AI run (each agent step, model call and tool call) MUST be traced to a
+  locally run tracing service, tagged with the case ID and workflow ID, recording model, provider,
+  duration, token counts and cost, and containing no personal data (document text, names, dates
+  of birth and identity numbers are masked). The tracing service starts with the one-command run
+  (FR-000-01) and reports its own health; if it is down, AI runs continue and readiness reports
+  tracing as degraded. Tracing is off in CI.
 
 ### Key Entities
 
@@ -224,6 +230,8 @@ doesn't match the agreed contract; confirm each is reported and the PR is blocke
 - **SC-000-06**: 100% of PRs merged after Day 1 morning pass every check in FR-000-16.
 - **SC-000-07**: All six end-to-end journeys pass before the Day 3 feature freeze.
 - **SC-000-08**: A full CI run completes in under 15 minutes.
+- **SC-000-09**: For any demo case, every AI run can be found in the tracing service by case ID,
+  and a scan of the traces finds zero personal data.
 
 ## Assumptions
 

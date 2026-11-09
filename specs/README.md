@@ -232,6 +232,8 @@ before the contracts PR.
 - [ ] CI on hosted runners with a fake embedder; end-to-end suite in benefit-fe; OpenAPI file
       committed in benefit-be (FR-000-24 to FR-000-26).
 - [ ] Synthetic marker per store, not per record (FR-000-14).
+- [ ] Local tracing of every AI run and tool call, tagged by case and workflow, no personal data
+      (FR-000-28); "agent success" defined with a 90% threshold (FR-002-10).
 - [ ] Metric periods, AI override rate definition, refresh interval (FR-008-01, FR-008-08).
 - [ ] New screens and actions the demo needs: AI activity, notices list, upcoming
       redeterminations, start redetermination (FR-006-14 to FR-006-17).

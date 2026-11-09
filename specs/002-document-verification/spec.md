@@ -133,9 +133,12 @@ caseworker.
   and their personal data MUST NOT be written to logs (see FR-000-11).
 - **FR-002-10**: An agent evaluation set (the synthetic pay stubs with expected values from 003,
   plus the cases added by caseworker overrides) and an evaluation command MUST exist. The command
-  reports extraction accuracy, mismatch recall, false-flag rate, citation rate and cost per case.
-  It fails when extraction accuracy is below 90%, mismatch recall below 100%, false-flag rate
-  above 5% or citation rate below 95%; cost is reported only.
+  reports extraction accuracy, mismatch recall, false-flag rate, citation rate, agent success and
+  cost per case. Agent success is the share of evaluation cases where verification ends in the
+  expected outcome (resolved with no finding, finding and request for information drafted, or
+  escalated to a caseworker with the expected cause) within the 3-loop limit. It fails when
+  extraction accuracy is below 90%, mismatch recall below 100%, false-flag rate above 5%,
+  citation rate below 95% or agent success below 90%; cost is reported only.
 - **FR-002-11**: The evaluation command MUST also read the overrides stored at runtime
   (FR-006-02), using the caseworker's corrected outcome as the expected result. Only overrides
   of AI output are included: a corrected value or a dismissed finding (FR-001-19). Overrides of a
