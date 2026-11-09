@@ -5,11 +5,11 @@ Applies to `benefit-be/packages/agents/` and the extraction and agent-success pa
 ## Structure
 - **AG-1** LangChain supplies the building blocks (model client, prompts, parsers, retrievers, MCP tools). LangGraph wires them into graphs. Both live only in `packages/agents/`.
 - **AG-2** Nothing in `packages/agents/` imports `temporalio`. Each agent is a plain async function that takes `packages/domain` models and returns a domain model.
-- **AG-3** One graph per agent: Intake, VerifyDocs (extract, validate, critique, then retry or escalate) and RFI drafting. Retry loops have a hard maximum, and the agent escalates once it is reached.
+- **AG-3** One graph per agent: VerifyDocs (extract, validate, critique, then retry or escalate), Drafting (requests for information and redetermination forms) and Explanation (decision explanations, 004). Retry loops have a hard maximum, and the agent escalates once it is reached.
 - **AG-4** Agents reach external systems only through MCP tools (via `langchain-mcp-adapters`) or `packages/rag`. No direct DB, file or HTTP access.
 
 ## Claude API usage
-- **AG-5** Model: `claude-opus-5-5` through `langchain-anthropic`, set in one place in config. Don't hardcode model IDs anywhere else.
+- **AG-5** Model: `claude-opus-5-5` through `langchain-anthropic` (Anthropic API) or `langchain-aws` (Amazon Bedrock), chosen by `LLM_PROVIDER` in one factory in `packages/agents`. Don't hardcode model IDs or import a provider SDK anywhere else.
 - **AG-6** Don't force tool choice: Claude rejects it. Use native JSON-schema structured output, or `tool_choice="auto"`.
 - **AG-7** Don't set `temperature` or `top_p`.
 - **AG-8** PDFs and images go to Claude directly for extraction. No separate OCR step.

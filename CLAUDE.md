@@ -18,7 +18,7 @@ Central store for shared AI-assisted development assets (see README.md for folde
 ## Rule sets, lane agents and workflows
 
 - **Rule sets** (`project-rules/`): every rule has an ID (`TW-3`, `AG-6`, …). `project-rules/README.md` maps each repo path to its lane and rule files, and says which file wins when two disagree. Generated code must satisfy them; treat them as hard constraints, not suggestions.
-- **Lane agents** (`agents/`, shared through the `.claude/agents` and `.github/agents` symlinks): `workflows-lane`, `agents-lane`, `data-lane`, `platform-ui-lane`. They mirror the team's four owners. They write their lane's section of `plan.md` and review implemented code against their rules. They never edit code.
+- **Lane agents** (`agents/`, shared through the `.claude/agents` and `.github/agents` symlinks): `workflows-lane`, `agents-lane`, `data-lane`, `platform-ui-lane`. They match the four lanes; the three team members rotate between lanes (see `specs/README.md`). They write their lane's section of `plan.md` and review implemented code against their rules. They never edit code.
 - **Workflows** (`workflows/`): `feature.md` is the standard path from spec to PR. Run it with the **feature-workflow** skill.
 
 ## Keeping Claude Code and Copilot in step
@@ -54,7 +54,7 @@ Rules:
 - Run the `.specify/scripts/bash/*.sh` scripts exactly as the skills say. Don't create feature folders by hand.
 - When building one of the linked projects, work inside `repos/<name>` and use that project's own build and test commands.
 - Don't edit `.specify/templates` or `.specify/scripts` unless asked. Update them with `specify integration upgrade`.
-- `plan.md` must name the target repo(s) (`repos/<name>`). `/speckit-implement` writes code only inside those submodules, never in the metarepo.
+- `plan.md` must name the target repo(s) (`repos/<name>`). `/speckit-implement` writes code only inside those submodules, never in the metarepo. The one exception is feature 009 (delivery factory), whose plan may also target the metarepo's `scripts/factory/` and `templates/`.
 - For backend work, the "Project Structure" section of `plan.md` must use the layout and import boundaries in `project-rules/backend-architecture.md`. Don't invent a different structure.
 - `/speckit-plan`: get each affected lane agent's section (plan mode) and include it. `/speckit-tasks`: tag every task with its lane and repo.
 - `/speckit-implement`: before each task, read the rule files for its lane. Afterwards, every affected lane agent must review the changes (review mode) and report PASS before any PR is opened.
@@ -71,7 +71,7 @@ skills/create-pr/create-pr.sh <repo-name> --branch feature/<NNN-feature> --messa
 - It runs inside `repos/<name>` and pushes to that submodule's own `origin`, then opens a PR against `main` with `gh` (requires `gh auth login`).
 - Branch name = Spec Kit feature folder name with a type prefix (`feature/003-user-login`). Use the same branch in every repo the feature touches, with one PR per repo, and link the PRs to each other.
 - Confirm the repo, branch, files and PR title with the user before pushing. Never push to `main`, force-push or skip hooks.
-- The metarepo commits only `specs/` and, after the PRs merge, the updated submodule pointers (`sync-repos.sh --commit`).
+- The metarepo commits only `specs/`, feature 009's `scripts/factory/` and `templates/`, and, after the PRs merge, the updated submodule pointers (`sync-repos.sh --commit`).
 
 ## Skills
 

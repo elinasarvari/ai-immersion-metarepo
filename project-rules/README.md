@@ -9,9 +9,9 @@ Every rule has an ID (for example `TW-3`). Reviews cite the ID, the file and the
 | Repo | Path | Lane (owner) | Rule sets |
 |---|---|---|---|
 | benefit-be | `apps/worker/` | Workflows | [temporal-workflows.md](temporal-workflows.md) |
-| benefit-be | `packages/agents/`, `evals/` (extraction, agent success) | Agents | [agents-llm.md](agents-llm.md) |
+| benefit-be | `packages/agents/`, `evals/` (extraction, explanations, agent success) | Agents | [agents-llm.md](agents-llm.md) |
 | benefit-be | `packages/rag/`, `packages/rules/`, `db/`, `analytics/`, `data/policy/`, `evals/` (retrieval) | Knowledge & data | [data-knowledge.md](data-knowledge.md), [database.md](database.md) |
-| benefit-be | `apps/api/`, `packages/mcp_servers/`, Makefile, Procfile, setup | Platform & UI | [platform-api.md](platform-api.md), [api-generation.md](api-generation.md) |
+| benefit-be | `apps/api/`, `packages/mcp_servers/`, `packages/platform/`, Makefile, Procfile, setup | Platform & UI | [platform-api.md](platform-api.md), [api-generation.md](api-generation.md) |
 | benefit-be | `packages/domain/` | Shared (all lanes agree) | [backend-architecture.md](backend-architecture.md) |
 | benefit-fe | everything | Platform & UI | [frontend-ui.md](frontend-ui.md), [frontend-react.md](frontend-react.md) |
 
@@ -33,5 +33,5 @@ When two files disagree, the more specific one wins:
 - **PR-2** Every AI output cites its source: a document field or a policy chunk ID.
 - **PR-3** Synthetic data only. No real personal data in code, tests, fixtures, seeds, evals, logs or prompts.
 - **PR-4** All package versions are pinned, and lockfiles (`uv.lock`, `pnpm-lock.yaml`) are committed with any dependency change.
-- **PR-5** Everything runs natively on a Mac: no Docker, no cloud services. The only network calls are to the Anthropic API.
+- **PR-5** Everything runs natively on a Mac: no Docker, no cloud services. CI runs on GitHub-hosted runners and may use service containers there (FR-000-24); nothing else does. The only network calls are to Claude, through the Anthropic API or Amazon Bedrock (chosen by `LLM_PROVIDER`).
 - **PR-6** `make check` passes before a PR is opened. Changes to agents, retrieval or extraction also pass `make eval` thresholds.

@@ -7,7 +7,7 @@ benefit-be/
   apps/
     api/              FastAPI: REST endpoints (/api/v1), auth, starts workflows and sends Temporal signals
     worker/           Temporal worker process
-      workflows/      CaseWorkflow, RenewalWorkflow (deterministic, no I/O)
+      workflows/      CaseWorkflow for applications and redeterminations (deterministic, no I/O)
       activities/     thin wrappers that call agents, the rules engine and the DB
   packages/
     agents/           LangGraph graphs + LangChain pieces (prompts, model client,
@@ -16,19 +16,20 @@ benefit-be/
     rag/              ingestion, Qwen3 embeddings, hybrid search, reranking
     mcp_servers/      case-mcp, docs-mcp, verify-mcp, policy-mcp
     domain/           shared Pydantic models used by everything above
+    platform/         settings, logging, error format, auth helpers (no business logic)
   db/
     migrations/       Alembic
-    seeds/            synthetic data only
-  evals/              retrieval, extraction and agent-success evals (make eval)
+    seeds/            synthetic data generator (fixed seed); output in generated/ (git-ignored)
+  evals/              retrieval, extraction, explanation and agent-success evals (make eval)
   analytics/          dbt models (DuckDB)
-  data/policy/        policy source documents
-  tests/
+  data/policy/        training-edition policy manual (written by the team)
+  tests/              mirrors the source tree
   Brewfile  Procfile  Makefile  pyproject.toml  uv.lock  .env.example
 ```
 
 ## Runtime processes
 
-All run from `benefit-be`, started together by `make dev` (Procfile and `honcho`):
+All run from `benefit-be`, started together by `make dev` (Procfile and `honcho`). `make prod` starts the same processes with production settings.
 
 | Process | Code | Role |
 |---|---|---|
@@ -64,13 +65,18 @@ apps/worker ┘
 ### Testing
 - **BA-9** Tests live in `tests/`, mirroring the source folder structure. Integration tests run against local Postgres and MongoDB.
 
+### Seed data and evaluations
+- **BA-10** `db/seeds/` and `evals/` are scripts and data, not runtime code: they may import `packages/*`, and nothing imports them.
+- **BA-11** The seed generator is reproducible from a fixed seed. Everything it generates (households, documents and the expected-value test sets) goes to `db/seeds/generated/`, which is git-ignored and rebuilt with `make seed`. The generator, the seed value and `data/policy/` are committed.
+- **BA-12** `evals/` holds the committed question sets and the evaluation command. The command reads `db/seeds/generated/` and the caseworker overrides stored at runtime. Evaluation runs call a live model and never run in CI.
+
 ## Ownership
 
 | Lane | Owns |
 |---|---|
 | Workflows | `apps/worker/` |
-| Agents | `packages/agents/`, extraction evals |
-| Knowledge & data | `packages/rag/`, `packages/rules/`, `db/`, `analytics/`, `data/policy/`, retrieval evals |
-| Platform & UI | `apps/api/`, `packages/mcp_servers/`, Makefile and setup, plus the `benefit-fe` repo |
+| Agents | `packages/agents/`, extraction, explanation and agent-success evals |
+| Knowledge & data | `packages/rag/`, `packages/rules/`, `db/` (including the baseline migration and `db/seeds/`), `analytics/`, `data/policy/`, retrieval evals |
+| Platform & UI | `apps/api/`, `packages/mcp_servers/`, `packages/platform/`, Makefile, Procfile and setup, plus the `benefit-fe` repo |
 
-Changes that need more than one lane are split so each lane's files change in their own commits, and the shared contract goes through `packages/domain` (`BA-8`).
+Whoever currently holds a lane makes its changes; the three team members rotate between the four lanes (see `specs/README.md`). Tests in `tests/` belong to the lane that owns the matching source folder. Changes that need more than one lane are split so each lane's files change in their own commits, and the shared contract goes through `packages/domain` (`BA-8`).
