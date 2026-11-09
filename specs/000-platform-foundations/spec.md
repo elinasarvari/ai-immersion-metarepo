@@ -12,7 +12,7 @@
 
 - **Lane**: Platform & UI
 - **Provides**: sign-in and roles, configuration, error format, health checks, logging, the
-  one-command run profiles, AI provider selection, the quality report, the CI pipeline, the
+  one-command run profiles, AI provider selection, the audit log, the CI pipeline, the
   integration and contract test harnesses, and the end-to-end test suite. Every other feature depends on this.
 - **Depends on**: nothing. Part of the Day 1 contracts PR.
 - **Out of scope**: real single sign-on, user self-registration, password reset, cloud
@@ -145,8 +145,9 @@ doesn't match the agreed contract; confirm each is reported and the PR is blocke
   MUST be committed and the real one MUST NOT be.
 - **FR-000-04**: The system MUST refuse to start when a required setting is missing or invalid,
   naming the setting.
-- **FR-000-05**: The system MUST support three roles: applicant, caseworker and supervisor, with
-  seeded demo accounts for each.
+- **FR-000-05**: The system MUST support three user roles: applicant, caseworker and supervisor,
+  with seeded demo accounts for each. Supervisors can do everything caseworkers can, plus the demo
+  clock (FR-001-15) and the escalated-task view (FR-006-01).
 - **FR-000-06**: Every operation except health and readiness MUST require a valid, unexpired
   session.
 - **FR-000-07**: Sessions MUST expire after a configurable period (default 8 hours).
@@ -161,10 +162,11 @@ doesn't match the agreed contract; confirm each is reported and the PR is blocke
 - **FR-000-12**: The AI model provider MUST be selectable by configuration between the Anthropic
   API and Amazon Bedrock, with no code changes.
 - **FR-000-13**: Every outbound call MUST have a timeout and a bounded retry with backoff.
-- **FR-000-14**: Every stored record and generated document MUST carry a synthetic-data marker.
-- **FR-000-15**: A single command MUST produce a quality report for the demo: tests passed,
-  requirements without a test, the latest evaluation scores from 002 and 004, and an audit-trail summary of the demo cases
-  (actions, overrides, tool calls).
+- **FR-000-14**: Every data store MUST record that it holds synthetic data, every generated
+  document MUST carry a visible "SYNTHETIC" marker, and every screen shows the banner in FR-006-11.
+  Individual records do not need their own marker.
+- **FR-000-15**: Moved to FR-009-05 (quality and factory dashboard). The ID is kept so existing
+  references stay valid.
 - **FR-000-16**: Every PR in benefit-be and benefit-fe MUST run static checks (lint, strict type
   checks, dependency vulnerability scan, secrets scan) and all automated test levels, and MUST be
   blocked from merging if any fail.
@@ -179,12 +181,33 @@ doesn't match the agreed contract; confirm each is reported and the PR is blocke
   household's records. Journeys not yet built are marked pending, not skipped silently.
 - **FR-000-20**: Integration and end-to-end tests MUST NOT call a live AI model; they use fakes or
   recorded responses.
+- **FR-000-21**: Sign-in MUST use seeded usernames and passwords, stored only as hashes made with a
+  modern password-hashing algorithm, behind an identity provider interface with a local fake
+  implementation (constitution IX).
+- **FR-000-22**: AI agents MUST call tools (005) with a system credential issued by the worker for
+  one case. It names that case, expires when the step ends and cannot be used by any user or for
+  any other case. It is not one of the user roles.
+- **FR-000-23**: The append-only audit log MUST record: sign-in success and failure, every refused
+  access (API and agent tools), every caseworker action, every demo clock action, every on-demand
+  redetermination start and every metrics refresh, each with actor, time, target and outcome, and
+  no personal data. Case history (FR-001-10) records the case's own events.
+- **FR-000-24**: CI MUST run on hosted runners with the same major versions of the databases and
+  workflow server as the local setup, and with the embedding and reranking models replaced by a
+  deterministic fake. Local development stays native on the Macs, with no containers.
+- **FR-000-25**: The end-to-end suite MUST live in benefit-fe and run on every pull request in
+  both code repos, against the other repo's same-named branch if it exists, otherwise its main.
+- **FR-000-26**: The API contract document MUST be generated from benefit-be and committed there;
+  benefit-fe generates its client from that file at a pinned benefit-be commit, and the contract
+  test fails if either side is out of date.
+- **FR-000-27**: All dates and day counts MUST use the America/Chicago time zone.
 
 ### Key Entities
 
 - **User**: a demo account with a role (applicant, caseworker, supervisor); an applicant user is
   linked to one household.
 - **Session**: proof of sign-in with user identity, role and expiry.
+- **System credential**: issued by the worker for one agent step; case ID, expiry, no user role.
+- **Audit log entry**: actor, time, action, target, outcome (FR-000-23).
 - **Error**: code, message, field details, reference ID.
 
 ## Success Criteria *(mandatory)*

@@ -36,4 +36,5 @@
   Spec Kit template. It names lanes and features, not technologies. `/speckit-analyze` may flag it.
 - Data set tolerances are now numeric (FR-003-10 to 12); seeded years now match the two loaded rule sets.
 - Attested facts for residency, citizenship and Medicare added (FR-003-16).
+- Round 2 completeness review (2026-11-09): gaps closed with defaults listed in specs/README.md ("Spec review round 2"); confirm in PR review.
 - Items marked incomplete require spec updates before `/speckit-clarify` or `/speckit-plan`.

@@ -123,8 +123,9 @@ number matches the determination and every rule has a citation.
   one manual version).
 - **FR-004-07**: Indexing MUST be repeatable: the same manual version produces the same passages
   and citations.
-- **FR-004-08**: An evaluation set of 30–50 questions with expected sections MUST exist, and an
-  evaluation command MUST report top-5 recall and the average rank of the first correct section.
+- **FR-004-08**: An evaluation set of 30–50 questions with expected sections, plus at least 10
+  off-topic questions, MUST exist, and an evaluation command MUST report top-5 recall, the average
+  rank of the first correct section and the off-topic rejection rate (SC-004-03).
 - **FR-004-09**: The manual's version date and a statement that it is a training edition MUST be
   recorded alongside the index.
 - **FR-004-10**: For any determination, the system MUST produce a plain-language explanation for
@@ -132,7 +133,8 @@ number matches the determination and every rule has a citation.
   values used, with a policy citation per rule.
 - **FR-004-11**: Every number in an explanation MUST match the determination exactly, checked
   automatically, and every statement MUST refer to a rule in the determination or a returned
-  passage. An explanation that fails these checks MUST be rejected and marked for review.
+  passage. An explanation that fails these checks MUST be rejected and raise an "explanation
+  review" task (FR-001-19).
 - **FR-004-12**: Explanations MUST NOT change, contradict or soften the determination.
 - **FR-004-13**: Each explanation MUST be stored with its determination as generated at the time,
   so history shows the original explanation.

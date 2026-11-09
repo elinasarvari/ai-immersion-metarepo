@@ -36,4 +36,5 @@
   Spec Kit template. It names lanes and features, not technologies. `/speckit-analyze` may flag it.
 - "Timer" and "demo profile" describe behaviour the demo needs, not a technology choice.
 - Re-validated after the independent review: outcomes, reason codes, demo clock, explanations trigger, shared queue and calendar days added.
+- Round 2 completeness review (2026-11-09): gaps closed with defaults listed in specs/README.md ("Spec review round 2"); confirm in PR review.
 - Items marked incomplete require spec updates before `/speckit-clarify` or `/speckit-plan`.

@@ -36,4 +36,5 @@
   Spec Kit template. It names lanes and features, not technologies. `/speckit-analyze` may flag it.
 - The manual-writing work item moved from requirements to Assumptions (it is not system behaviour).
 - Relevance threshold is tied to SC-004-03; explanation checks are automatic (FR-004-11).
+- Round 2 completeness review (2026-11-09): gaps closed with defaults listed in specs/README.md ("Spec review round 2"); confirm in PR review.
 - Items marked incomplete require spec updates before `/speckit-clarify` or `/speckit-plan`.

@@ -100,6 +100,8 @@ known-answer tests.
 - Household size changes between years: each year uses that year's household size.
 - An as-of date with no rule set in force: "Cannot determine" with reason "no rules for date".
 - Zero income: eligible on the income rule.
+- One rule fails and another lacks information: Ineligible, listing the missing item too.
+- Weekly pay of $400: monthly income $1,733.33 (400 × 52 ÷ 12).
 
 ## Requirements *(mandatory)*
 
@@ -141,12 +143,37 @@ known-answer tests.
   person. The monthly income limit is 138% of the annual value divided by 12, rounded down to the
   whole dollar (for example, one person in the current year: $1,782).
 - **FR-003-16**: Residency, citizenship or immigration status and Medicare entitlement MUST be
-  seeded as attested facts on each household member; identity and income are checked through
-  the simulated verification sources (005).
+  attested facts on each household member: seeded for seeded households, and taken from the
+  application form (FR-006-07) or redetermination response for new ones. Identity and income are
+  checked through the simulated verification sources (005, FR-002-13).
+- **FR-003-17**: Household monthly income MUST be the sum, over household members, of each
+  member's documented monthly income from verified pay stubs (002), across all of their jobs. A
+  member declaring zero income counts as zero on their attestation. A declared job without a
+  usable pay stub (FR-002-15) makes income missing information.
+- **FR-003-18**: Monthly income from a pay stub MUST be gross pay × 52 ÷ 12 for weekly, × 26 ÷ 12
+  for bi-weekly, × 2 for semi-monthly and × 1 for monthly pay, rounded to the nearest cent. For a
+  job with several stubs, the most recent stub is used.
+- **FR-003-19**: Evaluation MUST take a household snapshot (members, attested facts, verified
+  income) captured for the case, not the household's current record, so later changes do not
+  alter earlier determinations. Household size is the number of members in the snapshot.
+- **FR-003-20**: If any rule fails, the result MUST be Ineligible (also listing any missing
+  items). The result is Cannot determine only when no rule fails and at least one rule lacks
+  information.
+- **FR-003-21**: Program years MUST be calendar years: the previous program year is 2025 and the
+  current one is 2026. The as-of date is the case's received date for a new application, and the
+  redetermination's start date for a redetermination, both on the case clock (FR-001-13).
+- **FR-003-22**: The data set MUST include completed history loaded directly into the stores
+  (not run through workflows): decided cases from the previous program year and current coverage
+  periods, with their determinations, pre-written explanations, notices, review tasks and
+  caseworker actions, so that applicant history (006), redeterminations (007) and metric expected
+  values (008) work from a fresh reset. Pre-written explanations meet the same checks as
+  generated ones (FR-004-11).
 
 ### Key Entities
 
 - **Household**: members, sizes, address state, declared income, linked documents.
+- **Household snapshot**: the members, attested facts and verified monthly income captured for
+  one case; the input to evaluation (FR-003-19).
 - **Rule set**: the rules and income limits in force for a program year, with effective dates.
 - **Determination**: result, as-of date, rule set version and the per-rule explanation.
 - **Synthetic data set**: generated households, cases, documents and test sets, with the seed.
@@ -167,5 +194,6 @@ known-answer tests.
   poverty guidelines but deliberately simplified.
 - Household composition and income counting are simplified to monthly gross income for the
   3-day build; this simplification is stated in the demo.
-- Residency, citizenship, immigration and Medicare facts are seeded (FR-003-16); identity and
+- Residency, citizenship, immigration and Medicare facts are attested (FR-003-16); identity and
   income checks come from the simulated verification sources (005).
+- Evaluation is a pure function: `evaluate(household snapshot, as-of date)`.

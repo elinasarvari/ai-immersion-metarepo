@@ -101,6 +101,8 @@ expected.
 - The household has an open case already: the redetermination waits until it is decided.
 - A redetermination is started twice for the same period: only one runs.
 - The system is down on the start day: the redetermination starts when it is back up.
+- The income source reports a new job the household did not declare: the form asks about that
+  job only.
 
 ## Requirements *(mandatory)*
 
@@ -129,11 +131,28 @@ expected.
 - **FR-007-11**: The 60-day start and 30-day response window MUST follow the demo time scale and
   demo clock (FR-001-13, FR-001-15) when the demo profile is on.
 - **FR-007-12**: A redetermination MUST end with one outcome: renewed automatically, renewed after
-  response, or ended by caseworker decision.
+  response, or ended by caseworker decision. An ending carries a reason code: income over limit,
+  other rule not met, or missing information (no response).
+- **FR-007-13**: The renewal check MUST re-verify identity and income with the simulated sources
+  (005) and evaluate the held household snapshot with that income as of the redetermination's
+  start date (FR-003-21). Information is "missing or out of date" when a source reports income
+  differing from held income by more than 10%, a source reports a job the household has not
+  declared, a declared job has no verified income, or identity no longer matches. Renewal is
+  automatic only when the result is Eligible and nothing is missing or out of date.
+- **FR-007-14**: A renewed coverage period MUST start the day after the previous one ends. While a
+  redetermination review is open after the coverage end date, the coverage period's status MUST
+  be "continued pending review" and coverage continues.
+- **FR-007-15**: A redetermination started on demand (FR-007-10) MUST run exactly the same process
+  as one started by the daily schedule; if both happen for the same period, only one runs
+  (FR-007-07).
+- **FR-007-16**: An applicant's redetermination response MUST let them confirm or correct the
+  pre-filled items (household members, jobs and income) and upload pay stubs; it creates a new
+  household snapshot for the case (FR-003-19).
 
 ### Key Entities
 
-- **Coverage period**: start and end dates of a household's coverage for a program year.
+- **Coverage period**: start and end dates of a household's coverage, and its status (active,
+  continued pending review, renewed, ended).
 - **Redetermination**: a case of type "redetermination" linked to the period it renews, using the
   001 states, with one outcome from FR-007-12.
 - **Renewal form**: pre-filled items to confirm, deadline, approval status.

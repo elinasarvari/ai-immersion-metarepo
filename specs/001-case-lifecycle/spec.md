@@ -175,7 +175,9 @@ flag.
   task in the shared caseworker queue and wait for a caseworker action, without holding work
   open while waiting.
 - **FR-001-08**: If a review task is not actioned within 2 days, the system MUST remind
-  caseworkers; after 4 days it MUST flag the task as escalated for supervisors.
+  caseworkers by marking the task "reminder" in the queue (there are no email or text
+  notifications); after 4 days, or when a household's coverage end date passes while its
+  redetermination review is open (FR-007-04), it MUST flag the task as escalated for supervisors.
 - **FR-001-09**: Every adverse determination MUST wait for caseworker approval before the case is
   decided.
 - **FR-001-10**: Every state change MUST be recorded in the case history with time, actor and
@@ -186,19 +188,60 @@ flag.
   the system MUST create a review task instead of stalling.
 - **FR-001-13**: Every waiting period (response windows, review reminders and escalation,
   decision deadline tracking) MUST be configurable, and a demo profile MUST run them on a
-  compressed time scale (one day as one minute) without code changes.
+  compressed time scale (one day as one minute) without code changes. Each case keeps a case
+  clock: outside the demo profile it is the real date; in the demo profile it starts at the
+  case's real start time, runs at one day per minute and jumps forward when a timer is fired early
+  (FR-001-15). Every date the case uses (deadlines, determination as-of dates, decision dates,
+  history entries) comes from its case clock, and history records both case-clock and real times.
 - **FR-001-14**: After every determination, the system MUST request the applicant and
   caseworker explanations (004) and store them with the determination; if the request fails,
-  it MUST retry later without delaying the decision.
+  it MUST retry later without delaying the decision. An adverse notice waits for the applicant
+  explanation; if it is still unavailable after the retry limit, the notice uses the
+  rule-by-rule trace (FR-003-05) as its explanation and the review task says so.
 - **FR-001-15**: In the demo profile only, a supervisor MUST be able to fire a case's next pending
   timer immediately; the action MUST be recorded and MUST be refused outside the demo profile.
 - **FR-001-16**: A decided case MUST have one outcome: Approved, or Denied with a reason code
-  (income over limit, other rule not met, missing information). "Cannot determine" MUST create a
+  (income over limit, other rule not met, missing information). When the income rule and another
+  rule both fail, the reason code is "income over limit". "Cannot determine" MUST create a
   review task, never a decision.
-- **FR-001-17**: Favourable decision notices MUST be built from a fixed template and delivered
-  without approval; adverse notices MUST include the applicant explanation and be delivered only
-  after caseworker approval.
+- **FR-001-17**: Notices MUST be one of these types, and nothing else is sent to applicants:
+
+  | Notice | Built from | Caseworker approval |
+  |---|---|---|
+  | Approval | Fixed template | No |
+  | Automatic renewal (007) | Fixed template | No |
+  | Renewal after response (007) | Fixed template | No |
+  | Denial | Fixed template + applicant explanation | Yes |
+  | Coverage ended (007) | Fixed template + applicant explanation | Yes |
+  | Request for information | AI draft (002) | Yes |
+  | Redetermination form (007) | AI draft (002) | Yes |
+
+  Approving an adverse outcome and approving its notice are one caseworker action.
 - **FR-001-18**: All day counts MUST use calendar days.
+- **FR-001-19**: Every review task MUST have one of these reasons, and offer only the actions
+  listed for it. Every action is recorded (FR-001-10) and needs a reason when marked *.
+
+  | Reason | Raised when | Actions and result |
+  |---|---|---|
+  | Adverse determination | Determination is Ineligible | Approve denial → Decided, Denied (notice delivered); Override to approve* → Decided, Approved; Request information → request drafted (002) |
+  | Cannot determine | Determination is Cannot determine | Request information → request drafted listing the missing items; Correct a value* → determined again |
+  | Notice approval | An AI-drafted notice is ready | Approve → sent; Edit and approve → edited version sent, both kept |
+  | Verification review | Low confidence, unreadable document, different person, identity or income source mismatch, missing citation, verification unavailable, or retry limit reached (002, FR-001-12) | Accept findings → Determining; Correct a value* → Determining with the corrected value; Dismiss a finding* → Determining without it; Request information → request drafted |
+  | Missed response deadline | A response window ends with no response (FR-001-06, FR-007-04) | Deny for missing information → Decided, Denied (for a redetermination: coverage ended by caseworker decision); Extend by 15 days* (once per request) → Awaiting applicant; Continue with held data* → Determining |
+  | Explanation review | An explanation fails its checks (FR-004-11) | Approve as is; Edit and approve. Does not block the decision. |
+
+  Correcting a value and dismissing a finding both count as overrides of AI output (FR-002-11,
+  FR-006-02).
+- **FR-001-20**: When a caseworker overrides a determination, the stored determination MUST stay
+  unchanged; the case outcome records the override, the reviewer and the reason.
+- **FR-001-21**: The system MUST draft at most one request for information automatically per case.
+  Any further request is made only by a caseworker action from a review task.
+- **FR-001-22**: An approved new application MUST start a 12-month coverage period on the first
+  day of the month its application was received (case clock) and end on the last day of the 12th
+  month.
+- **FR-001-23**: Submitting the same application twice (same submission reference) MUST open one
+  case. A new application MUST be refused, with the reason, while the household has an open case
+  or a coverage period that has not ended.
 
 ### Key Entities
 
@@ -206,11 +249,13 @@ flag.
   deadline, coverage period, outcome and reason code, history.
 - **Case event**: one entry in the case history (state change, finding, action, demo action) with
   time, actor and reason.
-- **Review task**: a request for a person to act; reason, evidence, opened time, escalation flag,
-  outcome.
-- **Caseworker action**: approve, edit or override, with reviewer, time and reason.
-- **Decision notice**: favourable (template) or adverse (template plus explanation), approval
-  status, delivered time.
+- **Review task**: a request for a person to act; reason (FR-001-19), evidence, opened time,
+  reminder and escalation flags, outcome.
+- **Caseworker action**: one of the actions in FR-001-19, with reviewer, time and reason.
+- **Notice**: type (FR-001-17), content, approval status, original and edited versions,
+  delivered time.
+- **Coverage period**: start and end dates and status (active, continued pending review, renewed,
+  ended); see FR-001-22 and 007.
 
 ## Success Criteria *(mandatory)*
 

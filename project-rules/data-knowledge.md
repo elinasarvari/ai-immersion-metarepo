@@ -3,7 +3,7 @@
 Applies to `benefit-be/packages/rag/`, `packages/rules/`, `db/`, `analytics/`, `data/policy/` and the retrieval part of `evals/`. Owner: Knowledge & data. SQL rules in [database.md](database.md) also apply.
 
 ## Rules engine (`packages/rules/`)
-- **KD-1** Pure Python: no I/O, no framework imports, no clock. The entry point is `evaluate(case, as_of_date)`, and the date is always passed in.
+- **KD-1** Pure Python: no I/O, no framework imports, no clock. The entry point is `evaluate(household, as_of_date)`, where `household` is the case's household snapshot (FR-003-19), and the date is always passed in.
 - **KD-2** The rules engine is the only thing that decides eligibility (`PR-1`). Every determination lists the rules that fired.
 - **KD-3** Every rule has `hypothesis` property tests plus example tests for its edge cases (boundaries, missing data, dates).
 

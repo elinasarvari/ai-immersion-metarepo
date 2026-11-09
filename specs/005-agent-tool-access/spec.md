@@ -118,6 +118,15 @@ Every tool call is recorded so the team can see what an agent did on a case.
 - **FR-005-08**: Every tool call MUST be recorded with tool name, case, outcome and duration, and
   without personal data.
 - **FR-005-09**: Write tools MUST be refused for decided cases.
+- **FR-005-10**: Every tool call MUST carry the system credential for the case (FR-000-22); a call
+  without one, with an expired one, or for another case MUST be refused and logged. User sessions
+  cannot call tools.
+- **FR-005-11**: The draft tool MUST produce both notice types AI drafts (request for information
+  and redetermination form, FR-001-17), stored as awaiting approval.
+- **FR-005-12**: The identity source MUST answer match or no match on name and date of birth; the
+  income source MUST answer each job's employer and monthly gross income. Both draw their answers
+  from the synthetic data set, including seeded disagreements, and report errors and timeouts as
+  errors, never as a non-match.
 
 ### Key Entities
 

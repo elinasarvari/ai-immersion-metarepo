@@ -98,10 +98,13 @@ metrics change.
 
 ### Functional Requirements
 
-- **FR-008-01**: The system MUST refresh the reporting store from case data on a schedule and on
-  demand; two refreshes of the same source data MUST give identical results.
+- **FR-008-01**: The system MUST refresh the reporting store from case data on a schedule (every
+  hour; every 5 minutes in the demo profile) and on demand, from a "refresh" action on the metrics
+  page for supervisors and from a command; two refreshes of the same source data MUST give
+  identical results.
 - **FR-008-02**: The reporting store MUST hold pseudonymous household keys only, with no names,
-  contact details or document content.
+  contact details or document content. Keys MUST be the same on every refresh and MUST NOT be
+  reversible without a secret held in configuration.
 - **FR-008-03**: The program metrics page MUST show average time to decision, share decided
   within the deadline, automatic renewal rate, procedural denial rate, AI override rate and
   open reviews by age, each filterable by month.
@@ -109,6 +112,9 @@ metrics change.
 - **FR-008-05**: A failed refresh MUST leave the previous complete results in place.
 - **FR-008-06**: Metrics with no data or a zero denominator MUST say so instead of showing zero.
 - **FR-008-07**: Only supervisors and caseworkers MAY view the program metrics page.
+- **FR-008-08**: Metrics MUST use case-clock dates (FR-001-13). A metric for a month counts
+  cases decided in that month (for the automatic renewal rate: redeterminations that ended in
+  that month). "Open reviews by age" shows the current open tasks and ignores the month filter.
 
 ### Key Entities
 
@@ -122,11 +128,12 @@ Metric definitions:
   in the period.
 - **Decided within deadline**: decisions on new applications made within 45 days ÷ all
   decisions on new applications in the period (redeterminations have no 45-day deadline).
-- **Automatic renewal rate**: redeterminations renewed with no applicant action ÷
-  redeterminations started.
-- **Procedural denial rate**: denials with reason code "missing information" (FR-001-16) ÷ all
-  denials.
-- **AI override rate**: caseworker overrides ÷ AI findings reviewed.
+- **Automatic renewal rate**: redeterminations renewed automatically ÷ redeterminations that
+  ended in the period.
+- **Procedural denial rate**: denials and coverage endings with reason code "missing
+  information" (FR-001-16, FR-007-12) ÷ all denials and coverage endings.
+- **AI override rate**: AI findings and extracted values that a caseworker corrected or
+  dismissed (FR-001-19) ÷ AI findings and values presented on review tasks that were actioned.
 - **Open reviews by age**: open review tasks by days open (0–1, 2–3, 4 or more).
 
 ## Success Criteria *(mandatory)*

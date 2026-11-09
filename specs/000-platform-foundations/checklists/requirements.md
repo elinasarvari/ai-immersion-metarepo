@@ -35,4 +35,5 @@
 - The "Lane & Dependencies" section is a team convention (see specs/README.md), not part of the
   Spec Kit template. It names lanes and features, not technologies. `/speckit-analyze` may flag it.
 - Names the Anthropic API and Amazon Bedrock: a team constraint, not a design choice (accepted deviation from "no implementation details").
+- Round 2 completeness review (2026-11-09): gaps closed with defaults listed in specs/README.md ("Spec review round 2"); confirm in PR review.
 - Items marked incomplete require spec updates before `/speckit-clarify` or `/speckit-plan`.

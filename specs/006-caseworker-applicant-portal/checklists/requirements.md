@@ -36,4 +36,5 @@
   Spec Kit template. It names lanes and features, not technologies. `/speckit-analyze` may flag it.
 - WCAG 2.1 AA is a user-facing accessibility standard, kept as a requirement.
 - Access simplified to a shared caseworker queue; applicants still see only their own household.
+- Round 2 completeness review (2026-11-09): gaps closed with defaults listed in specs/README.md ("Spec review round 2"); confirm in PR review.
 - Items marked incomplete require spec updates before `/speckit-clarify` or `/speckit-plan`.

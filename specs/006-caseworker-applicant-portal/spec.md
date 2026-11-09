@@ -36,8 +36,9 @@ and confirm the case resumes.
    by soonest decision deadline, showing reason, days remaining and at-risk status.
 2. **Given** an open task, **When** the caseworker opens it, **Then** they see the finding, the
    document values and policy passages cited, and approve, edit and override actions.
-3. **Given** an override, **When** the caseworker submits it, **Then** a reason is required, the
-   action is recorded, and the case is added to the evaluation set.
+3. **Given** an override, **When** the caseworker submits it, **Then** a reason is required and
+   the action is recorded; an override of AI output (a corrected value or dismissed finding) is
+   also added to the evaluation set.
 4. **Given** a task open for 4 days, **When** a supervisor opens the queue, **Then** the task is
    flagged as escalated, showing how long it has been open.
 
@@ -128,11 +129,14 @@ reference; confirm refusal.
 
 ### Functional Requirements
 
-- **FR-006-01**: The review queue MUST list open tasks sorted by decision deadline, showing reason,
-  days remaining and at-risk status, with approve, edit and override actions. It is one shared
-  queue for all caseworkers, and tasks open 4 days or more are flagged as escalated.
-- **FR-006-02**: When a caseworker overrides an AI finding, the system MUST require a reason,
-  record it, and store it as an evaluation example read by the evaluation command (FR-002-11).
+- **FR-006-01**: The review queue MUST list open tasks sorted by decision deadline (for
+  redeterminations, which have none, by coverage end date), showing reason, days remaining or
+  coverage end date, at-risk status, and the reminder and escalation flags (FR-001-08). Each task
+  offers only the actions its reason allows (FR-001-19). It is one shared queue for all
+  caseworkers; supervisors can filter it to escalated tasks.
+- **FR-006-02**: When a caseworker overrides AI output (corrects a value or dismisses a finding),
+  the system MUST require a reason, record it, and store it as an evaluation example read by the
+  evaluation command (FR-002-11).
 - **FR-006-03**: When an applicant signs in, the system MUST show the status of each open case and
   any open requests for information with their due dates.
 - **FR-006-04**: The system MUST show the applicant's past applications and decisions for every
@@ -143,8 +147,12 @@ reference; confirm refusal.
 - **FR-006-06**: AI-drafted and adverse notices MUST be delivered only after caseworker approval;
   favourable template notices are delivered directly. Edited and original versions MUST both be
   kept.
-- **FR-006-07**: Applicants MUST be able to submit an application with household and income
-  details and upload pay stubs (PDF or image, up to 10 MB each).
+- **FR-006-07**: Applicants MUST be able to submit an application and upload pay stubs (PDF, PNG
+  or JPEG, up to 10 MB each, up to 10 files). The application collects, for each household
+  member: name, date of birth, relationship to the applicant, citizenship or qualifying
+  immigration status (attested), Medicare entitlement (yes or no), and each job with employer, pay
+  frequency and declared monthly gross income, or zero income; plus the household's Illinois
+  address. Each submission carries a reference so a repeated submit opens one case (FR-001-23).
 - **FR-006-08**: Applicants MUST be able to respond to a request for information or a
   redetermination by uploading documents and confirming details.
 - **FR-006-09**: Caseworkers MUST be able to view a case's full history: states, findings,
@@ -154,12 +162,22 @@ reference; confirm refusal.
 - **FR-006-12**: A task already actioned MUST refuse further actions and say who acted.
 - **FR-006-13**: In the demo profile only, supervisors MUST be able to advance a case's clock
   (FR-001-15) from the case view.
+- **FR-006-14**: Caseworkers MUST be able to see a case's AI activity: each verification and
+  explanation run with its steps, model, provider and cost, every tool call (FR-005-08), each
+  finding with its citations, and any caseworker overrides of it.
+- **FR-006-15**: Applicants MUST see a list of the notices delivered to them, with type and date,
+  and be able to open each one.
+- **FR-006-16**: Caseworkers MUST be able to view upcoming redeterminations (FR-007-09).
+- **FR-006-17**: Caseworkers and supervisors MUST be able to start a household's redetermination
+  on demand from the household view (FR-007-10).
+- **FR-006-18**: An application refused because the household already has an open case or active
+  coverage (FR-001-23) MUST say why and link to that case.
 
 ### Key Entities
 
 - **Review queue item**: review task with case reference, reason, days remaining, at-risk flag.
 - **Application**: declared household, income and uploaded documents for a new case.
-- **Applicant view**: open cases, open requests, history by coverage period.
+- **Applicant view**: open cases, open requests, notices, history by coverage period.
 
 ## Success Criteria *(mandatory)*
 

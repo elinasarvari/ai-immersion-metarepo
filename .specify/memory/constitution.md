@@ -104,7 +104,8 @@ Rationale: eligibility decisions must be auditable and reproducible; model outpu
 
 ## Technology & Architecture Constraints
 
-- **Repositories:** this metarepo (specs, rules, skills) plus two submodules under
+- **Repositories:** this metarepo (specs, rules, skills, and the delivery-factory scripts and
+  templates of feature 009) plus two submodules under
   `repos/`: `benefit-be` (all Python) and `benefit-fe` (React). `plan.md` MUST name the target
   repo(s); `/speckit-implement` writes code only inside them. Run commands (`make dev`, `make prod`,
   `make seed`, `make eval`) live in `benefit-be`; the shared contracts are outlined in
@@ -150,4 +151,4 @@ Rationale: eligibility decisions must be auditable and reproducible; model outpu
 - Every PR review checks compliance with these principles. `/speckit-analyze` flags conflicts
   between specs, plans and this constitution.
 
-**Version**: 1.4.0 | **Ratified**: 2026-11-09 | **Last Amended**: 2026-11-09
+**Version**: 1.4.1 | **Ratified**: 2026-11-09 | **Last Amended**: 2026-11-09

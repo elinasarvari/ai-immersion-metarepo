@@ -5,9 +5,16 @@ Context for a new Claude Code session started in this repo. Start by reading thi
 
 ## Where things stand
 
-- Branch `feature/initial-specs`: constitution v1.4.0 and specs 000–008, merged with `main`
-  (PR #1 lane rules and agents). PR to `main` opened for team review.
-- All planning open items are closed (see "Open items before planning" in `specs/README.md`).
+- Branch `feature/initial-specs`: constitution v1.4.1 and specs 000–009, merged with `main`
+  (PR #1 lane rules and agents). PR #3 to `main` opened for team review.
+- The merge with `main` (`eb03330`) truncated every spec; `f376694` restored them.
+- A second completeness review added feature 009 (delivery factory and demo readiness) and closed
+  gaps in 000–008 with defaults. The team confirms or overrules them in PR review: see "Spec
+  review round 2" in `specs/README.md`.
+- The team pages (pitch, tech stack, build process) predate round 2: they still show specs
+  000–008, constitution v1.3.0, a policy filter by date and "8–10 rules" (the spec has 6).
+- PR #2 (`feature/project-rules`) changes `project-rules/testing.md`; check its test naming
+  against constitution Principle V (`test_FR_NNN_nn_...`) before merging.
 - Not started: submodules `repos/benefit-be` and `repos/benefit-fe` (README still has `OWNER`
   placeholders), `/speckit-plan` for any feature, the Day 1 contracts PR.
 

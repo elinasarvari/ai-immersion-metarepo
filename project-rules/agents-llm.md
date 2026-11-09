@@ -5,7 +5,7 @@ Applies to `benefit-be/packages/agents/` and the extraction and agent-success pa
 ## Structure
 - **AG-1** LangChain supplies the building blocks (model client, prompts, parsers, retrievers, MCP tools). LangGraph wires them into graphs. Both live only in `packages/agents/`.
 - **AG-2** Nothing in `packages/agents/` imports `temporalio`. Each agent is a plain async function that takes `packages/domain` models and returns a domain model.
-- **AG-3** One graph per agent: Intake, VerifyDocs (extract, validate, critique, then retry or escalate) and RFI drafting. Retry loops have a hard maximum, and the agent escalates once it is reached.
+- **AG-3** One graph per agent: VerifyDocs (extract, validate, critique, then retry or escalate), Drafting (requests for information and redetermination forms) and Explanation (decision explanations, 004). Retry loops have a hard maximum, and the agent escalates once it is reached.
 - **AG-4** Agents reach external systems only through MCP tools (via `langchain-mcp-adapters`) or `packages/rag`. No direct DB, file or HTTP access.
 
 ## Claude API usage

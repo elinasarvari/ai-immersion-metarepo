@@ -33,5 +33,5 @@ When two files disagree, the more specific one wins:
 - **PR-2** Every AI output cites its source: a document field or a policy chunk ID.
 - **PR-3** Synthetic data only. No real personal data in code, tests, fixtures, seeds, evals, logs or prompts.
 - **PR-4** All package versions are pinned, and lockfiles (`uv.lock`, `pnpm-lock.yaml`) are committed with any dependency change.
-- **PR-5** Everything runs natively on a Mac: no Docker, no cloud services. The only network calls are to Claude, through the Anthropic API or Amazon Bedrock (chosen by `LLM_PROVIDER`).
+- **PR-5** Everything runs natively on a Mac: no Docker, no cloud services. CI runs on GitHub-hosted runners and may use service containers there (FR-000-24); nothing else does. The only network calls are to Claude, through the Anthropic API or Amazon Bedrock (chosen by `LLM_PROVIDER`).
 - **PR-6** `make check` passes before a PR is opened. Changes to agents, retrieval or extraction also pass `make eval` thresholds.

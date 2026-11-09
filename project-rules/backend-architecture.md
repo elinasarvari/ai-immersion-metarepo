@@ -7,7 +7,7 @@ benefit-be/
   apps/
     api/              FastAPI: REST endpoints (/api/v1), auth, starts workflows and sends Temporal signals
     worker/           Temporal worker process
-      workflows/      CaseWorkflow, RenewalWorkflow (deterministic, no I/O)
+      workflows/      CaseWorkflow for applications and redeterminations (deterministic, no I/O)
       activities/     thin wrappers that call agents, the rules engine and the DB
   packages/
     agents/           LangGraph graphs + LangChain pieces (prompts, model client,

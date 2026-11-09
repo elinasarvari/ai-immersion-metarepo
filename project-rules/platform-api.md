@@ -10,7 +10,7 @@ Applies to `benefit-be/apps/api/`, `packages/mcp_servers/`, `Makefile`, `Procfil
 
 ## Auth (both the API and MCP servers)
 - **PL-5** JWT via `PyJWT`, with the roles `applicant`, `caseworker` and `supervisor`.
-- **PL-6** Every API route and every MCP tool checks the caller's role and their access to the specific case. Applicants only see their own cases.
+- **PL-6** Every API route and every MCP tool checks the caller's role and their access to the specific case. Applicants only see their own cases. MCP tools accept only the case-scoped system credential issued by the worker (FR-000-22), never a user session.
 - **PL-7** Every route and tool has a test proving that each role it should reject is rejected.
 
 ## MCP servers (`packages/mcp_servers/`)
