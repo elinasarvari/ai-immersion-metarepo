@@ -16,3 +16,13 @@ Central store for the AI-assisted development assets shared by the Benefit proje
 - [benefit-be](https://github.com/OWNER/benefit-be) — Python backend
 
 Each project's `CLAUDE.md` points back to the rules in `project-rules/`.
+
+## Cloning repositories
+
+Cloned repos live in `repos/` (git-ignored). Ask Claude Code or GitHub Copilot to "clone <url>", or run directly:
+
+```bash
+skills/clone-repo/clone-repo.sh https://github.com/OWNER/benefit-fe.git
+```
+
+`.claude/skills` and `.github/skills` are symlinks to `skills/`, so both tools discover the same skills.
