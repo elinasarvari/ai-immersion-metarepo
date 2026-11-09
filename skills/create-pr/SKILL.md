@@ -13,7 +13,7 @@ Code changes live inside the submodule `repos/<name>`; each submodule pushes to 
 2. **Pick the branch name.** Default to the Spec Kit feature name (the `specs/` folder, e.g. `003-user-login`), prefixed by type: `feature/003-user-login` (or `fix/…`). Use the **same branch name in every repo** touched by one feature.
 3. **Write the commit message and PR body.**
    - Commit: Conventional Commits, e.g. `feat(login): add password reset flow`.
-   - PR body: write to a temporary file (scratchpad / temp dir, not in the repo) with: Summary (from `spec.md`), Changes, How to test (commands you ran and their results), link to the spec path in the metarepo, and links to sibling PRs for multi-repo features.
+   - PR body: use the target repo's `.github/pull_request_template.md` if it has one, otherwise `templates/github/pull_request_template.md` from the metarepo. Fill every section (Summary from `spec.md`, the spec path, How to test with the commands you ran and their results, sibling PRs for multi-repo features), tick only the checklist items that are actually true, delete sections that don't apply, and remove the `<!-- -->` hints. Write it to a temporary file (scratchpad or temp dir, not in the repo).
 4. **Confirm with the user** before pushing: show repo, remote URL, branch, files changed, commit message, PR title. Skip only if the user already said to go ahead.
 5. **Run, per repo:**
 
