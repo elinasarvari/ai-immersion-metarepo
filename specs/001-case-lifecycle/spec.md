@@ -183,9 +183,7 @@ flag.
 
 ## Assumptions
 
-- The 45-day decision deadline follows federal Medicaid timeliness rules for non-disability
-  applications.
-- The 15-day response window is based on our reading of federal Medicaid rules (42 CFR Part 435);
-  the team should confirm it against the current regulation before the demo.
+- The 45-day decision deadline and 15-day response window are project values for this training
+  build (see "Project values" in specs/README.md), modelled on federal Medicaid timeliness rules.
 - Business days exclude weekends and Illinois state holidays for the demo year.
 - Notices are delivered through the applicant portal only.

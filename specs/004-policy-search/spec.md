@@ -35,7 +35,7 @@ top 5 results.
 **Acceptance Scenarios**:
 
 1. **Given** the indexed manual, **When** a question is asked, **Then** up to 5 passages are
-   returned, each with section number, section title, source link and manual version date.
+   returned, each with section number, section title and manual version date.
 2. **Given** a question using an exact section number or a term of art, **When** it is asked,
    **Then** the matching section is returned first.
 
@@ -108,9 +108,8 @@ number matches the determination and every rule has a citation.
 
 ### Functional Requirements
 
-- **FR-004-01**: The system MUST index the medical eligibility chapters of the Illinois
-  Department of Human Services policy manual, keeping section number, title, source link and
-  manual version date for every passage.
+- **FR-004-01**: The system MUST index the project's training-edition Illinois Medicaid policy
+  manual, keeping section number, title and manual version date for every passage.
 - **FR-004-02**: Passages MUST follow the manual's own section structure; a split section MUST
   keep its section number and title on every part.
 - **FR-004-03**: Search MUST return at most 5 passages, ranked by relevance, each with its
@@ -124,7 +123,7 @@ number matches the determination and every rule has a citation.
   and citations.
 - **FR-004-08**: An evaluation set of 30–50 questions with expected sections MUST exist, and an
   evaluation command MUST report top-5 recall and the average rank of the first correct section.
-- **FR-004-09**: The manual's source, retrieval date, version date and terms of use MUST be
+- **FR-004-09**: The manual's version date and a statement that it is a training edition MUST be
   recorded alongside the index.
 - **FR-004-10**: For any determination, the system MUST produce a plain-language explanation for
   applicants and a detailed one for caseworkers, stating the outcome, each rule's result and the
@@ -135,10 +134,15 @@ number matches the determination and every rule has a citation.
 - **FR-004-12**: Explanations MUST NOT change, contradict or soften the determination.
 - **FR-004-13**: Each explanation MUST be stored with its determination as generated at the time,
   so history shows the original explanation.
+- **FR-004-14**: The team MUST write the training-edition manual (AI-assisted), modelled on the
+  structure of the Illinois Department of Human Services policy manual, with 25–40 numbered
+  sections covering the six eligibility rules (FR-003-01), income counting, verification,
+  application timeliness, requests for information and redeterminations. Every section MUST carry
+  a "training edition, not official policy" notice, and its values MUST match the project values.
 
 ### Key Entities
 
-- **Policy passage**: text, section number, section title, source link, version date.
+- **Policy passage**: text, section number, section title, version date.
 - **Search result**: question, date, ranked passages with citations, or "no relevant policy found".
 - **Evaluation question**: question text and expected section(s).
 - **Decision explanation**: determination reference, audience (applicant or caseworker), text,
@@ -159,8 +163,7 @@ number matches the determination and every rule has a citation.
 
 ## Assumptions
 
-- The Illinois DHS policy manual is publicly available online with numbered sections. A team
-  member confirms the current URL before Day 1. [NEEDS CLARIFICATION: Do the manual's terms of
-  use allow saving a local copy for indexing, or must we index only pages fetched at run time?]
+- The manual is a training edition written for this project and is synthetic like the rest of the
+  data, so no terms-of-use limits apply.
 - Only one manual version will be available; date filtering is built for future versions.
 - The 80% threshold is a starting target and can be revised after the first evaluation run.

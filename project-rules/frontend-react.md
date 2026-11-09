@@ -6,7 +6,7 @@
 - Prefer React 19 Actions (`useActionState`, `useFormStatus`, `useOptimistic`) over manual form state for submissions.
 - Use the `use()` hook with Suspense boundaries for async data instead of manual loading flags.
 - Pass `ref` directly as a prop; don't wrap components in `forwardRef`.
-- Mark Client Components explicitly with `'use client'`; default to Server Components for data-heavy work.
+- This is a Vite single-page app: all components run in the browser. Don't add `'use client'` or Server Components.
 - Wrap non-urgent state updates in `startTransition`/`useDeferredValue` to keep the UI responsive.
 - Build accessible UI by default: semantic HTML, keyboard navigation, ARIA attributes (WCAG 2.1 AA).
 - Skip manual memoization (`useMemo`/`useCallback`/`React.memo`) unless profiling shows the React Compiler isn't already handling it.

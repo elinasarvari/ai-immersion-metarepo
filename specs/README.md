@@ -30,8 +30,8 @@ anywhere else go through the owning lane.
 
 | Lane | Features | benefit-be | benefit-fe |
 |---|---|---|---|
-| **A: Workflows and decisions** | 001, 003, 007 | `api/apps/worker/`, `api/packages/rules/`, `api/db/migrations/`, synthetic data generator | none |
-| **B: AI and knowledge** | 002, 004, 005 | `api/packages/agents/`, `api/packages/rag/`, `api/packages/mcp_servers/` | none |
+| **A: Workflows and decisions** | 001, 003, 007 | `api/apps/worker/`, `api/packages/rules/`, `api/db/migrations/`, `api/seed/` (except `policy_manual/`) | none |
+| **B: AI and knowledge** | 002, 004, 005 | `api/packages/agents/`, `api/packages/rag/`, `api/packages/mcp_servers/`, `api/evals/`, `api/seed/policy_manual/` | none |
 | **C: Platform and experience** | 000, 006, 008 | `api/apps/api/`, `api/analytics/`, shared config and logging | whole repo |
 
 Shared: `api/packages/domain/` changes only through a contracts PR reviewed by all three lanes.
@@ -89,6 +89,23 @@ definitions.
 - **REST API** (006): endpoint list and OpenAPI document; the UI builds against stub
   responses until each endpoint is real.
 
+## Project values
+
+Fixed values for this training build. They are modelled on federal Medicaid rules but are not
+checked against current regulation, and every spec uses them.
+
+| Value | Project value | Used in |
+|---|---|---|
+| Decision deadline | 45 days from receipt | 001, 008 |
+| Response window for a request for information | 15 days | 001, 002 |
+| Redetermination start | 60 days before coverage ends | 007 |
+| Redetermination form response window | 30 days | 007 |
+| Coverage period | 12 months | 007 |
+| Income limit | 138% of the poverty guideline | 003 |
+| Poverty guideline, previous year | $15,000 + $5,000 per additional person (annual) | 003 |
+| Poverty guideline, current year | $15,500 + $5,200 per additional person (annual) | 003 |
+| Policy manual | Training edition written by the team, 25–40 sections | 004 |
+
 ## Conventions
 
 - Requirement IDs are feature-scoped: `FR-<feature>-<nn>`, success criteria `SC-<feature>-<nn>`.
@@ -106,14 +123,9 @@ Each spec is reviewed by the lane that **uses** what it provides (see "Depends o
 
 ## Open items before planning
 
-- [ ] 004: confirm the Illinois DHS policy manual URL and whether its terms of use allow a
-      local copy (the one `[NEEDS CLARIFICATION]` marker).
-- [ ] 001 and 007: confirm the 15-day and 30-day response windows and the 12-month renewal
-      period against current federal Medicaid rules (42 CFR Part 435).
-- [ ] 003: confirm the 138% income limit for Illinois adults and copy the federal poverty
-      guidelines for both program years into configuration, with the source recorded.
-- [ ] Decide where the synthetic data generator and evaluation sets live in benefit-be, and add
-      them to `project-rules/backend-architecture.md`.
-- [ ] Fix two `project-rules/` conflicts: `frontend-react.md` asks for Server Components (not
-      available in a Vite single-page app) and `backend-architecture.md` says Workflows and
-      Agents have separate owners (conflicts with rotation).
+- [x] 004: policy manual source. Decided: a training-edition manual written by the team (FR-004-14).
+- [x] 001, 003 and 007: program values. Decided: fixed project values (see "Project values").
+- [x] Seed data and evaluation sets. Decided: `benefit-be/api/seed/` and `benefit-be/api/evals/`,
+      added to `project-rules/backend-architecture.md`.
+- [x] `project-rules/` conflicts. Fixed: `frontend-react.md` now states a Vite single-page app
+      with no Server Components, and `backend-architecture.md` assigns ownership by lane.

@@ -112,7 +112,9 @@ Rationale: eligibility decisions must be auditable and reproducible; model outpu
   search uses a locally run embedding model. Evaluation scores are recorded against the
   Anthropic API so results stay comparable.
 - **Program:** Illinois Medicaid for adults aged 19–64 qualifying on income. Policy citations
-  come from the public Illinois Department of Human Services policy manual (medical chapters).
+  come from a training-edition manual written for this project, modelled on the Illinois
+  Department of Human Services policy manual. Deadlines, windows and income limits are fixed
+  project values listed in `specs/README.md`.
 
 ## Development Workflow
 
@@ -140,4 +142,4 @@ Rationale: eligibility decisions must be auditable and reproducible; model outpu
 - Every PR review checks compliance with these principles. `/speckit-analyze` flags conflicts
   between specs, plans and this constitution.
 
-**Version**: 1.0.0 | **Ratified**: 2026-11-09 | **Last Amended**: 2026-11-09
+**Version**: 1.1.0 | **Ratified**: 2026-11-09 | **Last Amended**: 2026-11-09

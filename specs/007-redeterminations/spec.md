@@ -146,6 +146,6 @@ expected.
 
 - Illinois calls Medicaid renewals "redeterminations"; federal rules expect states to renew from
   available data before asking the applicant.
-- The 30-day response window and 12-month period reflect our reading of federal Medicaid rules
-  (42 CFR 435.916); the team should confirm them before the demo.
+- The 30-day response window and 12-month coverage period are project values for this training
+  build, modelled on federal Medicaid renewal rules.
 - The 60-day start is a team default, adjustable by configuration.

@@ -133,6 +133,11 @@ known-answer tests.
 - **FR-003-13**: The data set MUST include the test sets for other features: 10–20 pay stubs with
   expected extracted values (002), the known-answer cases (003), households due for
   redetermination during the demo window (007), and expected metric values (008).
+- **FR-003-15**: Poverty guideline values MUST be held in versioned configuration. Project values
+  (annual, per household): previous program year $15,000 for one person plus $5,000 for each
+  additional person; current program year $15,500 for one person plus $5,200 for each additional
+  person. The monthly income limit is 138% of the annual value divided by 12, rounded down to the
+  whole dollar (for example, one person in the current year: $1,782).
 - **FR-003-14**: Demo users from 000 MUST be linked to specific households chosen to show the demo
   scenarios.
 
@@ -154,9 +159,8 @@ known-answer tests.
 
 ## Assumptions
 
-- Income limits use the published federal poverty guidelines for each program year; the team
-  copies the values into configuration and records the source. 138% reflects the adult income
-  limit as we understand it and must be confirmed against the current Illinois figures.
+- Income limits are project values for this training build (FR-003-15), modelled on the federal
+  poverty guidelines but deliberately simplified.
 - Household composition and income counting are simplified to monthly gross income for the
   3-day build; this simplification is stated in the demo.
 - Citizenship, immigration and identity checks come from the simulated verification sources (005).

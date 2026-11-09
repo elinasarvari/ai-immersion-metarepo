@@ -13,7 +13,7 @@
 
 ## Requirement Completeness
 
-- [ ] No [NEEDS CLARIFICATION] markers remain
+- [x] No [NEEDS CLARIFICATION] markers remain
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
 - [x] Success criteria are technology-agnostic (no implementation details)
@@ -31,5 +31,5 @@
 
 ## Notes
 
-- One marker remains (manual terms of use). Resolve it before /speckit-plan. All other items pass. The "Lane & Dependencies" section is a team convention (see specs/README.md).
+- All items pass. The terms-of-use question was resolved by using a training-edition manual written for the project. The "Lane & Dependencies" section is a team convention (see specs/README.md).
 - Items marked incomplete require spec updates before `/speckit-clarify` or `/speckit-plan`.

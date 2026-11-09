@@ -18,6 +18,9 @@ api/
     domain/           shared Pydantic models used by everything above
   db/migrations/      Alembic
   analytics/          reporting / dbt models
+  seed/               synthetic data generator (fixed seed); policy_manual/ holds the
+                      training-edition manual
+  evals/              evaluation sets and the evaluation command (002, 004)
   tests/
 ```
 
@@ -65,6 +68,13 @@ apps/worker┘
 - Only `apps/worker/activities` imports `packages/agents`, `packages/rules` and `packages/rag`.
 - `apps/api` and `apps/worker` don't import each other.
 
+### Seed data and evaluations (`seed/`, `evals/`)
+- Both are scripts and data, not runtime code: they may import `packages/*`, and nothing imports them.
+- The generator in `seed/` is reproducible from a fixed seed. Generated households and documents
+  are git-ignored and rebuilt with `make seed`; the generator, the seed value and
+  `seed/policy_manual/` are committed.
+- Evaluation sets in `evals/` are committed. Evaluation runs call a live model and never run in CI.
+
 ### Database
 - Schema changes only through Alembic migrations in `db/migrations/`. Never edit an applied migration; add a new one.
 
@@ -76,4 +86,4 @@ apps/worker┘
 
 ## Ownership
 
-Workflows (`apps/worker/`) and Agents (`packages/agents/`) have separate owners. Changes that need both should be split so each owner's files change in their own commits, and the shared contract goes through `packages/domain`.
+Workflows (`apps/worker/`, Lane A) and Agents (`packages/agents/`, Lane B) belong to different lanes. Whoever currently holds a lane makes its changes; people rotate between lanes (see the lane table in `specs/README.md`). A change that needs both is split into separate commits per lane, and the shared contract goes through `packages/domain`.
