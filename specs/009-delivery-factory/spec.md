@@ -163,7 +163,8 @@ demo journey.
   IDs covered, each existing in `specs/`, and (b) a PASS result for every lane whose folders the
   pull request changes, with the number of review rounds and the rule IDs cited in any FAIL round.
 - **FR-009-04**: A traceability command MUST list, for every functional requirement, its tests
-  (matched by the `test_FR_NNN_nn_` name prefix in both code repos), tasks in `tasks.md` and
+  (matched by the `test_FR_NNN_nn_` prefix in Python and the `FR-NNN-nn:` prefix in TypeScript
+  test names, per `project-rules/testing.md`, in both code repos), tasks in `tasks.md` and
   merged pull requests citing it; it MUST flag requirements without tests, orphaned test names,
   and show agreed cuts as cut.
 - **FR-009-05**: A single command MUST build the quality and factory dashboard as a static page:

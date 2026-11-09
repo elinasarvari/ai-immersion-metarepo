@@ -14,7 +14,7 @@ Playwright covers the layers above unit tests: full user journeys through the UI
 - Base URLs, credentials and tokens come from env vars (`E2E_BASE_URL`, `API_BASE_URL`, ...) with defaults in a committed `.env.example`; never hardcode them.
 
 ## What to cover
-- Every user story's acceptance scenarios from `specs/<NNN-feature>/spec.md` get at least one E2E test for the happy path; name the test after the scenario.
+- Every user story's acceptance scenarios from `specs/<NNN-feature>/spec.md` get at least one E2E test for the happy path; name the test after the scenario, starting with the requirement ID it proves (`test('FR-000-19: applicant blocked from another household', ...)`). API tests follow the Python form in [testing.md](testing.md) (`test_FR_006_05_...`).
 - Every API endpoint gets API tests for: success response and schema, validation errors (`422`), auth (`401`/`403`), not found (`404`), and any documented business-rule error.
 - Validate API response bodies against the OpenAPI schema / `packages/domain` Pydantic models, not just status codes.
 - Don't re-test business logic exhaustively in E2E; push edge cases down to unit or API tests (test pyramid).
