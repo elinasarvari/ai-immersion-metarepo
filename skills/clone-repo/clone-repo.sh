@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Add a git repository as a submodule at <metarepo>/repos/<name>.
+# Clone a git repository into <workspace>/repos/<name>.
 # Usage: clone-repo.sh <git-url> [folder-name]
-# If the submodule is already registered, it is initialised/updated instead.
+# If the target already exists, it is fast-forward updated instead of re-cloned.
 set -euo pipefail
 
 url="${1:-}"
@@ -12,10 +12,11 @@ case "$url" in
   *) echo "Error: '$url' does not look like a git URL" >&2; exit 2 ;;
 esac
 
-# Metarepo root = two levels up from this script (skills/clone-repo/clone-repo.sh)
+# Workspace root = three levels up from this script (skills/clone-repo/clone-repo.sh)
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 root="$(cd "$script_dir/../.." && pwd -P)"
-mkdir -p "$root/repos"
+repos_dir="$root/repos"
+mkdir -p "$repos_dir"
 
 name="${2:-}"
 if [ -z "$name" ]; then
@@ -25,13 +26,13 @@ case "$name" in
   ""|.|..|*/*) echo "Error: invalid folder name '$name'" >&2; exit 2 ;;
 esac
 
-path="repos/$name"
-if git -C "$root" config -f .gitmodules --get "submodule.$path.url" >/dev/null 2>&1; then
-  echo "Submodule already registered: $path — initialising/updating"
-  git -C "$root" submodule update --init -- "$path"
-elif [ -e "$root/$path" ]; then
-  echo "Error: $root/$path exists but is not a registered submodule" >&2; exit 1
+target="$repos_dir/$name"
+if [ -d "$target/.git" ]; then
+  echo "Already cloned: $target — pulling latest"
+  git -C "$target" pull --ff-only
+elif [ -e "$target" ]; then
+  echo "Error: $target exists and is not a git repo" >&2; exit 1
 else
-  git -C "$root" submodule add -- "$url" "$path"
+  git clone -- "$url" "$target"
 fi
-echo "Ready: $root/$path (commit .gitmodules and $path to record it)"
+echo "Ready: $target"
