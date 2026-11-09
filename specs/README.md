@@ -15,7 +15,7 @@ Status: **Draft for team review** (2026-11-09).
 | [001 Case lifecycle](001-case-lifecycle/spec.md) | A | benefit-be | 000, 002*, 003* | Yes (states, signals) |
 | [002 Document verification](002-document-verification/spec.md) | B | benefit-be | 000, 004, 005 | Interface only |
 | [003 Eligibility rules and synthetic data](003-eligibility-rules/spec.md) | A | benefit-be | 000 | Yes (rules interface) |
-| [004 Policy search](004-policy-search/spec.md) | B | benefit-be | 000 | Interface only |
+| [004 Policy search and decision explanations](004-policy-search/spec.md) | B | benefit-be | 000, 003* | Interface only |
 | [005 Agent tool access](005-agent-tool-access/spec.md) | B | benefit-be | 000, 003, 004 | Yes (tool schemas) |
 | [006 Caseworker console and applicant portal](006-caseworker-applicant-portal/spec.md) | C | benefit-fe, benefit-be | 000, 001, 003, 007 | Yes (REST API) |
 | [007 Redeterminations](007-redeterminations/spec.md) | A | benefit-be | 001, 002, 003, 005 | No |
@@ -70,8 +70,13 @@ definitions.
 - **Domain models**: User, Household, HouseholdMember, CoveragePeriod, Case, CaseEvent,
   Document, Extraction, Finding, VerificationResult, NoticeDraft, ReviewTask,
   CaseworkerAction, RuleSet, Determination, ToolCallRecord.
-- **Database tables** (baseline migration): one per stored model above, plus `audit_log`
-  (append-only), `outbox` (notices), `policy_passages`.
+- **PostgreSQL** (baseline migration): users, households, household members, coverage periods,
+  cases, case events, review tasks, caseworker actions, rule sets, determinations (with
+  explanations), `audit_log` (append-only), `outbox` (notices), `policy_passages` (text, citation,
+  vector and keyword index).
+- **MongoDB** collections: `documents` (upload metadata), `extractions`, `agent_runs` (verification
+  and explanation run records with cost), `notice_drafts` (drafts and revisions), `tool_calls`.
+- **Reporting store** (008): built from PostgreSQL by dbt into DuckDB; pseudonymous keys only.
 - **Case workflow**: states (Submitted, Verifying, Awaiting applicant, Determining, Under
   review, Decided); signals (caseworker action, applicant response); timers (response
   deadline, review reminder, review reassignment, redetermination start).
@@ -79,6 +84,7 @@ definitions.
   - `verify_documents(case_id) -> VerificationResult` (B provides, A uses)
   - `evaluate(household, as_of_date) -> Determination` (A provides, A and C use)
   - `search_policy(query, as_of_date) -> list[PolicyPassage]` (B provides, B uses)
+  - `explain_determination(determination, audience) -> DecisionExplanation` (B provides, A and C use)
 - **Agent tools** (005): input and output schema for each of the 11 tools.
 - **REST API** (006): endpoint list and OpenAPI document; the UI builds against stub
   responses until each endpoint is real.
@@ -108,3 +114,6 @@ Each spec is reviewed by the lane that **uses** what it provides (see "Depends o
       guidelines for both program years into configuration, with the source recorded.
 - [ ] Decide where the synthetic data generator and evaluation sets live in benefit-be, and add
       them to `project-rules/backend-architecture.md`.
+- [ ] Fix two `project-rules/` conflicts: `frontend-react.md` asks for Server Components (not
+      available in a Vite single-page app) and `backend-architecture.md` says Workflows and
+      Agents have separate owners (conflicts with rotation).

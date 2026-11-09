@@ -16,7 +16,7 @@
 - **Depends on**: 000 (sign-in, configuration); 002 (document verification, stubbed until
   ready); 003 (determination, stubbed until ready).
 - **Out of scope**: appeals, mid-period change reporting, multiple programs, notice delivery
-  outside the applicant portal.
+  outside the applicant portal, applicant withdrawal.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -128,6 +128,8 @@ flag.
 - A caseworker overrides an adverse decision to approve: the case is decided as approved and the
   override is recorded with its reason.
 - Deadlines that land on a weekend or state holiday: business-day counting skips them.
+- The demo profile is on: every wait follows the compressed time scale, and case history shows
+  both simulated and real times.
 
 ## Requirements *(mandatory)*
 
@@ -155,6 +157,9 @@ flag.
   with 10 or fewer days left as at risk.
 - **FR-001-12**: When verification or determination fails after its retry limit, the system MUST
   create a review task instead of stalling.
+- **FR-001-13**: Every waiting period (response windows, review reminders and reassignment,
+  decision deadline tracking) MUST be configurable, and a demo profile MUST run them on a
+  compressed time scale (for example one day as one minute) without code changes.
 
 ### Key Entities
 

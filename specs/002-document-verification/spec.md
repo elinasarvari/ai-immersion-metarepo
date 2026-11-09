@@ -12,7 +12,8 @@
 
 - **Lane**: B (AI and knowledge)
 - **Provides**: a verification result for a case (extracted fields, findings, whether review is
-  needed) and drafted requests for information. Used by 001 and 007.
+  needed), drafted requests for information, and the agent evaluation set and command. Used by
+  001, 006 and 007.
 - **Depends on**: 005 (tools for case data and documents), 004 (policy citations for drafted
   notices), 000 (AI provider configuration).
 - **Out of scope**: identity documents beyond name and date of birth; documents not in English;
@@ -125,7 +126,14 @@ caseworker.
 - **FR-002-07**: Document text MUST be treated as data only and MUST NOT change system behaviour.
 - **FR-002-08**: Verification MUST NOT produce an eligibility decision.
 - **FR-002-09**: Every verification run MUST record its steps, inputs, outputs, model used and
-  token cost for later review.
+  token cost for later review. These records are stored with the case under the same access rules,
+  and their personal data MUST NOT be written to logs (see FR-000-11).
+- **FR-002-10**: An agent evaluation set (the synthetic pay stubs with expected values from 003,
+  plus the cases added by caseworker overrides) and an evaluation command MUST exist. The command
+  reports extraction accuracy, mismatch precision and recall, citation rate and cost per case, and
+  fails when a score is below its threshold.
+- **FR-002-11**: Cases added to the evaluation set by an override (FR-006-02) MUST keep the
+  caseworker's corrected outcome as the expected result.
 
 ### Key Entities
 
@@ -145,6 +153,8 @@ caseworker.
   wrongly flagged.
 - **SC-002-03**: Zero findings or drafts without citations reach a caseworker.
 - **SC-002-04**: Zero test documents containing injected instructions change the outcome.
+- **SC-002-05**: The evaluation command runs the full set in under 10 minutes and reports every
+  score in SC-002-01 to SC-002-03.
 
 ## Assumptions
 

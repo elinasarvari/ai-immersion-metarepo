@@ -13,7 +13,7 @@
 - **Lane**: C (platform and experience)
 - **Provides**: the screens caseworkers and applicants use, and the operations behind them.
 - **Depends on**: 000 (sign-in, errors), 001 (case states, review tasks, actions), 003
-  (explanations), 007 (redetermination responses). Builds against stub operations returning
+  (determinations), 004 (explanations), 007 (redetermination responses). Builds against stub operations returning
   seed data until those land.
 - **Out of scope**: mobile apps, languages other than English, notifications by email or text,
   the program metrics page (008).
@@ -38,6 +38,8 @@ and confirm the case resumes.
    document values and policy passages cited, and approve, edit and override actions.
 3. **Given** an override, **When** the caseworker submits it, **Then** a reason is required, the
    action is recorded, and the case is added to the evaluation set.
+4. **Given** a task reassigned to a supervisor after 4 business days, **When** the supervisor opens
+   the queue, **Then** the task appears with its reassignment reason and original assignee.
 
 ---
 

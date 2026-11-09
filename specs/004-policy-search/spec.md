@@ -1,4 +1,4 @@
-# Feature Specification: Policy Search
+# Feature Specification: Policy Search and Decision Explanations
 
 **Feature Branch**: `feature/004-policy-search`
 
@@ -6,16 +6,19 @@
 
 **Status**: Draft
 
-**Input**: User description: "Search and citation of the Illinois Medicaid policy manual"
+**Input**: User description: "Search and citation of the Illinois Medicaid policy manual, and plain-language explanations of decisions"
 
 ## Lane & Dependencies
 
 - **Lane**: B (AI and knowledge)
-- **Provides**: search over the Illinois policy manual returning cited passages. Used by 002
-  (notice drafts), 005 (policy search tool) and 006 (explanations).
-- **Depends on**: 000 (configuration).
+- **Provides**: search over the Illinois policy manual returning cited passages, and plain-language
+  explanations of determinations. Used by 002 (notice drafts), 005 (policy search tool), 006
+  (explanations shown to applicants and caseworkers) and 007.
+- **Depends on**: 000 (configuration, AI provider), 003 (determinations and rule traces; stubbed
+  until ready).
 - **Out of scope**: other states' manuals, non-medical chapters, answering general questions
-  without citations, keeping the manual automatically up to date.
+  without citations, keeping the manual automatically up to date, changing or overriding any
+  determination.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -68,12 +71,38 @@ better or worse.
    questions whose expected section is in the top 5, and the average rank of the first correct
    section.
 
+---
+
+### User Story 4 - Explain a decision in plain language (Priority: P1)
+
+For any determination, the applicant and the caseworker can read a plain-language explanation of
+the outcome: what each rule found, the values used, and the policy section behind each rule.
+
+**Why this priority**: "Why was this decided?" is central to the demo and to trust in the system.
+
+**Independent Test**: Generate explanations for the known-answer determinations and check every
+number matches the determination and every rule has a citation.
+
+**Acceptance Scenarios**:
+
+1. **Given** an income-ineligible determination, **When** its explanation is generated, **Then** it
+   states the outcome, the household income, size and limit used, and cites the policy section
+   for the income rule.
+2. **Given** any determination, **When** its explanation is generated, **Then** every number in it
+   matches the determination exactly and nothing is stated that the determination or the cited
+   passages do not support.
+3. **Given** a rule with no supporting passage found, **When** the explanation is generated,
+   **Then** it says no citation is available for that rule and the explanation is marked for
+   caseworker review.
+
 ### Edge Cases
 
 - A section is very long: it is split, and every part keeps its section number and title.
 - Two sections are near-duplicates: both may be returned, each with its own citation.
 - The manual is re-indexed: results and citations are the same for the same manual version.
 - The question contains instructions aimed at the model: treated as a search query only.
+- The AI provider is unavailable when an explanation is needed: the rule-by-rule trace is shown
+  without the plain-language summary, and the explanation is generated later.
 
 ## Requirements *(mandatory)*
 
@@ -97,12 +126,23 @@ better or worse.
   evaluation command MUST report top-5 recall and the average rank of the first correct section.
 - **FR-004-09**: The manual's source, retrieval date, version date and terms of use MUST be
   recorded alongside the index.
+- **FR-004-10**: For any determination, the system MUST produce a plain-language explanation for
+  applicants and a detailed one for caseworkers, stating the outcome, each rule's result and the
+  values used, with a policy citation per rule.
+- **FR-004-11**: Explanations MUST NOT state anything the determination or the cited passages do
+  not support, and every number MUST match the determination exactly; an explanation that fails
+  this check MUST be rejected and marked for review.
+- **FR-004-12**: Explanations MUST NOT change, contradict or soften the determination.
+- **FR-004-13**: Each explanation MUST be stored with its determination as generated at the time,
+  so history shows the original explanation.
 
 ### Key Entities
 
 - **Policy passage**: text, section number, section title, source link, version date.
 - **Search result**: question, date, ranked passages with citations, or "no relevant policy found".
 - **Evaluation question**: question text and expected section(s).
+- **Decision explanation**: determination reference, audience (applicant or caseworker), text,
+  citations per rule, generated time, model used.
 
 ## Success Criteria *(mandatory)*
 
@@ -113,6 +153,9 @@ better or worse.
 - **SC-004-02**: 100% of returned passages carry a complete citation.
 - **SC-004-03**: At least 90% of off-topic test questions return "no relevant policy found".
 - **SC-004-04**: Search returns results in under 2 seconds on a team laptop.
+- **SC-004-05**: 100% of numbers in generated explanations match their determinations on the
+  known-answer cases.
+- **SC-004-06**: At least 95% of rules in generated explanations carry a policy citation.
 
 ## Assumptions
 

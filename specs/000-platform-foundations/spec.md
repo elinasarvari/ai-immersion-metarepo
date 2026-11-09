@@ -12,7 +12,7 @@
 
 - **Lane**: C (platform and experience)
 - **Provides**: sign-in and roles, configuration, error format, health checks, logging, the
-  one-command run profiles, AI provider selection. Every other feature depends on this.
+  one-command run profiles, AI provider selection, the quality report. Every other feature depends on this.
 - **Depends on**: nothing. Part of the Day 1 contracts PR.
 - **Out of scope**: real single sign-on, user self-registration, password reset, cloud
   deployment, multiple environments beyond local development and local production-like.
@@ -139,6 +139,8 @@ succeed without code changes.
   API and Amazon Bedrock, with no code changes.
 - **FR-000-13**: Every outbound call MUST have a timeout and a bounded retry with backoff.
 - **FR-000-14**: Every stored record and generated document MUST carry a synthetic-data marker.
+- **FR-000-15**: A single command MUST produce a quality report for the demo: tests passed,
+  requirements without a test, and the latest evaluation scores from 002 and 004.
 
 ### Key Entities
 

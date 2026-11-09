@@ -49,7 +49,8 @@ Rationale: eligibility decisions must be auditable and reproducible; model outpu
 - Work follows red-green-refactor: one failing test for one behaviour, then the code, then
   refactor with all tests green (see `project-rules/testing.md`).
 - Every functional requirement (`FR-NNN-xx`) MUST have at least one test named after it, for
-  example `test_FR_002_03_income_mismatch_creates_cited_finding`.
+  example `test_FR_002_03_income_mismatch_creates_cited_finding`: the requirement ID followed by
+  the behaviour-first name from `project-rules/testing.md`.
 - Unit tests and CI MUST NOT call a live AI model; they use fakes or recorded responses.
   Evaluation runs against a live model are separate (`make eval`) and have pass thresholds.
 
@@ -102,7 +103,8 @@ Rationale: eligibility decisions must be auditable and reproducible; model outpu
   `repos/`: `benefit-be` (all Python) and `benefit-fe` (React). `plan.md` MUST name the target
   repo(s); `/speckit-implement` writes code only inside them.
 - **Backend:** Python 3.11+, FastAPI, Temporal (dev server), LangGraph and LangChain, PostgreSQL
-  with vector search, MongoDB, Alembic migrations, ruff, pytest. Layout per
+  with vector search, MongoDB, DuckDB and dbt for the reporting store, Alembic migrations, ruff,
+  pytest. Layout per
   `project-rules/backend-architecture.md`.
 - **Frontend:** React + TypeScript (strict), Vitest + Testing Library, WCAG 2.1 AA, per
   `project-rules/frontend-react.md`.

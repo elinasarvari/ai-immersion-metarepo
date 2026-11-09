@@ -14,7 +14,7 @@
 - **Provides**: the yearly redetermination process for every enrolled household. Used by 006
   (applicant view) and 008 (metrics).
 - **Depends on**: 001 (case lifecycle, review tasks), 002 (verification), 003 (rules, data set),
-  005 (verification sources).
+  005 (verification sources). 002 and 005 are stubbed until ready.
 - **Out of scope**: mid-period change reporting, appeals, the reconsideration period after
   coverage ends, outreach by mail, phone or text.
 
@@ -119,6 +119,10 @@ expected.
 - **FR-007-08**: Redeterminations MUST use the same verification, rules and review steps as new
   applications.
 - **FR-007-09**: Caseworkers MUST be able to list redeterminations starting in the next 30 days.
+- **FR-007-10**: A caseworker or supervisor MUST be able to start a household's redetermination on
+  demand (for demos and catch-up), subject to FR-007-07.
+- **FR-007-11**: The 60-day start and 30-day response window MUST follow the demo time scale
+  (FR-001-13) when the demo profile is on.
 
 ### Key Entities
 

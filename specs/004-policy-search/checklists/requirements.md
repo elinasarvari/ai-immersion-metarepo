@@ -1,4 +1,4 @@
-# Specification Quality Checklist: Policy Search
+# Specification Quality Checklist: Policy Search and Decision Explanations
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-11-09
