@@ -36,6 +36,8 @@ Rules:
 - Don't edit `.specify/templates` or `.specify/scripts` unless asked. Update them with `specify integration upgrade`.
 - `plan.md` must name the target repo(s) (`repos/<name>`). `/speckit-implement` writes code only inside those clones, never in the metarepo.
 - For backend work, the "Project Structure" section of `plan.md` must use the layout and import boundaries in `project-rules/backend-architecture.md`. Don't invent a different structure.
+- `/speckit-plan`: get each affected lane agent's section (plan mode) and include it. `/speckit-tasks`: tag every task with its lane and repo.
+- `/speckit-implement`: before each task, read the rule files for its lane. Afterwards, every affected lane agent must review the changes (review mode) and report PASS before any PR is opened.
 
 ## Pushing code and opening PRs
 

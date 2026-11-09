@@ -4,10 +4,11 @@ Central store for the AI-assisted development assets shared by the Benefit proje
 
 | Folder | Purpose |
 |---|---|
-| `workflows/` | Multi-step agent workflows (discover → plan → implement → verify) |
+| `workflows/` | Multi-step agent workflows (spec → plan → implement → rules gate → PR) |
+| `agents/` | Lane agents (Workflows, Agents, Knowledge & data, Platform & UI) that plan and review against the rule sets |
 | `skills/` | Reusable skills / slash commands (one folder per skill, with `SKILL.md`) |
 | `specs/` | Functional specs and technical plans per feature |
-| `project-rules/` | Coding standards and agent rules (e.g. `CLAUDE.md` fragments) per stack |
+| `project-rules/` | Rule sets with IDs, mapped to repo paths in `project-rules/README.md` |
 | `templates/` | Starter templates for specs, plans and rule files |
 
 ## Projects governed by this repo
