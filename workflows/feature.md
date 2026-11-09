@@ -1,4 +1,4 @@
-# Feature workflow: spec → plan → implement → rules gate → PR
+# Feature workflow: spec → plan → implement → review gate → PR
 
 The standard path for any feature in `benefit-be` and/or `benefit-fe`. Each step names who does it and what must be true before moving on.
 
@@ -33,11 +33,15 @@ The standard path for any feature in `benefit-be` and/or `benefit-fe`. Each step
 - Before writing each task, read the rule files for that task's lane. Follow them as hard constraints.
 - Work on a feature branch in each repo (`feature/<NNN-feature>`), created from `origin/main`.
 
-## 5. Rules gate (lane agents, review mode)
-1. Ask each lane agent whose paths changed to review the branch.
-2. Any FAIL: fix the cited violations, then ask only the failing lanes to review again.
-3. Repeat until every lane reports PASS.
-- **Gate:** every affected lane reports PASS. Don't open a PR with a known violation.
+## 5. Review gate (`review-changes` skill)
+Run in parallel:
+- **Rules:** each lane agent whose paths changed, in review mode.
+- **Code review:** `backend-reviewer` if `benefit-be` changed, `frontend-reviewer` if `benefit-fe` changed.
+
+Then:
+1. Any FAIL or REQUEST CHANGES: fix the blocking findings, then ask only the agents that raised them to review again.
+2. Repeat until every lane reports PASS and every code reviewer reports APPROVE.
+- **Gate:** no blocking findings left. Don't open a PR with a known violation.
 
 ## 6. Verify (main assistant)
 - `make check` in each changed repo (`benefit-be`: ruff, mypy, pytest, gitleaks, pip-audit; `benefit-fe`: ESLint, Prettier, `tsc`, Vitest, Playwright, `pnpm audit`).
@@ -47,7 +51,7 @@ The standard path for any feature in `benefit-be` and/or `benefit-fe`. Each step
 
 ## 7. Pull requests (`create-pr` skill)
 - One PR per changed repo, using the same branch name, filled from the PR template.
-- Include in each PR: the lane review results (PASS per lane), check and eval results, and links to the sibling PR.
+- Include in each PR: the review results (PASS per lane, APPROVE from the code reviewer), check and eval results, and links to the sibling PR.
 - If the OpenAPI spec changed, open the `benefit-be` PR first, then the `benefit-fe` PR that regenerates the client.
 - Confirm with the user before pushing.
 

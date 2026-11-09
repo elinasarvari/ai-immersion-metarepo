@@ -27,7 +27,7 @@ If the feature doesn't touch your lane, say so in one line.
 
 Input: the repo and branch, or the diff, of the implemented change.
 
-1. Look at every changed file in your lane: `git -C repos/<repo> diff origin/main...HEAD -- <your paths>`.
+1. Run `skills/review-changes/branch-status.sh <repo>` first. It fetches, so you compare against the current `origin/main`. Then look at every changed file in your lane: `git -C repos/<repo> diff origin/main...HEAD -- <your paths>` (plus `git -C repos/<repo> diff -- <your paths>` if it reports uncommitted files).
 2. Check each one against every rule in your rule sets. Also run the cheap checks that apply (for example `grep` for forbidden imports, a missing test file or a missing citation field).
 3. Report:
 

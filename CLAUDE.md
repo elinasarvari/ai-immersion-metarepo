@@ -19,6 +19,7 @@ Central store for shared AI-assisted development assets (see README.md for folde
 
 - **Rule sets** (`project-rules/`): every rule has an ID (`TW-3`, `AG-6`, …). `project-rules/README.md` maps each repo path to its lane and rule files, and says which file wins when two disagree. Generated code must satisfy them; treat them as hard constraints, not suggestions.
 - **Lane agents** (`agents/`, shared through the `.claude/agents` and `.github/agents` symlinks): `workflows-lane`, `agents-lane`, `data-lane`, `platform-ui-lane`. They match the four lanes; the three team members rotate between lanes (see `specs/README.md`). They write their lane's section of `plan.md` and review implemented code against their rules. They never edit code.
+- **Code reviewers** (`agents/`): `backend-reviewer` (`benefit-be`) and `frontend-reviewer` (`benefit-fe`). They review the whole branch like a senior engineer: bugs, security, tests, spec coverage and the cross-lane rules. They return APPROVE or REQUEST CHANGES with severity-ranked findings, and never edit code. Run them, together with the lane checks, with the **review-changes** skill.
 - **Workflows** (`workflows/`): `feature.md` is the standard path from spec to PR. Run it with the **feature-workflow** skill.
 
 ## Keeping Claude Code and Copilot in step
@@ -57,7 +58,7 @@ Rules:
 - `plan.md` must name the target repo(s) (`repos/<name>`). `/speckit-implement` writes code only inside those submodules, never in the metarepo. The one exception is feature 009 (delivery factory), whose plan may also target the metarepo's `scripts/factory/` and `templates/`.
 - For backend work, the "Project Structure" section of `plan.md` must use the layout and import boundaries in `project-rules/backend-architecture.md`. Don't invent a different structure.
 - `/speckit-plan`: get each affected lane agent's section (plan mode) and include it. `/speckit-tasks`: tag every task with its lane and repo.
-- `/speckit-implement`: before each task, read the rule files for its lane. Afterwards, every affected lane agent must review the changes (review mode) and report PASS before any PR is opened.
+- `/speckit-implement`: before each task, read the rule files for its lane. Afterwards, run the **review-changes** skill: every affected lane agent must report PASS and the code reviewer for each changed repo must report APPROVE before any PR is opened.
 
 ## Pushing code and opening PRs
 
