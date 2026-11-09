@@ -5,7 +5,20 @@ Feature specs for the 3-day build. Each folder was created with Spec Kit's
 quality checklist. Plans and tasks are produced by the lane owner with `/speckit-plan` and
 `/speckit-tasks` **after** the spec review.
 
-Status: **Draft for team review** (2026-11-09).
+Status: **Merged to main** via PR #3 (2026-11-09). Any unticked item under "Spec review round 2"
+below is still open; settle it before the Day 1 contracts PR.
+
+## Team pages
+
+Shared with the organization. To update one, read it by URL with the Artifact tool, edit, and
+republish to the same URL.
+
+| Page | What it covers |
+|---|---|
+| [Project hub](https://claude.ai/artifact/Vmy8w3CJ71TiUp1Jo8PTUo) | Start here: reading order, decisions so far, open items |
+| [Pitch](https://claude.ai/artifact/TK6m62sWqr4x7Aq9xgkXtL) | Business case, the 3-minute demo, risks |
+| [Tech stack](https://claude.ai/artifact/RFDMwFwTeycpJwNTsXHmow) | Architecture, tools by layer, data, MCP servers, testing, Day 0 setup |
+| [Build process](https://claude.ai/artifact/FgFY6qkFterpo8Q2YrDvfR) | Spec Kit flow, features, lanes and rotation, schedule |
 
 ## Feature map
 
