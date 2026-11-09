@@ -5,6 +5,7 @@ Central store for shared AI-assisted development assets (see README.md for folde
 ## Linked repositories (`repos/`)
 
 - External repositories are **plain git clones** at `repos/<repo-name>`. `repos/*` is gitignored, so the metarepo doesn't track them.
+- External repositories are **plain git clones** at `repos/<repo-name>`. `repos/*` is gitignored, so the metarepo doesn't track them.
 - When the user gives one or more repo URLs to add, link or pull in, use the **clone-repo** skill (`skills/clone-repo/SKILL.md`):
   ```bash
   skills/clone-repo/clone-repo.sh <git-url> [folder-name]
@@ -35,6 +36,7 @@ Rules:
 - When building one of the linked projects, work inside `repos/<name>` and use that project's own build and test commands.
 - Don't edit `.specify/templates` or `.specify/scripts` unless asked. Update them with `specify integration upgrade`.
 - `plan.md` must name the target repo(s) (`repos/<name>`). `/speckit-implement` writes code only inside those clones, never in the metarepo.
+- `plan.md` must name the target repo(s) (`repos/<name>`). `/speckit-implement` writes code only inside those clones, never in the metarepo.
 - For backend work, the "Project Structure" section of `plan.md` must use the layout and import boundaries in `project-rules/backend-architecture.md`. Don't invent a different structure.
 - `/speckit-plan`: get each affected lane agent's section (plan mode) and include it. `/speckit-tasks`: tag every task with its lane and repo.
 - `/speckit-implement`: before each task, read the rule files for its lane. Afterwards, every affected lane agent must review the changes (review mode) and report PASS before any PR is opened.
@@ -51,7 +53,7 @@ skills/create-pr/create-pr.sh <repo-name> --branch feature/<NNN-feature> --messa
 - It runs inside `repos/<name>` and pushes to that clone's own `origin`, then opens a PR against `main` with `gh` (requires `gh auth login`).
 - Branch name = Spec Kit feature folder name with a type prefix (`feature/003-user-login`). Use the same branch in every repo the feature touches, with one PR per repo, and link the PRs to each other.
 - Confirm the repo, branch, files and PR title with the user before pushing. Never push to `main`, force-push or skip hooks.
-- The metarepo commits only `specs/`. After the PRs merge, refresh each clone with `git -C repos/<name> pull --ff-only` on `main`.
+- The metarepo commits only `specs/` and, after the PRs merge, the updated submodule pointer (`git submodule update --remote repos/<name>`).
 
 ## Skills
 

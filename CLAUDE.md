@@ -22,15 +22,16 @@ Run these steps in order. In Claude Code they are slash commands; in Copilot, as
 
 1. `/speckit-constitution`: set the project principles, based on `project-rules/`
 2. `/speckit-specify <what to build>`: write the functional spec
-3. `/speckit-clarify` *(optional)*: resolve unclear points
+3. `/speckit-clarify` _(optional)_: resolve unclear points
 4. `/speckit-plan <tech choices>`: write the technical plan
-5. `/speckit-checklist` *(optional)*: generate a quality checklist
+5. `/speckit-checklist` _(optional)_: generate a quality checklist
 6. `/speckit-tasks`: break the plan into tasks
-7. `/speckit-analyze` *(optional)*: check the spec, plan and tasks are consistent
+7. `/speckit-analyze` _(optional)_: check the spec, plan and tasks are consistent
 8. `/speckit-implement`: build it by working through the tasks and running the needed install, build and test commands
 9. `/speckit-converge`: find remaining gaps and add them as tasks
 
 Rules:
+
 - Run the `.specify/scripts/bash/*.sh` scripts exactly as the skills say. Don't create feature folders by hand.
 - When building one of the linked projects, work inside `repos/<name>` and use that project's own build and test commands.
 - Don't edit `.specify/templates` or `.specify/scripts` unless asked. Update them with `specify integration upgrade`.
@@ -51,7 +52,7 @@ skills/create-pr/create-pr.sh <repo-name> --branch feature/<NNN-feature> --messa
 - It runs inside `repos/<name>` and pushes to that clone's own `origin`, then opens a PR against `main` with `gh` (requires `gh auth login`).
 - Branch name = Spec Kit feature folder name with a type prefix (`feature/003-user-login`). Use the same branch in every repo the feature touches, with one PR per repo, and link the PRs to each other.
 - Confirm the repo, branch, files and PR title with the user before pushing. Never push to `main`, force-push or skip hooks.
-- The metarepo commits only `specs/`. After the PRs merge, refresh each clone with `git -C repos/<name> pull --ff-only` on `main`.
+- The metarepo commits only `specs/` and, after the PRs merge, the updated submodule pointer (`git submodule update --remote repos/<name>`).
 
 ## Skills
 
