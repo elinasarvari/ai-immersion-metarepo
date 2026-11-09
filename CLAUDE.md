@@ -10,9 +10,29 @@ Central store for shared AI-assisted development assets (see README.md for folde
   skills/clone-repo/clone-repo.sh <git-url> [folder-name]
   ```
   If the submodule is already registered, the script initialises/updates it instead.
-- After a fresh checkout of the metarepo, run `git submodule update --init --recursive` to fetch them.
+- To check or update the linked repos (after a fresh checkout, after PRs merge, or before starting work), use the **sync-repos** skill: `skills/sync-repos/sync-repos.sh [--check | --commit]`. It only fast-forwards clean submodules on `main` and only records pointers that are merged into `main`.
 - Never add submodules outside `repos/`, never embed credentials in URLs, and never remove a submodule without asking.
-- When working inside a linked repo, follow that repo's own `CLAUDE.md` / rules plus the matching file in `project-rules/`. Commits for that project are made inside `repos/<name>`; then commit the updated pointer in the metarepo.
+- When working inside a linked repo, follow that repo's own `CLAUDE.md` / rules plus the rule sets that `project-rules/README.md` maps to the paths you touch. Commits for that project are made inside `repos/<name>`; then commit the updated pointer in the metarepo.
+- The project has two repos: `benefit-be` (API, Temporal worker, agents, rules, RAG, MCP servers, DB, evals, analytics) and `benefit-fe` (React UI).
+
+## Rule sets, lane agents and workflows
+
+- **Rule sets** (`project-rules/`): every rule has an ID (`TW-3`, `AG-6`, …). `project-rules/README.md` maps each repo path to its lane and rule files, and says which file wins when two disagree. Generated code must satisfy them; treat them as hard constraints, not suggestions.
+- **Lane agents** (`agents/`, shared through the `.claude/agents` and `.github/agents` symlinks): `workflows-lane`, `agents-lane`, `data-lane`, `platform-ui-lane`. They match the four lanes; the three team members rotate between lanes (see `specs/README.md`). They write their lane's section of `plan.md` and review implemented code against their rules. They never edit code.
+- **Workflows** (`workflows/`): `feature.md` is the standard path from spec to PR. Run it with the **feature-workflow** skill.
+
+## Keeping Claude Code and Copilot in step
+
+Both tools use the same skills, agents and rules. Copilot gets them like this:
+
+| Copilot reads | Comes from | How |
+|---|---|---|
+| `.github/copilot-instructions.md` | `CLAUDE.md` | generated copy |
+| `.github/prompts/<skill>.prompt.md` (slash commands in Copilot Chat) | `skills/<skill>/SKILL.md` | generated |
+| `.github/skills/` | `skills/` | symlink |
+| `.github/agents/` | `agents/` | symlink |
+
+After changing `CLAUDE.md` or adding, renaming or removing a skill, run `python3 scripts/sync-copilot.py`, and commit the generated files with the change. `--check` reports drift without changing anything. Never edit the generated files directly.
 
 ## Spec-driven development (GitHub Spec Kit)
 
@@ -36,6 +56,8 @@ Rules:
 - Don't edit `.specify/templates` or `.specify/scripts` unless asked. Update them with `specify integration upgrade`.
 - `plan.md` must name the target repo(s) (`repos/<name>`). `/speckit-implement` writes code only inside those submodules, never in the metarepo.
 - For backend work, the "Project Structure" section of `plan.md` must use the layout and import boundaries in `project-rules/backend-architecture.md`. Don't invent a different structure.
+- `/speckit-plan`: get each affected lane agent's section (plan mode) and include it. `/speckit-tasks`: tag every task with its lane and repo.
+- `/speckit-implement`: before each task, read the rule files for its lane. Afterwards, every affected lane agent must review the changes (review mode) and report PASS before any PR is opened.
 
 ## Pushing code and opening PRs
 
@@ -49,7 +71,7 @@ skills/create-pr/create-pr.sh <repo-name> --branch feature/<NNN-feature> --messa
 - It runs inside `repos/<name>` and pushes to that submodule's own `origin`, then opens a PR against `main` with `gh` (requires `gh auth login`).
 - Branch name = Spec Kit feature folder name with a type prefix (`feature/003-user-login`). Use the same branch in every repo the feature touches, with one PR per repo, and link the PRs to each other.
 - Confirm the repo, branch, files and PR title with the user before pushing. Never push to `main`, force-push or skip hooks.
-- The metarepo commits only `specs/` and, after the PRs merge, the updated submodule pointer (`git submodule update --remote repos/<name>`).
+- The metarepo commits only `specs/` and, after the PRs merge, the updated submodule pointers (`sync-repos.sh --commit`).
 
 ## Skills
 

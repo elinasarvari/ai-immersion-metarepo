@@ -127,9 +127,10 @@ Rationale: eligibility decisions must be auditable and reproducible; model outpu
 
 - **Spec Kit flow:** constitution → specify → (clarify) → plan → (checklist) → tasks →
   (analyze) → implement → converge, as described in `CLAUDE.md`.
-- **Lanes, not people:** work is organised into three lanes (A: workflows and decisions,
-  B: AI and knowledge, C: platform and experience). Team members rotate between lanes at each
-  integration checkpoint so everyone works on every side.
+- **Lanes, not people:** work is organised into the four lanes in `project-rules/README.md`
+  (Workflows, Agents, Knowledge & data, Platform & UI), each with its own rule file and lane
+  agent. The three team members rotate between seats (Workflows + Agents, Knowledge & data,
+  Platform & UI) at each integration checkpoint so everyone works on every side.
 - **Handover:** before rotating, merge all work, tick completed tasks in `tasks.md`, and write
   `handoff.md` in the feature folder (state, open issues, next task). The incoming person reviews
   the outgoing person's last PR.
@@ -149,4 +150,4 @@ Rationale: eligibility decisions must be auditable and reproducible; model outpu
 - Every PR review checks compliance with these principles. `/speckit-analyze` flags conflicts
   between specs, plans and this constitution.
 
-**Version**: 1.3.0 | **Ratified**: 2026-11-09 | **Last Amended**: 2026-11-09
+**Version**: 1.4.0 | **Ratified**: 2026-11-09 | **Last Amended**: 2026-11-09

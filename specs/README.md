@@ -11,44 +11,48 @@ Status: **Draft for team review** (2026-11-09).
 
 | Feature | Lane | Target repo(s) | Depends on | In Day 1 contracts PR? |
 |---|---|---|---|---|
-| [000 Platform foundations](000-platform-foundations/spec.md) | C | benefit-be, benefit-fe | none | Yes |
-| [001 Case lifecycle](001-case-lifecycle/spec.md) | A | benefit-be | 000, 002*, 003*, 004* | Yes (states, signals) |
-| [002 Document verification](002-document-verification/spec.md) | B | benefit-be | 000, 003, 004, 005 | Interface only |
-| [003 Eligibility rules and synthetic data](003-eligibility-rules/spec.md) | A | benefit-be | 000 | Yes (rules interface) |
-| [004 Policy search and decision explanations](004-policy-search/spec.md) | B | benefit-be | 000, 003* | Interface only |
-| [005 Agent tool access](005-agent-tool-access/spec.md) | B | benefit-be | 000, 003, 004 | Yes (tool schemas) |
-| [006 Caseworker console and applicant portal](006-caseworker-applicant-portal/spec.md) | C | benefit-fe, benefit-be | 000, 001, 003, 004, 007 | Yes (REST API) |
-| [007 Redeterminations](007-redeterminations/spec.md) | A | benefit-be | 001, 002, 003, 005 | No |
-| [008 Program metrics](008-program-metrics/spec.md) | C | benefit-be, benefit-fe | 001, 003, 006, 007 | No |
+| [000 Platform foundations](000-platform-foundations/spec.md) | Platform & UI | benefit-be, benefit-fe | none | Yes |
+| [001 Case lifecycle](001-case-lifecycle/spec.md) | Workflows | benefit-be | 000, 002*, 003*, 004* | Yes (states, signals) |
+| [002 Document verification](002-document-verification/spec.md) | Agents | benefit-be | 000, 003, 004, 005 | Interface only |
+| [003 Eligibility rules and synthetic data](003-eligibility-rules/spec.md) | Knowledge & data | benefit-be | 000 | Yes (rules interface) |
+| [004 Policy search and decision explanations](004-policy-search/spec.md) | Knowledge & data, Agents | benefit-be | 000, 003* | Interface only |
+| [005 Agent tool access](005-agent-tool-access/spec.md) | Platform & UI | benefit-be | 000, 003, 004 | Yes (tool schemas) |
+| [006 Caseworker console and applicant portal](006-caseworker-applicant-portal/spec.md) | Platform & UI | benefit-fe, benefit-be | 000, 001, 003, 004, 007 | Yes (REST API) |
+| [007 Redeterminations](007-redeterminations/spec.md) | Workflows | benefit-be | 001, 002, 003, 005 | No |
+| [008 Program metrics](008-program-metrics/spec.md) | Knowledge & data, Platform & UI | benefit-be, benefit-fe | 001, 003, 006, 007 | No |
 
 \* Built against stubs until the real implementation lands.
 
 ## Lanes and the folders they own
 
-Paths follow `project-rules/backend-architecture.md`. A lane edits only its own folders; changes
-anywhere else go through the owning lane.
+Lanes match `project-rules/README.md` and the lane agents in `agents/`. Paths are from the
+`benefit-be` repo root, per `project-rules/backend-architecture.md`. A lane edits only its own
+folders; changes anywhere else go through the owning lane.
 
-| Lane | Features | benefit-be | benefit-fe |
+| Lane | Features it leads | benefit-be | benefit-fe |
 |---|---|---|---|
-| **A: Workflows and decisions** | 001, 003, 007 | `api/apps/worker/`, `api/packages/rules/`, `api/db/migrations/`, `api/seed/` (except `policy_manual/`; writes `seed/generated/`) | none |
-| **B: AI and knowledge** | 002, 004, 005 | `api/packages/agents/`, `api/packages/rag/`, `api/packages/mcp_servers/`, `api/evals/`, `api/seed/policy_manual/` | none |
-| **C: Platform and experience** | 000, 006, 008 | `api/apps/api/`, `api/analytics/`, `api/packages/platform/`, `Makefile`, `Procfile`, `.env.example` | whole repo |
+| **Workflows** | 001, 007 | `apps/worker/` | none |
+| **Agents** | 002, 004 (explanations) | `packages/agents/`; extraction, explanation and agent-success evals in `evals/` | none |
+| **Knowledge & data** | 003, 004 (search), 008 (reporting store) | `packages/rag/`, `packages/rules/`, `db/` (baseline migration, `db/seeds/`), `analytics/`, `data/policy/`; retrieval evals | none |
+| **Platform & UI** | 000, 005, 006, 008 (metrics page) | `apps/api/`, `packages/mcp_servers/`, `packages/platform/`, `Makefile`, `Procfile`, `.env.example` | whole repo |
 
-Shared: `api/packages/domain/` changes only through a contracts PR reviewed by all three lanes.
-Tests in `api/tests/` mirror the source tree and belong to the lane that owns the source folder.
-Lane A writes the baseline migration (every table, including users) in the contracts PR.
+Shared: `packages/domain/` changes only through a contracts PR reviewed by every lane.
+Tests in `tests/` mirror the source tree and belong to the lane that owns the source folder.
+Knowledge & data writes the baseline migration (every table, including users) in the contracts PR.
 
 ## Rotation
 
-Lanes stay fixed; people rotate at each integration checkpoint so everyone works on every side.
+Four lanes, three people. Workflows and Agents form one seat, because activities call agents
+through a single shared contract; Knowledge & data and Platform & UI are a seat each. People
+rotate seats at each integration checkpoint so everyone works on every side.
 
 | Session | Person 1 | Person 2 | Person 3 |
 |---|---|---|---|
 | Day 1 morning | Contracts PR together | Contracts PR together | Contracts PR together |
-| Day 1 afternoon | Lane A | Lane B | Lane C |
-| Day 2 morning | Lane B | Lane C | Lane A |
-| Day 2 afternoon | Lane C | Lane A | Lane B |
-| Day 3 | Hardening in current lane | Hardening in current lane | Hardening in current lane |
+| Day 1 afternoon | Workflows + Agents | Knowledge & data | Platform & UI |
+| Day 2 morning | Knowledge & data | Platform & UI | Workflows + Agents |
+| Day 2 afternoon | Platform & UI | Workflows + Agents | Knowledge & data |
+| Day 3 | Hardening in current seat | Hardening in current seat | Hardening in current seat |
 
 Before each rotation: merge everything, tick completed tasks in `tasks.md`, write `handoff.md`
 in each feature folder you touched, and spend 10 minutes walking the next person through it.
@@ -88,14 +92,14 @@ definitions.
   escalation, redetermination start). Redeterminations use the same states with no 45-day
   deadline.
 - **Interfaces between lanes**:
-  - `verify_documents(case_id) -> VerificationResult` (B provides, A uses)
-  - `evaluate(household, as_of_date) -> Determination` (A provides; called only by worker
-    activities. C reads stored determinations.)
-  - `search_policy(query, as_of_date) -> list[PolicyPassage]` (B provides, B uses)
-  - `explain_determination(determination, audience) -> DecisionExplanation` (B provides;
-    called by worker activities after each determination. C reads stored explanations.)
-  - `draft_request(case_id, items) -> NoticeDraft` (B provides; used for requests for
-    information and redetermination forms)
+  - `verify_documents(case_id) -> VerificationResult` (Agents provides; Workflows uses)
+  - `evaluate(household, as_of_date) -> Determination` (Knowledge & data provides; called only
+    by worker activities. Platform & UI reads stored determinations.)
+  - `search_policy(query) -> list[PolicyPassage]` (Knowledge & data provides; Agents uses)
+  - `explain_determination(determination, audience) -> DecisionExplanation` (Agents provides;
+    called by worker activities after each determination. Platform & UI reads stored explanations.)
+  - `draft_request(case_id, items) -> NoticeDraft` (Agents provides; used for requests
+    for information and redetermination forms)
 - **Agent tools** (005): input and output schema for each of the 11 tools.
 - **REST API** (006): endpoint list and OpenAPI document; the UI builds against stub
   responses until each endpoint is real.
@@ -134,8 +138,9 @@ If the team is behind at a checkpoint, cut in this order. Every cut keeps the de
 
 ## Test strategy
 
-Each lane writes unit, workflow and integration tests for its own features. Lane C owns CI, the
-test harnesses and the end-to-end suite; each lane adds the end-to-end journey for its feature.
+Each lane writes unit, workflow and integration tests for its own features. Platform & UI owns
+CI, the test harnesses and the end-to-end suite; each lane adds the end-to-end journey for its
+feature.
 
 | Level | What it checks | Tool | Runs |
 |---|---|---|---|
@@ -170,7 +175,7 @@ Each spec is reviewed by the lane that **uses** what it provides (see "Depends o
 - [x] 004: policy manual source. Decided: a training-edition manual written by the team (see 004
       Assumptions).
 - [x] 001, 003 and 007: program values. Decided: fixed project values (see "Project values").
-- [x] Seed data and evaluation sets. Decided: `benefit-be/api/seed/` and `benefit-be/api/evals/`,
-      added to `project-rules/backend-architecture.md`.
+- [x] Seed data and evaluation sets. Decided: `benefit-be/db/seeds/` and `benefit-be/evals/`, with the
+      manual in `data/policy/` (BA-10 to BA-12 in `project-rules/backend-architecture.md`).
 - [x] `project-rules/` conflicts. Fixed: `frontend-react.md` now states a Vite single-page app
       with no Server Components, and `backend-architecture.md` assigns ownership by lane.
