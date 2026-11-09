@@ -35,8 +35,7 @@ healthy.
 1. **Given** a fresh clone and the documented prerequisites, **When** the developer runs the
    development start command, **Then** every component starts and reports healthy.
 2. **Given** a running system, **When** the developer runs the production-like start command,
-   **Then** components start with production settings (no auto-reload, built frontend) and
-   report healthy.
+   **Then** components start with production settings and report healthy.
 3. **Given** a running system, **When** the developer runs the reset command, **Then** all data
    is cleared and the synthetic data set is reloaded.
 
@@ -140,7 +139,8 @@ succeed without code changes.
 - **FR-000-13**: Every outbound call MUST have a timeout and a bounded retry with backoff.
 - **FR-000-14**: Every stored record and generated document MUST carry a synthetic-data marker.
 - **FR-000-15**: A single command MUST produce a quality report for the demo: tests passed,
-  requirements without a test, and the latest evaluation scores from 002 and 004.
+  requirements without a test, the latest evaluation scores from 002 and 004, and an audit-trail summary of the demo cases
+  (actions, overrides, tool calls).
 
 ### Key Entities
 

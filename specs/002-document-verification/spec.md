@@ -15,7 +15,7 @@
   needed), drafted requests for information, and the agent evaluation set and command. Used by
   001, 006 and 007.
 - **Depends on**: 005 (tools for case data and documents), 004 (policy citations for drafted
-  notices), 000 (AI provider configuration).
+  notices), 003 (synthetic pay stubs and expected values), 000 (AI provider configuration).
 - **Out of scope**: identity documents beyond name and date of birth; documents not in English;
   document types other than pay stubs; making any eligibility decision.
 
@@ -117,8 +117,9 @@ caseworker.
 - **FR-002-03**: When declared monthly income differs from documented monthly income by more
   than 10%, the system MUST record a finding citing both values and the document field, and MUST
   request clarification.
-- **FR-002-04**: If verification has looped 3 times without resolution, the system MUST escalate
-  to a caseworker and stop retrying.
+- **FR-002-04**: A verification loop is one full pass of extract, compare and self-check
+  (re-extracting a low-confidence field under FR-002-02 happens inside a loop). If 3 loops end
+  without resolution, the system MUST escalate to a caseworker and stop retrying.
 - **FR-002-05**: The system MUST NOT send a request for information until a caseworker approves
   or edits the draft.
 - **FR-002-06**: Every finding and draft MUST cite its sources (document field and/or policy
@@ -130,10 +131,14 @@ caseworker.
   and their personal data MUST NOT be written to logs (see FR-000-11).
 - **FR-002-10**: An agent evaluation set (the synthetic pay stubs with expected values from 003,
   plus the cases added by caseworker overrides) and an evaluation command MUST exist. The command
-  reports extraction accuracy, mismatch precision and recall, citation rate and cost per case, and
-  fails when a score is below its threshold.
-- **FR-002-11**: Cases added to the evaluation set by an override (FR-006-02) MUST keep the
-  caseworker's corrected outcome as the expected result.
+  reports extraction accuracy, mismatch recall, false-flag rate, citation rate and cost per case.
+  It fails when extraction accuracy is below 90%, mismatch recall below 100%, false-flag rate
+  above 5% or citation rate below 95%; cost is reported only.
+- **FR-002-11**: The evaluation command MUST also read the overrides stored at runtime
+  (FR-006-02), using the caseworker's corrected outcome as the expected result. Only overrides
+  of AI findings are included.
+- **FR-002-12**: The same drafting capability MUST produce the pre-filled redetermination form
+  for 007, listing only missing or out-of-date items, for caseworker approval.
 
 ### Key Entities
 

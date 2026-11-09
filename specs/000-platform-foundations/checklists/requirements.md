@@ -2,11 +2,12 @@
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-11-09
+**Re-validated**: 2026-11-09, after an independent review of all specs
 **Feature**: [spec.md](../spec.md)
 
 ## Content Quality
 
-- [x] No implementation details (languages, frameworks, APIs)
+- [x] No implementation details (languages, frameworks, APIs) (see Notes for accepted deviations)
 - [x] Focused on user value and business needs
 - [x] Written for non-technical stakeholders
 - [x] All mandatory sections completed
@@ -31,5 +32,7 @@
 
 ## Notes
 
-- All items pass. The "Lane & Dependencies" section is a team convention (see specs/README.md) and names lanes and features, not technologies. The two AI providers are named because the team's access is split between them; this is a constraint, not a design choice.
+- The "Lane & Dependencies" section is a team convention (see specs/README.md), not part of the
+  Spec Kit template. It names lanes and features, not technologies. `/speckit-analyze` may flag it.
+- Names the Anthropic API and Amazon Bedrock: a team constraint, not a design choice (accepted deviation from "no implementation details").
 - Items marked incomplete require spec updates before `/speckit-clarify` or `/speckit-plan`.

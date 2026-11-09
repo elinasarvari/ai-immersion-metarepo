@@ -107,7 +107,7 @@ known-answer tests.
 
 - **FR-003-01**: The system MUST evaluate these rules for adults 19–64 qualifying on income:
   (1) lives in Illinois; (2) aged 19–64 on the as-of date; (3) citizenship or qualifying
-  immigration status verified; (4) identity verified; (5) not entitled to Medicare;
+  immigration status attested; (4) identity verified; (5) not entitled to Medicare;
   (6) household income at or below 138% of the federal poverty level for the household size.
 - **FR-003-02**: Results MUST be one of Eligible, Ineligible or Cannot determine.
 - **FR-003-03**: Missing information MUST produce "Cannot determine" with the missing items
@@ -123,23 +123,26 @@ known-answer tests.
 - **FR-003-09**: A set of at least 30 known-answer cases MUST cover every rule, every edge case
   above and both program years.
 - **FR-003-10**: The synthetic data generator MUST be reproducible from a fixed seed and produce
-  about 200 households across 3 coverage years, household sizes 1–6, with about 60% under the
-  income limit.
-- **FR-003-11**: The data set MUST include about 15% income mismatches between declared and
+  200 households across 2 coverage years (previous and current program years), household sizes
+  1–6, with 60% (±5 points) under the income limit.
+- **FR-003-11**: The data set MUST include 15% (±3 points) income mismatches between declared and
   documented income, plus multiple jobs, zero income, household changes between years and
   missing documents.
 - **FR-003-12**: The data set MUST include pay stub documents (weekly, bi-weekly and monthly),
-  about 10% of them deliberately poor quality, each with a visible "SYNTHETIC" marker.
+  10% (±3 points) of them deliberately poor quality, each with a visible "SYNTHETIC" marker.
 - **FR-003-13**: The data set MUST include the test sets for other features: 10–20 pay stubs with
   expected extracted values (002), the known-answer cases (003), households due for
   redetermination during the demo window (007), and expected metric values (008).
+- **FR-003-14**: Demo users from 000 MUST be linked to specific households chosen to show the demo
+  scenarios.
 - **FR-003-15**: Poverty guideline values MUST be held in versioned configuration. Project values
   (annual, per household): previous program year $15,000 for one person plus $5,000 for each
   additional person; current program year $15,500 for one person plus $5,200 for each additional
   person. The monthly income limit is 138% of the annual value divided by 12, rounded down to the
   whole dollar (for example, one person in the current year: $1,782).
-- **FR-003-14**: Demo users from 000 MUST be linked to specific households chosen to show the demo
-  scenarios.
+- **FR-003-16**: Residency, citizenship or immigration status and Medicare entitlement MUST be
+  seeded as attested facts on each household member; identity and income are checked through
+  the simulated verification sources (005).
 
 ### Key Entities
 
@@ -154,7 +157,8 @@ known-answer tests.
 
 - **SC-003-01**: 100% of known-answer cases pass on every run.
 - **SC-003-02**: 100% of determinations include a complete explanation for every rule.
-- **SC-003-03**: Generating the data set twice with the same seed produces byte-identical output.
+- **SC-003-03**: Generating the data set twice with the same seed produces identical records and
+  identical document content (text and values).
 - **SC-003-04**: Every other lane can load the data set and its test sets without changes.
 
 ## Assumptions
@@ -163,4 +167,5 @@ known-answer tests.
   poverty guidelines but deliberately simplified.
 - Household composition and income counting are simplified to monthly gross income for the
   3-day build; this simplification is stated in the demo.
-- Citizenship, immigration and identity checks come from the simulated verification sources (005).
+- Residency, citizenship, immigration and Medicare facts are seeded (FR-003-16); identity and
+  income checks come from the simulated verification sources (005).

@@ -38,8 +38,8 @@ and confirm the case resumes.
    document values and policy passages cited, and approve, edit and override actions.
 3. **Given** an override, **When** the caseworker submits it, **Then** a reason is required, the
    action is recorded, and the case is added to the evaluation set.
-4. **Given** a task reassigned to a supervisor after 4 business days, **When** the supervisor opens
-   the queue, **Then** the task appears with its reassignment reason and original assignee.
+4. **Given** a task open for 4 days, **When** a supervisor opens the queue, **Then** the task is
+   flagged as escalated, showing how long it has been open.
 
 ---
 
@@ -129,27 +129,31 @@ reference; confirm refusal.
 ### Functional Requirements
 
 - **FR-006-01**: The review queue MUST list open tasks sorted by decision deadline, showing reason,
-  days remaining and at-risk status, with approve, edit and override actions.
+  days remaining and at-risk status, with approve, edit and override actions. It is one shared
+  queue for all caseworkers, and tasks open 4 days or more are flagged as escalated.
 - **FR-006-02**: When a caseworker overrides an AI finding, the system MUST require a reason,
-  record it, and add the case to the evaluation set.
+  record it, and store it as an evaluation example read by the evaluation command (FR-002-11).
 - **FR-006-03**: When an applicant signs in, the system MUST show the status of each open case and
   any open requests for information with their due dates.
 - **FR-006-04**: The system MUST show the applicant's past applications and decisions for every
   coverage period, with the explanation as recorded at the time.
-- **FR-006-05**: Every operation MUST return only records belonging to the signed-in applicant's
-  household, or to cases assigned to the signed-in caseworker or their supervisor; anything else
-  MUST be refused, logged and reveal nothing about the record.
-- **FR-006-06**: Notice drafts MUST be delivered to the applicant only after caseworker approval;
-  edited and original versions MUST both be kept.
+- **FR-006-05**: Applicants MUST see only records belonging to their own household; any other
+  request MUST be refused, logged and reveal nothing about whether the record exists.
+  Caseworkers and supervisors can see all cases.
+- **FR-006-06**: AI-drafted and adverse notices MUST be delivered only after caseworker approval;
+  favourable template notices are delivered directly. Edited and original versions MUST both be
+  kept.
 - **FR-006-07**: Applicants MUST be able to submit an application with household and income
   details and upload pay stubs (PDF or image, up to 10 MB each).
 - **FR-006-08**: Applicants MUST be able to respond to a request for information or a
   redetermination by uploading documents and confirming details.
 - **FR-006-09**: Caseworkers MUST be able to view a case's full history: states, findings,
-  documents, notices and actions.
+  determinations with their explanations, documents, notices and actions.
 - **FR-006-10**: All screens MUST meet WCAG 2.1 AA.
 - **FR-006-11**: Every screen MUST show a visible "synthetic data" banner.
 - **FR-006-12**: A task already actioned MUST refuse further actions and say who acted.
+- **FR-006-13**: In the demo profile only, supervisors MUST be able to advance a case's clock
+  (FR-001-15) from the case view.
 
 ### Key Entities
 

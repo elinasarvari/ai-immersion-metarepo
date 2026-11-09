@@ -37,8 +37,9 @@ Rationale: eligibility decisions must be auditable and reproducible; model outpu
 
 ### IV. Human Control
 
-- A caseworker MUST approve every adverse outcome (denial, reduction, termination) and every
-  notice before it reaches an applicant.
+- A caseworker MUST approve every adverse outcome (denial, reduction, termination), every adverse
+  notice and every AI-drafted notice before it reaches an applicant. Favourable notices built from
+  a fixed template (approval, automatic renewal) need no approval.
 - Coverage MUST NOT end automatically because an applicant missed a deadline; a caseworker
   review task is created instead.
 - Every approve, edit and override MUST be recorded with the reviewer, time and reason.
@@ -88,7 +89,7 @@ Rationale: eligibility decisions must be auditable and reproducible; model outpu
   Errors returned to clients are structured and leak no internals. Logs are structured and carry
   case and workflow identifiers.
 - Everything runs locally; there is no cloud deployment. A production-like local profile
-  (`make prod`) MUST exist alongside the development profile.
+  (`make prod`) MUST exist alongside the development profile (`make dev`), both in `benefit-be`.
 
 ### X. Simplicity Within Three Days
 
@@ -99,10 +100,12 @@ Rationale: eligibility decisions must be auditable and reproducible; model outpu
 
 ## Technology & Architecture Constraints
 
-- **Repositories:** this metarepo (specs, contracts, rules, skills) plus two submodules under
+- **Repositories:** this metarepo (specs, rules, skills) plus two submodules under
   `repos/`: `benefit-be` (all Python) and `benefit-fe` (React). `plan.md` MUST name the target
-  repo(s); `/speckit-implement` writes code only inside them.
-- **Backend:** Python 3.11+, FastAPI, Temporal (dev server), LangGraph and LangChain, PostgreSQL
+  repo(s); `/speckit-implement` writes code only inside them. Run commands (`make dev`, `make prod`,
+  `make seed`, `make eval`) live in `benefit-be`; the shared contracts are outlined in
+  `specs/README.md` and implemented in `benefit-be`.
+- **Backend:** Python 3.11+, FastAPI, Temporal (dev server), LangGraph and LangChain, MCP servers, PostgreSQL
   with vector search, MongoDB, DuckDB and dbt for the reporting store, Alembic migrations, ruff,
   pytest. Layout per
   `project-rules/backend-architecture.md`.
@@ -142,4 +145,4 @@ Rationale: eligibility decisions must be auditable and reproducible; model outpu
 - Every PR review checks compliance with these principles. `/speckit-analyze` flags conflicts
   between specs, plans and this constitution.
 
-**Version**: 1.1.0 | **Ratified**: 2026-11-09 | **Last Amended**: 2026-11-09
+**Version**: 1.2.0 | **Ratified**: 2026-11-09 | **Last Amended**: 2026-11-09

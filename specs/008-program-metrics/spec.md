@@ -120,13 +120,14 @@ Metric definitions:
 
 - **Average time to decision**: days from application received to decision, for cases decided
   in the period.
-- **Decided within deadline**: decisions made within 45 days ÷ all decisions in the period.
+- **Decided within deadline**: decisions on new applications made within 45 days ÷ all
+  decisions on new applications in the period (redeterminations have no 45-day deadline).
 - **Automatic renewal rate**: redeterminations renewed with no applicant action ÷
   redeterminations started.
-- **Procedural denial rate**: denials and closures for missing information ÷ all denials and
-  closures.
+- **Procedural denial rate**: denials with reason code "missing information" (FR-001-16) ÷ all
+  denials.
 - **AI override rate**: caseworker overrides ÷ AI findings reviewed.
-- **Open reviews by age**: open review tasks by business days open (0–1, 2–3, 4 or more).
+- **Open reviews by age**: open review tasks by days open (0–1, 2–3, 4 or more).
 
 ## Success Criteria *(mandatory)*
 

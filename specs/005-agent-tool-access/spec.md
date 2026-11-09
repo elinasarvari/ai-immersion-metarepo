@@ -95,7 +95,7 @@ Every tool call is recorded so the team can see what an agent did on a case.
 - A document is very large: it is returned in parts, with a clear indicator of how many remain.
 - The verification source returns a result for a different person: returned as a mismatch, not
   silently accepted.
-- A tool is called after the case is closed: read tools work; write tools are refused.
+- A tool is called after the case is decided: read tools work; write tools are refused.
 
 ## Requirements *(mandatory)*
 
@@ -117,7 +117,7 @@ Every tool call is recorded so the team can see what an agent did on a case.
   (default 10 seconds).
 - **FR-005-08**: Every tool call MUST be recorded with tool name, case, outcome and duration, and
   without personal data.
-- **FR-005-09**: Write tools MUST be refused for closed cases.
+- **FR-005-09**: Write tools MUST be refused for decided cases.
 
 ### Key Entities
 
@@ -132,7 +132,7 @@ Every tool call is recorded so the team can see what an agent did on a case.
 - **SC-005-01**: 100% of cross-case access attempts in testing are refused and logged.
 - **SC-005-02**: 100% of tool calls during a processed case appear in the audit record.
 - **SC-005-03**: Simulated failure and latency rates fall within 2 percentage points and 10% of
-  configuration over 1,000 calls.
+  configuration over 1,000 calls, with delays scaled down for the test.
 - **SC-005-04**: Zero personal data found in tool call records.
 
 ## Assumptions

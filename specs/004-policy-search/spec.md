@@ -12,8 +12,9 @@
 
 - **Lane**: B (AI and knowledge)
 - **Provides**: search over the Illinois policy manual returning cited passages, and plain-language
-  explanations of determinations. Used by 002 (notice drafts), 005 (policy search tool), 006
-  (explanations shown to applicants and caseworkers) and 007.
+  explanations of determinations. Used by 001 (explanations requested after each
+  determination), 002 (notice drafts), 005 (policy search tool) and 006 (shows stored
+  explanations).
 - **Depends on**: 000 (configuration, AI provider), 003 (determinations and rule traces; stubbed
   until ready).
 - **Out of scope**: other states' manuals, non-medical chapters, answering general questions
@@ -102,7 +103,7 @@ number matches the determination and every rule has a citation.
 - The manual is re-indexed: results and citations are the same for the same manual version.
 - The question contains instructions aimed at the model: treated as a search query only.
 - The AI provider is unavailable when an explanation is needed: the rule-by-rule trace is shown
-  without the plain-language summary, and the explanation is generated later.
+  without the plain-language summary, and the explanation is generated later (FR-001-14).
 
 ## Requirements *(mandatory)*
 
@@ -116,9 +117,10 @@ number matches the determination and every rule has a citation.
   citation.
 - **FR-004-04**: Search MUST match both meaning and exact terms (section numbers, defined terms).
 - **FR-004-05**: Search MUST return "no relevant policy found" when no passage meets the
-  relevance threshold.
-- **FR-004-06**: Search MUST accept a date and return only passages from the manual version in
-  force on that date.
+  relevance threshold. The threshold is set in configuration during the first evaluation run so
+  that SC-004-03 is met.
+- **FR-004-06**: Every result MUST include the version date of the manual it came from (there is
+  one manual version).
 - **FR-004-07**: Indexing MUST be repeatable: the same manual version produces the same passages
   and citations.
 - **FR-004-08**: An evaluation set of 30–50 questions with expected sections MUST exist, and an
@@ -128,17 +130,12 @@ number matches the determination and every rule has a citation.
 - **FR-004-10**: For any determination, the system MUST produce a plain-language explanation for
   applicants and a detailed one for caseworkers, stating the outcome, each rule's result and the
   values used, with a policy citation per rule.
-- **FR-004-11**: Explanations MUST NOT state anything the determination or the cited passages do
-  not support, and every number MUST match the determination exactly; an explanation that fails
-  this check MUST be rejected and marked for review.
+- **FR-004-11**: Every number in an explanation MUST match the determination exactly, checked
+  automatically, and every statement MUST refer to a rule in the determination or a returned
+  passage. An explanation that fails these checks MUST be rejected and marked for review.
 - **FR-004-12**: Explanations MUST NOT change, contradict or soften the determination.
 - **FR-004-13**: Each explanation MUST be stored with its determination as generated at the time,
   so history shows the original explanation.
-- **FR-004-14**: The team MUST write the training-edition manual (AI-assisted), modelled on the
-  structure of the Illinois Department of Human Services policy manual, with 25–40 numbered
-  sections covering the six eligibility rules (FR-003-01), income counting, verification,
-  application timeliness, requests for information and redeterminations. Every section MUST carry
-  a "training edition, not official policy" notice, and its values MUST match the project values.
 
 ### Key Entities
 
@@ -165,5 +162,10 @@ number matches the determination and every rule has a citation.
 
 - The manual is a training edition written for this project and is synthetic like the rest of the
   data, so no terms-of-use limits apply.
-- Only one manual version will be available; date filtering is built for future versions.
+- There is one manual version, so search does not filter by date.
+- The team writes the training-edition manual (AI-assisted), modelled on the structure of the
+  Illinois Department of Human Services policy manual: 25–40 numbered sections covering the six
+  eligibility rules (FR-003-01), income counting, verification, application timeliness, requests
+  for information and redeterminations. Every section carries a "training edition, not official
+  policy" notice, and its values match the project values.
 - The 80% threshold is a starting target and can be revised after the first evaluation run.

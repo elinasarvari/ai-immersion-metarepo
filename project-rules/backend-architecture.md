@@ -16,12 +16,14 @@ api/
     rag/              ingestion, Qwen3 embeddings, hybrid search
     mcp_servers/      case-mcp, docs-mcp, verify-mcp, policy-mcp
     domain/           shared Pydantic models used by everything above
+    platform/         settings, logging, error format, auth helpers (no business logic)
   db/migrations/      Alembic
   analytics/          reporting / dbt models
   seed/               synthetic data generator (fixed seed); policy_manual/ holds the
                       training-edition manual
   evals/              evaluation sets and the evaluation command (002, 004)
-  tests/
+  tests/              mirrors the source tree
+Makefile, Procfile, .env.example   run commands (dev, prod, seed, eval) and settings
 ```
 
 ## Runtime processes
@@ -33,7 +35,7 @@ All four run from this repo:
 | FastAPI server | `apps/api/` | Handles UI requests, starts workflows, sends signals for caseworker actions |
 | Temporal worker | `apps/worker/` | Runs workflows and their activities; activities call into `packages/agents` |
 | MCP servers | `packages/mcp_servers/<name>/` | One small process each; agents connect through `langchain-mcp-adapters` |
-| Temporal dev server | not our code | Installed with Homebrew, started by `make dev` from the metarepo |
+| Temporal dev server | not our code | Installed with Homebrew, started by `make dev` in this repo |
 
 ## Rules
 
@@ -70,10 +72,12 @@ apps/worker┘
 
 ### Seed data and evaluations (`seed/`, `evals/`)
 - Both are scripts and data, not runtime code: they may import `packages/*`, and nothing imports them.
-- The generator in `seed/` is reproducible from a fixed seed. Generated households and documents
-  are git-ignored and rebuilt with `make seed`; the generator, the seed value and
-  `seed/policy_manual/` are committed.
-- Evaluation sets in `evals/` are committed. Evaluation runs call a live model and never run in CI.
+- The generator in `seed/` is reproducible from a fixed seed. Everything it generates (households,
+  documents and the expected-value test sets) goes to `seed/generated/`, which is git-ignored and
+  rebuilt with `make seed`; the generator, the seed value and `seed/policy_manual/` are committed.
+- `evals/` holds the committed question sets and the evaluation command. The command reads
+  `seed/generated/` and the caseworker overrides stored at runtime. Evaluation runs call a live
+  model and never run in CI.
 
 ### Database
 - Schema changes only through Alembic migrations in `db/migrations/`. Never edit an applied migration; add a new one.
@@ -86,4 +90,4 @@ apps/worker┘
 
 ## Ownership
 
-Workflows (`apps/worker/`, Lane A) and Agents (`packages/agents/`, Lane B) belong to different lanes. Whoever currently holds a lane makes its changes; people rotate between lanes (see the lane table in `specs/README.md`). A change that needs both is split into separate commits per lane, and the shared contract goes through `packages/domain`.
+Workflows (`apps/worker/`, Lane A) and Agents (`packages/agents/`, Lane B) belong to different lanes. Whoever currently holds a lane makes its changes; people rotate between lanes (see the lane table in `specs/README.md`). Tests in `tests/` belong to the lane that owns the matching source folder. A change that needs both is split into separate commits per lane, and the shared contract goes through `packages/domain`.

@@ -2,11 +2,12 @@
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-11-09
+**Re-validated**: 2026-11-09, after an independent review of all specs
 **Feature**: [spec.md](../spec.md)
 
 ## Content Quality
 
-- [x] No implementation details (languages, frameworks, APIs)
+- [x] No implementation details (languages, frameworks, APIs) (see Notes for accepted deviations)
 - [x] Focused on user value and business needs
 - [x] Written for non-technical stakeholders
 - [x] All mandatory sections completed
@@ -31,5 +32,8 @@
 
 ## Notes
 
-- All items pass. The terms-of-use question was resolved by using a training-edition manual written for the project. The "Lane & Dependencies" section is a team convention (see specs/README.md).
+- The "Lane & Dependencies" section is a team convention (see specs/README.md), not part of the
+  Spec Kit template. It names lanes and features, not technologies. `/speckit-analyze` may flag it.
+- The manual-writing work item moved from requirements to Assumptions (it is not system behaviour).
+- Relevance threshold is tied to SC-004-03; explanation checks are automatic (FR-004-11).
 - Items marked incomplete require spec updates before `/speckit-clarify` or `/speckit-plan`.
