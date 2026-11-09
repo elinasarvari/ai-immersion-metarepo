@@ -132,6 +132,24 @@ If the team is behind at a checkpoint, cut in this order. Every cut keeps the de
 5. Policy manual down to 15 sections and 20 evaluation questions.
 6. Poor-quality scanned pay stubs.
 
+## Test strategy
+
+Each lane writes unit, workflow and integration tests for its own features. Lane C owns CI, the
+test harnesses and the end-to-end suite; each lane adds the end-to-end journey for its feature.
+
+| Level | What it checks | Tool | Runs |
+|---|---|---|---|
+| Static | Lint, formatting, strict types, dependency and secrets scans | ruff, mypy, tsc, pip-audit, npm audit, gitleaks | Every PR |
+| Unit | One behaviour per test, named after its `FR-` | pytest, Vitest + Testing Library | Every PR |
+| Workflow | State changes, timers, signals, restart and replay | Temporal test environment | Every PR |
+| Contract | API matches its contract; tool schemas; generated frontend client | OpenAPI diff, JSON Schema | Every PR |
+| Integration | API, workers and tools against local databases; access rules | pytest with local PostgreSQL, MongoDB, Temporal | Every PR |
+| End-to-end | The six demo journeys through real screens (AI faked) | Playwright | Every PR |
+| Accessibility | WCAG 2.1 AA on every screen | axe with Playwright | Every PR |
+| LLM evaluation | Extraction, mismatches, citations, retrieval, explanations | `make eval` (live model) | On demand, before the demo |
+
+No test level in CI calls a live AI model. Load and performance testing are out of scope.
+
 ## Conventions
 
 - Requirement IDs are feature-scoped: `FR-<feature>-<nn>`, success criteria `SC-<feature>-<nn>`.

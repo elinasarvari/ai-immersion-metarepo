@@ -54,6 +54,10 @@ Rationale: eligibility decisions must be auditable and reproducible; model outpu
   the behaviour-first name from `project-rules/testing.md`.
 - Unit tests and CI MUST NOT call a live AI model; they use fakes or recorded responses.
   Evaluation runs against a live model are separate (`make eval`) and have pass thresholds.
+- Required test levels on every PR, all of which MUST pass to merge: static checks (ruff, strict
+  type checks for Python and TypeScript, dependency and secrets scans), unit, workflow (including
+  restart and replay), contract, integration (local PostgreSQL, MongoDB and Temporal) and
+  end-to-end tests for each demo journey. LLM evaluation runs on demand with `make eval`.
 
 ### VI. Contracts First
 
@@ -145,4 +149,4 @@ Rationale: eligibility decisions must be auditable and reproducible; model outpu
 - Every PR review checks compliance with these principles. `/speckit-analyze` flags conflicts
   between specs, plans and this constitution.
 
-**Version**: 1.2.0 | **Ratified**: 2026-11-09 | **Last Amended**: 2026-11-09
+**Version**: 1.3.0 | **Ratified**: 2026-11-09 | **Last Amended**: 2026-11-09

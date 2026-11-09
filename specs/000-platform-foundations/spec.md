@@ -12,10 +12,12 @@
 
 - **Lane**: C (platform and experience)
 - **Provides**: sign-in and roles, configuration, error format, health checks, logging, the
-  one-command run profiles, AI provider selection, the quality report. Every other feature depends on this.
+  one-command run profiles, AI provider selection, the quality report, the CI pipeline, the
+  integration and contract test harnesses, and the end-to-end test suite. Every other feature depends on this.
 - **Depends on**: nothing. Part of the Day 1 contracts PR.
 - **Out of scope**: real single sign-on, user self-registration, password reset, cloud
-  deployment, multiple environments beyond local development and local production-like.
+  deployment, multiple environments beyond local development and local production-like, load and
+  performance testing.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -102,6 +104,28 @@ succeed without code changes.
 3. **Given** an unknown provider value, **When** the system starts, **Then** it refuses to start
    and names the allowed values.
 
+---
+
+### User Story 5 - Quality gates on every change (Priority: P1)
+
+Every pull request in either code repo runs the full set of automated checks, and cannot merge
+unless all of them pass.
+
+**Why this priority**: "Production quality" is only real if it is enforced on every change.
+
+**Independent Test**: Open a PR with a lint error, a failing test and a contract change that
+doesn't match the agreed contract; confirm each is reported and the PR is blocked.
+
+**Acceptance Scenarios**:
+
+1. **Given** a PR, **When** checks run, **Then** static checks, unit, workflow, contract,
+   integration and end-to-end tests all run, and the results are shown on the PR.
+2. **Given** any failing check, **When** the run completes, **Then** the PR cannot be merged.
+3. **Given** a change to the API that doesn't match the agreed contract, **When** checks run,
+   **Then** the contract test fails and names the difference.
+4. **Given** the demo journeys, **When** the end-to-end suite runs, **Then** each journey passes
+   through the real screens and services, with the AI model faked.
+
 ### Edge Cases
 
 - A required setting is missing at startup: the component refuses to start and names the setting.
@@ -141,6 +165,20 @@ succeed without code changes.
 - **FR-000-15**: A single command MUST produce a quality report for the demo: tests passed,
   requirements without a test, the latest evaluation scores from 002 and 004, and an audit-trail summary of the demo cases
   (actions, overrides, tool calls).
+- **FR-000-16**: Every PR in benefit-be and benefit-fe MUST run static checks (lint, strict type
+  checks, dependency vulnerability scan, secrets scan) and all automated test levels, and MUST be
+  blocked from merging if any fail.
+- **FR-000-17**: An integration test harness MUST run tests against local PostgreSQL, MongoDB and
+  Temporal test instances, reset before each run, with the AI model faked.
+- **FR-000-18**: Contract tests MUST check that the API matches the agreed contract document, that
+  every agent tool matches its agreed schema, and that the frontend's API client is generated from
+  the same contract.
+- **FR-000-19**: An end-to-end test suite MUST cover each demo journey through the real screens and
+  services: mismatch and request for information; restart and resume; missed deadline and
+  override; automatic renewal; renewal needing one document; an applicant blocked from another
+  household's records. Journeys not yet built are marked pending, not skipped silently.
+- **FR-000-20**: Integration and end-to-end tests MUST NOT call a live AI model; they use fakes or
+  recorded responses.
 
 ### Key Entities
 
@@ -160,6 +198,9 @@ succeed without code changes.
 - **SC-000-04**: The AI smoke test passes on both providers with no code change.
 - **SC-000-05**: Any client error can be traced to its log entry by reference ID in under one
   minute.
+- **SC-000-06**: 100% of PRs merged after Day 1 morning pass every check in FR-000-16.
+- **SC-000-07**: All six end-to-end journeys pass before the Day 3 feature freeze.
+- **SC-000-08**: A full CI run completes in under 15 minutes.
 
 ## Assumptions
 

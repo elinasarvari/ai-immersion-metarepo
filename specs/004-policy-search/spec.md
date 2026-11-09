@@ -136,6 +136,9 @@ number matches the determination and every rule has a citation.
 - **FR-004-12**: Explanations MUST NOT change, contradict or soften the determination.
 - **FR-004-13**: Each explanation MUST be stored with its determination as generated at the time,
   so history shows the original explanation.
+- **FR-004-14**: The evaluation command MUST also score explanations on the known-answer
+  determinations: the share whose numbers all match (target 100%) and the citation rate per rule
+  (target at least 95%), failing below either target.
 
 ### Key Entities
 

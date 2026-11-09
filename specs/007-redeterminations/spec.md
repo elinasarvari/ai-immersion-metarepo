@@ -148,6 +148,8 @@ expected.
 - **SC-007-03**: Zero coverage periods end automatically in testing.
 - **SC-007-04**: The demo shows both an automatic renewal and a renewal needing one document in
   under 2 minutes using the demo clock.
+- **SC-007-05**: A workflow replay test against recorded redetermination histories passes on every
+  PR.
 
 ## Assumptions
 

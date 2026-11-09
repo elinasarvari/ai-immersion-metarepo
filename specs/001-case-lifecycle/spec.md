@@ -223,6 +223,8 @@ flag.
   task; zero automatic denials.
 - **SC-001-04**: In the demo profile, one case can be taken from submission through a missed
   deadline to a decision in under 3 minutes using the demo clock.
+- **SC-001-05**: A restart test (stop the worker mid-case, restart, confirm no repeated effects)
+  and a workflow replay test against recorded case histories pass on every PR.
 
 ## Assumptions
 
