@@ -12,9 +12,9 @@
 
 - **Lane**: Platform & UI
 - **Provides**: the screens caseworkers and applicants use, and the operations behind them.
-- **Depends on**: 000 (sign-in, errors), 001 (case states, review tasks, actions), 003
-  (determinations), 004 (explanations), 007 (redetermination responses). Builds against stub operations returning
-  seed data until those land.
+- **Depends on**: 000 (sign-in, errors), 001 (case states), 010 (review tasks, actions), 011
+  (notices, demo clock), 003 (determinations), 004 (explanations), 007 (redetermination
+  responses). Builds against stub operations returning seed data until those land.
 - **Out of scope**: mobile apps, languages other than English, notifications by email or text,
   the program metrics page (008).
 
@@ -131,8 +131,8 @@ reference; confirm refusal.
 
 - **FR-006-01**: The review queue MUST list open tasks sorted by decision deadline (for
   redeterminations, which have none, by coverage end date), showing reason, days remaining or
-  coverage end date, at-risk status, and the reminder and escalation flags (FR-001-08). Each task
-  offers only the actions its reason allows (FR-001-19). It is one shared queue for all
+  coverage end date, at-risk status, and the reminder and escalation flags (FR-010-02). Each task
+  offers only the actions its reason allows (FR-010-01). It is one shared queue for all
   caseworkers; supervisors can filter it to escalated tasks.
 - **FR-006-02**: When a caseworker overrides AI output (corrects a value or dismisses a finding),
   the system MUST require a reason, record it, and store it as an evaluation example read by the
@@ -161,7 +161,7 @@ reference; confirm refusal.
 - **FR-006-11**: Every screen MUST show a visible "synthetic data" banner.
 - **FR-006-12**: A task already actioned MUST refuse further actions and say who acted.
 - **FR-006-13**: In the demo profile only, supervisors MUST be able to advance a case's clock
-  (FR-001-15) from the case view.
+  (FR-011-05) from the case view.
 - **FR-006-14**: Caseworkers MUST be able to see a case's AI activity: each verification and
   explanation run with its steps, model, provider and cost, every tool call (FR-005-08), each
   finding with its citations, and any caseworker overrides of it.

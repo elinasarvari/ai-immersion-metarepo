@@ -12,7 +12,7 @@
 
 - **Lane**: Knowledge & data
 - **Provides**: determinations with explanation traces for any household and as-of date; the
-  synthetic data set and test sets every lane uses. Used by 001, 002, 006, 007 and 008.
+  synthetic data set and test sets every lane uses. Used by 001, 002, 006, 007, 008 and 011.
 - **Depends on**: 000 (configuration). Nothing else; it must work standalone.
 - **Out of scope**: eligibility groups other than adults 19–64 on income; disability, long-term
   care and spend-down rules; other programs; real personal data.

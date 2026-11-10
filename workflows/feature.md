@@ -29,7 +29,7 @@ The standard path for any feature in `benefit-be` and/or `benefit-fe`. Each step
 - **Gate:** no task without a lane tag; no lane task without its required tests.
 
 ## 4. Implement (main assistant)
-- `/speckit-implement`. Code is written only inside `repos/<repo>` (feature 009 may also write the metarepo's `scripts/factory/` and `templates/`).
+- `/speckit-implement`. Code is written only inside `repos/<repo>` (the software factory may also write the metarepo's `scripts/factory/` and `templates/`).
 - Before writing each task, read the rule files for that task's lane. Follow them as hard constraints.
 - Work on a feature branch in each repo (`feature/<NNN-feature>`), created from `origin/main`.
 

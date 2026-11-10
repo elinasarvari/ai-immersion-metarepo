@@ -122,7 +122,7 @@ Every tool call is recorded so the team can see what an agent did on a case.
   without one, with an expired one, or for another case MUST be refused and logged. User sessions
   cannot call tools.
 - **FR-005-11**: The draft tool MUST produce both notice types AI drafts (request for information
-  and redetermination form, FR-001-17), stored as awaiting approval.
+  and redetermination form, FR-011-06), stored as awaiting approval.
 - **FR-005-12**: The identity source MUST answer match or no match on name and date of birth; the
   income source MUST answer each job's employer and monthly gross income. Both draw their answers
   from the synthetic data set, including seeded disagreements, and report errors and timeouts as

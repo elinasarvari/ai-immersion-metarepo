@@ -13,7 +13,7 @@
 - **Lane**: Agents
 - **Provides**: a verification result for a case (extracted fields, findings, whether review is
   needed), drafted requests for information, and the agent evaluation set and command. Used by
-  001, 006 and 007.
+  001, 006, 007, 010 and 011.
 - **Depends on**: 005 (tools for case data and documents), 004 (policy citations for drafted
   notices), 003 (synthetic pay stubs and expected values), 000 (AI provider configuration).
 - **Out of scope**: identity documents beyond name and date of birth; documents not in English;
@@ -141,7 +141,7 @@ caseworker.
   citation rate below 95% or agent success below 90%; cost is reported only.
 - **FR-002-11**: The evaluation command MUST also read the overrides stored at runtime
   (FR-006-02), using the caseworker's corrected outcome as the expected result. Only overrides
-  of AI output are included: a corrected value or a dismissed finding (FR-001-19). Overrides of a
+  of AI output are included: a corrected value or a dismissed finding (FR-010-01). Overrides of a
   rules determination are not.
 - **FR-002-12**: The same drafting capability MUST produce the pre-filled redetermination form
   for 007, listing only missing or out-of-date items, for caseworker approval.
@@ -158,7 +158,7 @@ caseworker.
   as missing information, and the request for information MUST name it. A member declaring zero
   income needs no document.
 - **FR-002-16**: Every way verification can need a person MUST raise the "verification review"
-  reason in FR-001-19, with the specific cause shown on the task.
+  reason in FR-010-01, with the specific cause shown on the task.
 
 ### Key Entities
 
