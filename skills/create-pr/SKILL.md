@@ -16,15 +16,17 @@ description: Create a feature branch, commit, push and open a pull request again
    - Commit: Conventional Commits, e.g. `feat(login): add password reset flow`.
    - PR body: use the target repo's `.github/pull_request_template.md` if it has one, otherwise `templates/github/pull_request_template.md` from the metarepo. Fill every section (Summary from `spec.md`, the spec path, How to test with the commands you ran and their results, sibling PRs for multi-repo features), tick only the checklist items that are actually true, delete sections that don't apply, and remove the `<!-- -->` hints. Write it to a temporary file (scratchpad or temp dir, not in the repo).
 5. **Confirm with the user** before pushing: show repo, remote URL, branch, files changed, commit message, PR title. Skip only if the user already said to go ahead.
-6. **Run, per repo:**
+6. **Run, per repo,** from anywhere in the metarepo (not from inside `repos/<name>`, which is a separate git repo):
 
    ```bash
-   skills/create-pr/create-pr.sh <repo-name> \
+   git create-pr <repo-name> \
      --branch feature/003-user-login \
      --message "feat(login): add password reset flow" \
      --title "feat(login): add password reset flow" \
      --body-file /path/to/pr-body.md [--draft] [--base main] [--no-pr]
    ```
+
+   `git create-pr` is a git alias for `skills/create-pr/create-pr.sh`, defined in the metarepo's committed `.gitconfig`. If git says it isn't a git command, enable it once per clone with `git config --local include.path ../.gitconfig`, or call the script directly with the same arguments.
 
    The script:
    1. Checks that `repos/<name>` is a git clone with an `origin`.

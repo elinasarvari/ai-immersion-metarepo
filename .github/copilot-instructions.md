@@ -65,9 +65,11 @@ Rules:
 When the user asks to push, ship or create a PR, use the **create-pr** skill (`skills/create-pr/SKILL.md`):
 
 ```bash
-skills/create-pr/create-pr.sh <repo-name> --branch feature/<NNN-feature> --message "<conventional commit>" \
+git create-pr <repo-name> --branch feature/<NNN-feature> --message "<conventional commit>" \
   --title "<pr title>" --body-file <pr-body.md> [--draft]
 ```
+
+`git create-pr` is a git alias for `skills/create-pr/create-pr.sh`, defined in the committed `.gitconfig`. Enable it once per clone of the metarepo with `git config --local include.path ../.gitconfig`.
 
 - It runs inside `repos/<name>` and pushes to that clone's own `origin`, then opens a PR against `main` with `gh` (requires `gh auth login`; with `--no-pr` it only pushes and prints the compare link).
 - Branch name = Spec Kit feature folder name with a type prefix (`feature/003-user-login`). Use the same branch in every repo the feature touches, with one PR per repo, and link the PRs to each other.

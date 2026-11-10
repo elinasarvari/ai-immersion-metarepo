@@ -28,6 +28,12 @@ skills/clone-repo/clone-repo.sh https://github.com/OWNER/benefit-fe.git
 
 After cloning this metarepo, clone each project repo with `skills/clone-repo/clone-repo.sh <url>`, and keep them current with `skills/sync-repos/sync-repos.sh`.
 
+To open a PR for changes in a cloned repo, use `git create-pr <repo-name> --branch feature/<NNN-feature> --message "<commit>"` (see the **create-pr** skill). It is a git alias kept in the committed `.gitconfig`; enable it once after cloning the metarepo:
+
+```bash
+git config --local include.path ../.gitconfig
+```
+
 `.claude/skills` and `.github/skills` are symlinks to `skills/`, so both tools discover the same skills.
 
 ## Code review agents

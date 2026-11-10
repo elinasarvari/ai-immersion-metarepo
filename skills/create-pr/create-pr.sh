@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Branch, commit, push and open a PR for changes inside a cloned repo (repos/<name>).
 #
-# Usage:
-#   create-pr.sh <repo-name> --branch <branch> --message <commit-msg>
-#                [--title <pr-title>] [--body-file <file>] [--base main] [--draft] [--no-pr]
+# Usage (from anywhere in the metarepo, after `git config --local include.path ../.gitconfig`):
+#   git create-pr <repo-name> --branch <branch> --message <commit-msg>
+#                 [--title <pr-title>] [--body-file <file>] [--base main] [--draft] [--no-pr]
+# or call the script directly: skills/create-pr/create-pr.sh <repo-name> ...
 #
 # - repos/<name> is a plain git clone (git-ignored by the metarepo, made by clone-repo.sh).
 # - Pushes to that clone's own `origin`, so code always lands in the right repository.
@@ -14,7 +15,7 @@ set -euo pipefail
 
 die() { echo "Error: $*" >&2; exit 1; }
 
-name="${1:-}"; [ -n "$name" ] && [ "${name#-}" = "$name" ] || die "usage: $0 <repo-name> --branch <b> --message <m> [...]"
+name="${1:-}"; [ -n "$name" ] && [ "${name#-}" = "$name" ] || die "usage: git create-pr <repo-name> --branch <b> --message <m> [--title <t>] [--body-file <f>] [--draft] [--no-pr]"
 shift
 branch="" message="" title="" body_file="" base="main" draft="" no_pr=""
 while [ $# -gt 0 ]; do
@@ -33,8 +34,9 @@ case "$name" in ""|.|..|*/*) die "invalid repo name: $name" ;; esac
 [ -n "$branch" ] || die "--branch is required"
 [ "$branch" != "$base" ] || die "branch must differ from base ($base)"
 git check-ref-format --branch "$branch" >/dev/null 2>&1 || die "invalid branch name: $branch"
+# A git alias runs from the repo root; GIT_PREFIX is the folder the user called it from.
+case "$body_file" in ""|/*) ;; *) body_file="$PWD/${GIT_PREFIX:-}$body_file" ;; esac
 [ -z "$body_file" ] || [ -f "$body_file" ] || die "body file not found: $body_file"
-case "$body_file" in ""|/*) ;; *) body_file="$PWD/$body_file" ;; esac
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 root="$(cd "$script_dir/../.." && pwd -P)"
