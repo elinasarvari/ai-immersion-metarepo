@@ -12,8 +12,8 @@
 
 - **Lane**: Knowledge & data (search); Agents (decision explanations)
 - **Provides**: search over the Illinois policy manual returning cited passages, and plain-language
-  explanations of determinations. Used by 001 (explanations requested after each
-  determination), 002 (notice drafts), 005 (policy search tool) and 006 (shows stored
+  explanations of determinations. Used by 011 (explanations requested after each
+  determination), 010 (explanation review tasks), 002 (notice drafts), 005 (policy search tool) and 006 (shows stored
   explanations).
 - **Depends on**: 000 (configuration, AI provider), 003 (determinations and rule traces; stubbed
   until ready).
@@ -103,7 +103,7 @@ number matches the determination and every rule has a citation.
 - The manual is re-indexed: results and citations are the same for the same manual version.
 - The question contains instructions aimed at the model: treated as a search query only.
 - The AI provider is unavailable when an explanation is needed: the rule-by-rule trace is shown
-  without the plain-language summary, and the explanation is generated later (FR-001-14).
+  without the plain-language summary, and the explanation is generated later (FR-011-07).
 
 ## Requirements *(mandatory)*
 
@@ -134,7 +134,7 @@ number matches the determination and every rule has a citation.
 - **FR-004-11**: Every number in an explanation MUST match the determination exactly, checked
   automatically, and every statement MUST refer to a rule in the determination or a returned
   passage. An explanation that fails these checks MUST be rejected and raise an "explanation
-  review" task (FR-001-19).
+  review" task (FR-010-01).
 - **FR-004-12**: Explanations MUST NOT change, contradict or soften the determination.
 - **FR-004-13**: Each explanation MUST be stored with its determination as generated at the time,
   so history shows the original explanation.

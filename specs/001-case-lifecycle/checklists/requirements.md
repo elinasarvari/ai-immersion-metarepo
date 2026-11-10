@@ -37,4 +37,8 @@
 - "Timer" and "demo profile" describe behaviour the demo needs, not a technology choice.
 - Re-validated after the independent review: outcomes, reason codes, demo clock, explanations trigger, shared queue and calendar days added.
 - Round 2 completeness review (2026-11-09): gaps closed with defaults listed in specs/README.md ("Spec review round 2"); confirm in PR review.
+- Split on 2026-11-10 into 001 (lifecycle core), 010 (review queue) and 011 (applicant waits,
+  notices, demo clock). Re-validated: 001 keeps its own IDs, moved IDs are listed under "Moved
+  requirements", and FR-001-13 now covers only the case clock. User stories renumbered: old US6
+  is now US3. New acceptance scenario US1-6 covers FR-001-23.
 - Items marked incomplete require spec updates before `/speckit-clarify` or `/speckit-plan`.
