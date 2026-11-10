@@ -1,0 +1,5 @@
+{
+  "lanes": ["workflows-lane", "data-lane", "platform-ui-lane"],
+  "repos": ["benefit-be"],
+  "reason": "workflows-lane: CaseWorkflow review loop, timers, retry-to-review, activities and worker repositories in apps/worker/. data-lane: migration 0002_review_queue tightening review_tasks and caseworker_actions validators and indexes in db/migrations/. packages/domain/review.py is a [contracts] task; the REST endpoint is 006's. platform-ui-lane: only the REVIEW_REMINDER_DAYS / REVIEW_ESCALATION_DAYS settings in packages/platform/settings.py and their test (T021, ADR-010-03)."
+}

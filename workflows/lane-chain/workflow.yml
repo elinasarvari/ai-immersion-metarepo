@@ -1,0 +1,64 @@
+schema_version: "1.0"
+workflow:
+  id: "lane-chain"
+  name: "Benefits Case lane chain"
+  version: "0.2.0"
+  author: "ai-immersion-metarepo"
+  description: >-
+    One lane inside benefit-feature: implement the lane's tasks (tests first) → run the lane's unit tests → fix
+    (up to 2 rounds). Runs in parallel with the other lanes; started by benefit-feature, not by hand.
+
+requires:
+  speckit_version: ">=1.0.0"
+  integrations:
+    any: ["claude"]
+
+inputs:
+  lane: {type: string, required: true}
+  feature_dir: {type: string, required: true}
+  branch: {type: string, required: true}
+  integration: {type: string, default: "auto"}
+
+# Lanes share one working tree per repo. Each lane edits only its own folders, writes only under
+# lanes/<lane>/, never edits tasks.md, and runs only its own unit tests. Reviews, full checks and builds run
+# once, after all lanes finish (benefit-feature's verify stage).
+
+steps:
+  - id: implement
+    command: speckit.implement
+    integration: "{{ inputs.integration }}"
+    timeout: 3600
+    input:
+      args: >-
+        Implement ONLY the tasks tagged [{{ inputs.lane }}] (or its short name) in {{ inputs.feature_dir }}/tasks.md,
+        on branch {{ inputs.branch }}, following plan.md, the Accepted ADRs in decisions/, the test cases in
+        test-plan.md, and only the rule files project-rules/README.md maps to this lane. Write each test first,
+        named as in test-plan.md. Other lanes are editing the same repo now: edit only this lane's folders
+        (project-rules/backend-architecture.md, Ownership); never edit shared files or tasks.md. If a task needs a
+        change elsewhere, write it to {{ inputs.feature_dir }}/lanes/{{ inputs.lane }}/blocked.md and go on.
+        Finally write {{ inputs.feature_dir }}/lanes/{{ inputs.lane }}/done.json as {"tasks": ["T001", ...]}.
+        Commit and push nothing. Reply in ≤5 lines.
+
+  - id: test_loop
+    type: do-while
+    max_iterations: 2
+    condition: "{{ steps.lane_tests.output.data.blocking > 0 }}"
+    steps:
+      - id: lane_tests
+        type: shell
+        run: "python3 workflows/benefit-feature/scripts/wf.py lane-tests {{ inputs.feature_dir }} {{ inputs.lane }}"
+        output_format: json
+        timeout: 1200
+
+      - id: maybe_fix
+        type: if
+        condition: "{{ steps.lane_tests.output.data.blocking > 0 }}"
+        then:
+          - id: lane_fix
+            type: prompt
+            integration: "{{ inputs.integration }}"
+            timeout: 1800
+            prompt: >-
+              The {{ inputs.lane }} unit tests fail; the output is in {{ inputs.feature_dir }}/lanes/{{ inputs.lane }}/tests.json.
+              Fix the code (not the tests, unless a test contradicts test-plan.md), editing only this lane's folders.
+              Commit nothing. Reply in ≤3 lines.

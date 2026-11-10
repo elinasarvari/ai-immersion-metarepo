@@ -1,6 +1,6 @@
 # Rule sets
 
-These are the rules generated code must pass. Spec Kit plans are written against them, `/speckit-implement` follows them, and the lane agents in `agents/` review the result against them before a PR is opened.
+These are the rules generated code must pass. Spec Kit plans are written against them, `/speckit-implement` follows them, and the compliance review (`agents/compliance-reviewer/`) checks the result against them before a PR is opened.
 
 Every rule has an ID (for example `TW-3`). Reviews cite the ID, the file and the line.
 

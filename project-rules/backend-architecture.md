@@ -18,12 +18,14 @@ benefit-be/
     domain/           shared Pydantic models used by everything above
     platform/         settings, logging, error format, auth helpers (no business logic)
   db/
-    migrations/       Alembic
+    migrations/       versioned MongoDB migration scripts (up and down) and the runner
     seeds/            synthetic data generator (fixed seed); output in generated/ (git-ignored)
   evals/              retrieval, extraction, explanation and agent-success evals (make eval)
   analytics/          dbt models (DuckDB)
   data/policy/        training-edition policy manual (written by the team)
   tests/              mirrors the source tree
+  openapi/            the committed OpenAPI contract (generated from apps/api, FR-000-26)
+  scripts/            run, health and CI helper scripts (export_openapi, check_health, ci/)
   Brewfile  Procfile  Makefile  pyproject.toml  uv.lock  .env.example
 ```
 
@@ -63,7 +65,7 @@ apps/worker ┘
 - **BA-8** Data passed between lanes (activity inputs and outputs, signal payloads, agent results) is defined in `packages/domain`. Changing it needs agreement from every lane that uses it, and the PR says so.
 
 ### Testing
-- **BA-9** Tests live in `tests/`, mirroring the source folder structure. Integration tests run against local Postgres and MongoDB.
+- **BA-9** Tests live in `tests/`, mirroring the source folder structure. Integration tests run against a local MongoDB (single-node replica set) and the Temporal dev server.
 
 ### Seed data and evaluations
 - **BA-10** `db/seeds/` and `evals/` are scripts and data, not runtime code: they may import `packages/*`, and nothing imports them.

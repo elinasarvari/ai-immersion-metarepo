@@ -1,0 +1,5 @@
+# Shared git settings for this metarepo. Enable once per clone with:
+#   git config --local include.path ../.gitconfig
+[alias]
+	# git create-pr <repo-name> --branch <b> --message <m> [--title <t>] [--body-file <f>] [--draft] [--no-pr]
+	create-pr = "!skills/create-pr/create-pr.sh"

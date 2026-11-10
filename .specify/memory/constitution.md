@@ -1,5 +1,10 @@
 # Benefit Case Platform Constitution
 
+> **DRAFT AMENDMENT v2.0.0, not yet in force.** This edit replaces PostgreSQL with MongoDB as the only
+> operational database and removes row-level security (principle VIII, Technology & Architecture
+> Constraints, principle V test levels). Under Governance, it takes effect only when a PR to this file
+> is approved by all three team members. Until then, version 1.4.1 is the ratified text.
+
 The Benefit Case Platform processes Illinois Medicaid applications and annual redeterminations
 with AI assistance. It is a 3-day learning project built to production habits: all data is
 synthetic and nothing is deployed, but the code must behave as if both were real.
@@ -56,7 +61,7 @@ Rationale: eligibility decisions must be auditable and reproducible; model outpu
   Evaluation runs against a live model are separate (`make eval`) and have pass thresholds.
 - Required test levels on every PR, all of which MUST pass to merge: static checks (ruff, strict
   type checks for Python and TypeScript, dependency and secrets scans), unit, workflow (including
-  restart and replay), contract, integration (local PostgreSQL, MongoDB and Temporal) and
+  restart and replay), contract, integration (local MongoDB and Temporal) and
   end-to-end tests for each demo journey. LLM evaluation runs on demand with `make eval`.
 
 ### VI. Contracts First
@@ -81,7 +86,8 @@ Rationale: eligibility decisions must be auditable and reproducible; model outpu
 - All data MUST be synthetic and visibly marked as synthetic. No real personal data, ever.
 - Synthetic data MUST be handled as if it were real: no personal data in logs, pseudonymous
   keys only in the reporting store, per-request authorization, and applicants see only their
-  own household's records (enforced in the API, in every agent tool and by row-level security).
+  own household's records (enforced in the API, in every agent tool and in the repository layer,
+  which adds the household filter to every query on household-scoped collections).
 - No secrets in code or commits; only `.env.example` is committed (see `project-rules/security.md`).
 
 ### IX. Production Habits, Local Infrastructure
@@ -104,14 +110,15 @@ Rationale: eligibility decisions must be auditable and reproducible; model outpu
 
 ## Technology & Architecture Constraints
 
-- **Repositories:** this metarepo (specs, rules, skills, and the software-factory scripts and
-  templates) plus two submodules under
-  `repos/`: `benefit-be` (all Python) and `benefit-fe` (React). `plan.md` MUST name the target
+- **Repositories:** this metarepo (specs, rules, skills, and the delivery-factory scripts and
+  templates of feature 009) plus two plain git clones
+  under `repos/` (git-ignored, not submodules): `benefit-be` (all Python) and `benefit-fe` (React). `plan.md` MUST name the target
   repo(s); `/speckit-implement` writes code only inside them. Run commands (`make dev`, `make prod`,
   `make seed`, `make eval`) live in `benefit-be`; the shared contracts are outlined in
   `specs/README.md` and implemented in `benefit-be`.
-- **Backend:** Python 3.11+, FastAPI, Temporal (dev server), LangGraph and LangChain, MCP servers, PostgreSQL
-  with vector search, MongoDB, DuckDB and dbt for the reporting store, Alembic migrations, ruff,
+- **Backend:** Python 3.11+, FastAPI, Temporal (dev server), LangGraph and LangChain, MCP servers, MongoDB 8.0
+  as the single operational database (one local replica-set node so multi-document transactions
+  work), DuckDB and dbt for the reporting store, versioned migration scripts, ruff,
   pytest. Layout per
   `project-rules/backend-architecture.md`.
 - **Frontend:** React + TypeScript (strict), Vitest + Testing Library, WCAG 2.1 AA, per
@@ -151,4 +158,4 @@ Rationale: eligibility decisions must be auditable and reproducible; model outpu
 - Every PR review checks compliance with these principles. `/speckit-analyze` flags conflicts
   between specs, plans and this constitution.
 
-**Version**: 1.4.1 | **Ratified**: 2026-11-09 | **Last Amended**: 2026-11-09
+**Version**: 2.0.0-draft (ratified text: 1.4.1) | **Ratified**: 2026-11-09 | **Last Amended**: 2026-11-09 (draft, pending approval)
