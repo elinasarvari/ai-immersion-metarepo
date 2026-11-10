@@ -1,5 +1,29 @@
+# OS / editor clutter
 .DS_Store
+Thumbs.db
+*.swp
+*~
+.idea/
+
+# secrets and local environment
 .env
+.env.*
+!.env.example
+
+# Python (workflow scripts, scripts/)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node (in case tooling is run at the metarepo root)
+node_modules/
+
+# Claude Code per-user settings (shared settings go in .claude/settings.json)
+.claude/settings.local.json
 
 # cloned repositories (keep the folder, never commit contents or link them as submodules)
 repos/*
@@ -8,4 +32,5 @@ repos/*
 
 # Spec Kit workflow run state (per machine) and check logs from workflows/benefit-feature
 .specify/workflows/runs/
-specs/*/review/*.log
+.specify/.workflow-install.lock
+specs/*/review/**/*.log

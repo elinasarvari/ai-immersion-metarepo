@@ -85,7 +85,7 @@ flowchart TB
         fix -- "next round" --> jobs
     end
 
-    trace["Traceability<br/>every FR has a test named after it"]:::script
+    trace["Traceability<br/>every own FR has a test named after it"]:::script
     pr["Draft PRs<br/>create-pr · one per repo · linked"]:::ai
     q3{{"pr_mode=ask?<br/>you approve the push"}}:::you
     ci["GitHub Actions<br/>ci-wait · each repo's own CI"]:::script
@@ -114,7 +114,7 @@ Stages that depend on each other run in a chain. Work that doesn't (the four lan
 | 4 | Lanes (AI ×4) | Each lane implements its own tasks, tests first, in its own folders; runs its unit tests and fixes failures (up to 2 rounds). | code per lane | `lane-tests` |
 | 5 | QA tests (AI) | Tests that span lanes or repos: contract, integration, end-to-end, eval. | tests | `ownership` |
 | 6 | Verify (script + AI) | Tests, builds and evals in parallel. If all green, code reviews and the compliance review in parallel. If anything blocks, one fix session, then the next round. | `review/verify.md` | `verify-status` |
-| 7 | Trace (script) | Every requirement must have a test named after it (`test_FR_010_01_…`). | `review/trace.md` | `trace` |
+| 7 | Trace (script) | Every requirement of the feature's own spec (`FR-<NNN>-xx`) must have a test named after it (`test_FR_010_01_…`). Other specs' IDs that the spec only refers to are left to those specs; the task and test-plan checks count the same set. | `review/trace.md` | `trace` |
 | 8 | Ship (AI + script) | Draft PRs, one per repo and linked (backend first if the API changed); then waits for each repo's GitHub Actions. | PR URLs | `ci-wait` |
 
 ## 4. Who does what
