@@ -546,9 +546,21 @@ def job_trace(d, mode):
 STACK_PORTS = [int(p) for p in os.environ.get("WF_STACK_PORTS", "8000,8001,5173,7233,8233,27017").split(",") if p]
 
 
+def project_dirs():
+    """This checkout and the main checkout it belongs to (a feature worktree's metarepo), as path prefixes."""
+    dirs = {str(ROOT)}
+    common = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "--path-format=absolute", "--git-common-dir"],
+                            capture_output=True, text=True).stdout.strip()
+    if common:
+        dirs.add(str(Path(common).parent.resolve()))
+    return [d.rstrip("/") + "/" for d in dirs]
+
+
 def busy_ports():
-    """[(port, holder)] for each stack port something listens on, IPv4 or IPv6 (Vite binds ::1)."""
-    busy = []
+    """[(port, holder)] for each stack port another project's process listens on, IPv4 or IPv6 (Vite binds ::1).
+    This project's own services (started from the metarepo or one of its worktrees, such as the shared local
+    MongoDB) don't count: the e2e job may use them."""
+    busy, ours = [], project_dirs()
     for port in STACK_PORTS:
         used = False
         for fam, host in ((socket.AF_INET, "127.0.0.1"), (socket.AF_INET6, "::1")):
@@ -561,7 +573,15 @@ def busy_ports():
         if used:
             r = subprocess.run(["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "-Fpc"], capture_output=True, text=True)
             fields = dict((ln[0], ln[1:]) for ln in r.stdout.splitlines() if ln[:1] in ("p", "c"))
-            busy.append((port, f"{fields.get('c', '?')} pid {fields.get('p', '?')}"))
+            pid = fields.get("p", "")
+            where = ""
+            if pid:
+                where = subprocess.run(["ps", "-o", "command=", "-p", pid], capture_output=True, text=True).stdout
+                cwd = subprocess.run(["lsof", "-a", "-p", pid, "-d", "cwd", "-Fn"], capture_output=True, text=True)
+                where += "".join(ln[1:] + "/" for ln in cwd.stdout.splitlines() if ln[:1] == "n")
+            if any(d in where for d in ours):
+                continue
+            busy.append((port, f"{fields.get('c', '?')} pid {pid or '?'}"))
     return busy
 
 

@@ -437,6 +437,20 @@ class ScriptJobs(WfCase):
         self.assertIn("in use", res["problems"][0])
         self.assertFalse((self.root / "repos/benefit-be/ran").exists())
 
+    def test_a_stack_port_held_by_this_project_does_not_count_as_busy(self):
+        script = self.root / "repos" / "benefit-be" / "hold_port.py"
+        script.write_text("import socket, sys, time\ns = socket.socket()\ns.bind(('127.0.0.1', 0))\ns.listen()\n"
+                          "print(s.getsockname()[1], flush=True)\ntime.sleep(30)\n")
+        proc = subprocess.Popen([sys.executable, str(script)], stdout=subprocess.PIPE, text=True,
+                                cwd=script.parent)
+        try:
+            port = proc.stdout.readline().strip()
+            with mock.patch.dict(os.environ, {"WF_STACK_PORTS": port}):
+                self.assertEqual(self.wf("ports")[1]["busy"], [])
+        finally:
+            proc.kill()
+            proc.wait()
+
     def test_each_round_counts_only_its_own_jobs(self):
         self.write("review/jobs/trace.json", json.dumps({"job": "trace", "status": "fail"}))
         self.wf("jobs", FD)
