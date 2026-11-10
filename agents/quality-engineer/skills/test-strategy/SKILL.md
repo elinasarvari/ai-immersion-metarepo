@@ -5,7 +5,7 @@ description: As the quality engineer, write a feature's test plan (every require
 
 # Test strategy
 
-You take on the **quality engineer role**. Read `agents/quality-engineer/rules/behavior.md` and `agents/README.md` first. Paths are from the metarepo root.
+You are the **quality-engineer agent**. Read `agents/quality-engineer/quality-engineer.agent.md` and `agents/README.md` first. Paths are from the metarepo root.
 
 ## 1. Inputs (read once)
 - `specs/<NNN-feature>/spec.md`, `plan.md`, `data-model.md`, `contracts/`, `tasks.md`
@@ -22,12 +22,13 @@ You take on the **quality engineer role**. Read `agents/quality-engineer/rules/b
 | TC-01 | FR-010-01, US1-AS1 | unit | data-lane / benefit-be | test_FR_010_01_extension_adds_ten_days | seed: household H3 |
 
 ## Quality gates
-- Coverage: every FR has ≥1 case (checked by `wf.py test-plan-check` and `wf.py trace`)
+- Coverage: every FR has ≥1 case (`wf.py tasks-gate`), and every case has a test defined with its exact name and not skipped (`wf.py job <feature_dir> trace:strict`)
 - Evals: <metric> ≥ <threshold> (AI features only)
 - Not tested, and why: <FR and reason> (should be empty)
 ```
 - **Levels:** `unit`, `integration`, `workflow`, `contract`, `e2e`, `eval`.
-- **Lane:** the one that owns the code under test, or `qa` for cases that span lanes or repos.
+- **Lane / repo:** the lane that owns the code under test, or `qa` for cases that span lanes or repos, then the repo (`data-lane / benefit-be`). The trace looks for the test only in that repo.
+- **Test name:** exact and unique. Python: the function name, `test_FR_<NNN>_<nn>_…`. TypeScript: the start of the `test('FR-<NNN>-<nn>: …')` title. Eval: the eval case id.
 
 ## 3. Add tasks to `specs/<NNN-feature>/tasks.md`
 - **Lane tasks:** for each implementation task, make sure its test-first task exists, tagged the same `[lane][repo]`, and names its `TC-` IDs. Add the task where it's missing.
@@ -36,7 +37,6 @@ You take on the **quality engineer role**. Read `agents/quality-engineer/rules/b
 
 ## 4. Self-check, then report
 ```bash
-python3 workflows/benefit-feature/scripts/wf.py test-plan-check <feature_dir>
-python3 workflows/benefit-feature/scripts/wf.py tasks-split <feature_dir>
+python3 workflows/benefit-feature/scripts/wf.py tasks-gate <feature_dir>   # task lane tags + test-plan coverage and names
 ```
-Fix what they report, then reply in ≤10 lines (behavior, section 6).
+Fix what it reports, then reply in ≤10 lines (agent file, section 6).

@@ -2,12 +2,14 @@ schema_version: "1.0"
 workflow:
   id: "benefit-feature"
   name: "Benefits Case feature"
-  version: "0.3.0"
+  version: "0.5.0"
   author: "ai-immersion-metarepo"
   description: >-
-    From an existing spec to draft PRs: architect plan → tasks + QA tasks → contracts → lanes in parallel →
-    QA tests → verify loop (tests and builds in parallel, then code and compliance reviews in parallel, then fix)
-    → traceability → draft PRs → GitHub Actions. People are asked only when automation can't decide.
+    From an existing spec to draft PRs, each AI step a separate agent: architect plan → decision-maker settles
+    open ADRs → tasks → quality engineer's test plan and QA tasks → contracts → lanes in parallel →
+    QA tests → verify loop (fix → tests, builds and script checks in parallel → reviews in parallel, only on
+    green and only where something changed) → draft PRs → GitHub Actions. People are asked only when
+    automation can't decide.
 
 requires:
   speckit_version: ">=1.0.0"
@@ -27,46 +29,38 @@ inputs:
   trace_mode:
     type: string
     default: "strict"
-    prompt: "strict = fail if a requirement has no test; warn = report only"
+    prompt: "strict = fail if a planned test is missing; warn = report only"
+  decision_mode:
+    type: string
+    default: "auto"
+    prompt: "auto = the decision-maker agent decides open ADRs (review them in the PR); ask = you decide at a gate"
   # Gate answers for runs without a terminal. One per gate; set only on resume, after a person decided.
   spec_verdict: {type: string, default: ""}
   decision_verdict: {type: string, default: ""}
   pr_verdict: {type: string, default: ""}
 
 # Run:     specify workflow run workflows/benefit-feature/workflow.yml -i feature=003
-# Checks:  every `wf.py` step prints JSON and stops the run when it fails; fix, then `specify workflow resume <id>`.
-# AI steps: 5 fixed (plan, tasks+QE, contracts, QA, PR) + 1 per lane + reviews and fixes per verify round.
+# Checks:  one `wf.py` gate after each planning stage; every check on the code runs inside the verify loop, so
+#          the fix step can repair it. A failed gate stops the run: fix, then `specify workflow resume <id>`.
+# AI steps: each one is a separate agent session (agents/). 6 fixed (architect, tasks, quality engineer, contracts,
+#           QA, PR) + the decision-maker if an ADR is open (+ an architect update if it chose differently) + 1 per lane
+#           + per verify round: the reviews that need rerunning and one fix.
 
 steps:
-  # ── 1. Prepare and pick up the spec ───────────────────────────────────────────────────────────────
-  - id: inputs_check
-    type: shell
-    run: "python3 workflows/benefit-feature/scripts/wf.py inputs-check {{ inputs.pr_mode }} {{ inputs.trace_mode }}"
-    output_format: json
-
+  # ── 1. Pick up the spec ───────────────────────────────────────────────────────────────────────────
   - id: sync
     type: shell
     run: "skills/sync-repos/sync-repos.sh"
     timeout: 300
 
-  - id: install_lane_chain
-    type: shell
-    run: "(specify workflow remove lane-chain >/dev/null 2>&1 || true) && specify workflow add workflows/lane-chain"
-    timeout: 120
-
   - id: feature
     type: shell
-    run: "python3 workflows/benefit-feature/scripts/wf.py use-spec {{ inputs.feature }}"
-    output_format: json
-
-  - id: spec_check
-    type: shell
-    run: "python3 workflows/benefit-feature/scripts/wf.py spec-check {{ steps.feature.output.data.feature_dir }}"
+    run: "python3 workflows/benefit-feature/scripts/wf.py prepare {{ inputs.feature }} {{ inputs.pr_mode }} {{ inputs.trace_mode }} {{ inputs.decision_mode }}"
     output_format: json
 
   - id: spec_questions
     type: if
-    condition: "{{ steps.spec_check.output.data.open > 0 }}"
+    condition: "{{ steps.feature.output.data.open > 0 }}"
     then:
       - id: approve_spec
         type: gate
@@ -76,33 +70,62 @@ steps:
         on_reject: abort
         verdict_input: spec_verdict
 
-  # ── 2. Architect: plan, decisions, scope (one AI session) ───────────────────────────────────────────
+  # ── 2. Architect plans; a separate decision-maker settles what the architect may not ─────────────
   - id: architect
     type: prompt
     integration: "{{ inputs.integration }}"
     timeout: 2400
     prompt: >-
-      Use the architecture-plan skill for {{ steps.feature.output.data.feature_dir }}. Unattended run: don't ask
-      questions; leave open ADRs open. Reply in ≤10 lines.
+      You are the architect agent (agents/architect/architect.agent.md). Use its architecture-plan skill for
+      {{ steps.feature.output.data.feature_dir }}. Unattended run: don't ask questions; leave open ADRs open with a
+      recommendation. Reply in ≤10 lines.
 
-  - id: plan_check
+  - id: plan_gate
     type: shell
-    run: "python3 workflows/benefit-feature/scripts/wf.py plan-check {{ steps.feature.output.data.feature_dir }}"
+    run: "python3 workflows/benefit-feature/scripts/wf.py plan-gate {{ steps.feature.output.data.feature_dir }}"
     output_format: json
 
-  - id: decisions_check
-    type: shell
-    run: "python3 workflows/benefit-feature/scripts/wf.py decisions-check {{ steps.feature.output.data.feature_dir }}"
-    output_format: json
+  - id: decide
+    type: if
+    condition: "{{ steps.plan_gate.output.data.open > 0 and inputs.decision_mode == 'auto' }}"
+    then:
+      - id: decision_maker
+        type: prompt
+        integration: "{{ inputs.integration }}"
+        timeout: 1800
+        prompt: >-
+          You are the decision-maker agent (agents/decision-maker.agent.md). Decide the open ADRs in
+          {{ steps.feature.output.data.feature_dir }}/decisions/ and record them as it says. Reply in ≤10 lines.
 
-  - id: scope_check
-    type: shell
-    run: "python3 workflows/benefit-feature/scripts/wf.py scope-check {{ steps.feature.output.data.feature_dir }}"
-    output_format: json
+      - id: decisions_gate
+        type: shell
+        run: "python3 workflows/benefit-feature/scripts/wf.py decisions-gate {{ steps.feature.output.data.feature_dir }}"
+        output_format: json
+
+      # The plan assumed the architect's recommendations; update it only where the decision-maker chose otherwise.
+      - id: plan_update
+        type: if
+        condition: "{{ (steps.decisions_gate.output.data.plan_update_needed | length) > 0 }}"
+        then:
+          - id: architect_update
+            type: prompt
+            integration: "{{ inputs.integration }}"
+            timeout: 1200
+            prompt: >-
+              You are the architect agent (agents/architect/architect.agent.md). The decision-maker accepted options
+              other than your recommendation for {{ steps.decisions_gate.output.data.plan_update_needed }} (see
+              {{ steps.feature.output.data.feature_dir }}/decisions/auto-decisions.json). Update plan.md, research.md,
+              data-model.md, contracts/ and scope.json to follow those ADRs as decided. Don't change any ADR. Reply in
+              ≤5 lines.
+
+          - id: plan_recheck
+            type: shell
+            run: "python3 workflows/benefit-feature/scripts/wf.py plan-gate {{ steps.feature.output.data.feature_dir }}"
+            output_format: json
 
   - id: decision_questions
     type: if
-    condition: "{{ steps.decisions_check.output.data.open > 0 }}"
+    condition: "{{ steps.plan_gate.output.data.open > 0 and inputs.decision_mode == 'ask' }}"
     then:
       - id: approve_decisions
         type: gate
@@ -114,30 +137,33 @@ steps:
         on_reject: abort
         verdict_input: decision_verdict
 
-  # ── 3. Tasks + quality engineering (one AI session) ────────────────────────────────────────────────
+  # ── 3. Tasks, then the quality engineer as its own agent (it judges coverage independently) ──────
   - id: tasks
     type: prompt
     integration: "{{ inputs.integration }}"
     timeout: 1800
     prompt: >-
-      For {{ steps.feature.output.data.feature_dir }}: first follow the speckit-tasks skill to write tasks.md from the
-      plan. Tag every task with one lane and its repo: [contracts], [workflows], [agents], [data] or [platform-ui],
-      then [benefit-be] or [benefit-fe]. Shared changes (packages/domain, OpenAPI, dependencies, lockfiles,
-      Makefile/Procfile) are [contracts]; every other task touches only its lane's folders. Mention the FR IDs each
-      task serves. Then, in the same session, use the test-strategy skill to write test-plan.md and add the
-      test-first and [qa] tasks. Reply in ≤10 lines.
+      For {{ steps.feature.output.data.feature_dir }}: follow the speckit-tasks skill to write tasks.md from the plan
+      and the Accepted ADRs. Tag every task with one lane and its repo: [contracts], [workflows], [agents], [data] or
+      [platform-ui], then [benefit-be] or [benefit-fe]. Shared changes (packages/domain, OpenAPI, dependencies,
+      lockfiles, Makefile/Procfile) are [contracts]; every other task touches only its lane's folders. Mention the FR
+      IDs each task serves. Reply in ≤5 lines.
 
-  - id: tasks_split
+  - id: quality_engineer
+    type: prompt
+    integration: "{{ inputs.integration }}"
+    timeout: 1800
+    prompt: >-
+      You are the quality-engineer agent (agents/quality-engineer/quality-engineer.agent.md). Use its test-strategy
+      skill for {{ steps.feature.output.data.feature_dir }}: write test-plan.md and add the test-first and [qa] tasks
+      to tasks.md. Reply in ≤10 lines.
+
+  - id: tasks_gate
     type: shell
-    run: "python3 workflows/benefit-feature/scripts/wf.py tasks-split {{ steps.feature.output.data.feature_dir }}"
+    run: "python3 workflows/benefit-feature/scripts/wf.py tasks-gate {{ steps.feature.output.data.feature_dir }}"
     output_format: json
 
-  - id: test_plan_check
-    type: shell
-    run: "python3 workflows/benefit-feature/scripts/wf.py test-plan-check {{ steps.feature.output.data.feature_dir }}"
-    output_format: json
-
-  # ── 4. Implement: contracts alone, then lanes in parallel, then cross-lane QA tests ─────────────────
+  # ── 4. Build: contracts alone, then lanes in parallel, then cross-lane QA tests ───────────────────
   - id: branches
     type: shell
     run: "workflows/benefit-feature/scripts/start-branches.sh {{ steps.feature.output.data.feature_dir }}"
@@ -145,7 +171,7 @@ steps:
 
   - id: contracts
     type: if
-    condition: "{{ steps.tasks_split.output.data.contracts_tasks > 0 }}"
+    condition: "{{ steps.tasks_gate.output.data.contracts_tasks > 0 }}"
     then:
       - id: implement_contracts
         command: speckit.implement
@@ -157,27 +183,32 @@ steps:
             {{ steps.feature.output.data.branch }}, tests first, following plan.md and the Accepted ADRs. Mark them [X].
             Commit nothing. Reply in ≤5 lines.
 
+  # Lanes share one working tree per repo: each edits only its own folders and writes only under lanes/<lane>/.
   - id: lanes
     type: fan-out
-    items: "{{ steps.tasks_split.output.data.lanes }}"
+    items: "{{ steps.tasks_gate.output.data.lanes }}"
     max_concurrency: 4
     step:
-      id: lane_run
-      type: workflow
-      workflow: lane-chain
+      id: lane
+      command: speckit.implement
+      integration: "{{ inputs.integration }}"
+      timeout: 3600
       input:
-        lane: "{{ item }}"
-        feature_dir: "{{ steps.feature.output.data.feature_dir }}"
-        branch: "{{ steps.feature.output.data.branch }}"
-        integration: "{{ inputs.integration }}"
-
-  - id: lanes_done
-    type: fan-in
-    wait_for: [lanes]
+        args: >-
+          Implement ONLY the tasks tagged [{{ item }}] (or its short name) in {{ steps.feature.output.data.feature_dir }}/tasks.md,
+          on branch {{ steps.feature.output.data.branch }}, following plan.md, the Accepted ADRs in decisions/, the test
+          cases in test-plan.md, and only the rule files project-rules/README.md maps to this lane. Write each test first,
+          named exactly as in test-plan.md. Other lanes are editing the same repo now: edit only this lane's folders
+          (project-rules/backend-architecture.md, Ownership); never edit shared files or tasks.md. If a task needs a
+          change elsewhere, write it to {{ steps.feature.output.data.feature_dir }}/lanes/{{ item }}/blocked.md and go on.
+          Before finishing, run only this lane's unit tests (tests/<this lane's folders>, or vitest for benefit-fe) and
+          fix the code until they pass (change a test only if it contradicts test-plan.md); the full checks run later.
+          Finally write {{ steps.feature.output.data.feature_dir }}/lanes/{{ item }}/done.json as {"tasks": ["T001", ...]}.
+          Commit and push nothing. Reply in ≤5 lines.
 
   - id: qa
     type: if
-    condition: "{{ steps.tasks_split.output.data.qa_tasks > 0 }}"
+    condition: "{{ steps.tasks_gate.output.data.qa_tasks > 0 }}"
     then:
       - id: implement_qa
         command: speckit.implement
@@ -186,20 +217,12 @@ steps:
         input:
           args: >-
             Implement ONLY the [qa] tasks in {{ steps.feature.output.data.feature_dir }}/tasks.md: the contract,
-            integration, end-to-end and eval tests in test-plan.md, named as planned. Mark them [X]. Commit nothing.
-            Reply in ≤5 lines.
+            integration, end-to-end and eval tests in test-plan.md, named exactly as planned. Mark them [X]. Commit
+            nothing. Reply in ≤5 lines.
 
-  - id: mark_tasks
-    type: shell
-    run: "python3 workflows/benefit-feature/scripts/wf.py mark-tasks {{ steps.feature.output.data.feature_dir }}"
-    output_format: json
-
-  - id: ownership
-    type: shell
-    run: "python3 workflows/benefit-feature/scripts/wf.py ownership {{ steps.feature.output.data.feature_dir }}"
-    output_format: json
-
-  # ── 5. Verify loop: tests and builds in parallel → reviews in parallel (only if green) → fix ─────────
+  # ── 5. Verify loop. Each round: fix what the last round found → every check in parallel → reviews (only on
+  #       green, only those with no result, still blocking, or whose repo changed) → status. A round always
+  #       ends on a verification, so no fix ships unchecked.
   - id: verify_init
     type: shell
     run: "python3 workflows/benefit-feature/scripts/wf.py verify-init {{ steps.feature.output.data.feature_dir }}"
@@ -210,9 +233,29 @@ steps:
     max_iterations: 3
     condition: "{{ steps.verify_status.output.data.blocking > 0 }}"
     steps:
+      - id: needs_fix
+        type: shell
+        run: "python3 workflows/benefit-feature/scripts/wf.py needs-fix {{ steps.feature.output.data.feature_dir }}"
+        output_format: json
+
+      - id: maybe_fix
+        type: if
+        condition: "{{ steps.needs_fix.output.data.blocking > 0 }}"
+        then:
+          - id: fix
+            type: prompt
+            integration: "{{ inputs.integration }}"
+            timeout: 2400
+            prompt: >-
+              Fix everything {{ steps.feature.output.data.review_dir }}/verify.md lists as blocking: failing jobs (read
+              their logs), open tasks (do them, including the work in lanes/*/blocked.md, then mark them [X] in tasks.md),
+              missing or skipped planned tests (review/trace.md), files outside their lane, and every critical or major
+              finding in the review files it points to. Follow the lane rule files and Accepted ADRs; keep each change
+              in its owner's folders. Commit nothing. Reply in ≤5 lines.
+
       - id: job_list
         type: shell
-        run: "python3 workflows/benefit-feature/scripts/wf.py jobs {{ steps.feature.output.data.feature_dir }}"
+        run: "python3 workflows/benefit-feature/scripts/wf.py jobs {{ steps.feature.output.data.feature_dir }} {{ inputs.trace_mode }}"
         output_format: json
 
       - id: run_jobs
@@ -226,73 +269,37 @@ steps:
           output_format: json
           timeout: 3700
 
-      - id: jobs_status
+      - id: review_list
         type: shell
-        run: "python3 workflows/benefit-feature/scripts/wf.py verify-status {{ steps.feature.output.data.feature_dir }}"
+        run: "python3 workflows/benefit-feature/scripts/wf.py review-list {{ steps.feature.output.data.feature_dir }}"
         output_format: json
 
-      # Reviews cost tokens, so they run only once tests and builds pass.
-      - id: maybe_review
-        type: if
-        condition: "{{ (steps.jobs_status.output.data.jobs_failing | length) == 0 }}"
-        then:
-          - id: review_list
-            type: shell
-            run: "python3 workflows/benefit-feature/scripts/wf.py review-list {{ steps.feature.output.data.feature_dir }}"
-            output_format: json
-
-          - id: reviews
-            type: fan-out
-            items: "{{ steps.review_list.output.data.reviews }}"
-            max_concurrency: 3
-            step:
-              id: review
-              type: prompt
-              integration: "{{ inputs.integration }}"
-              timeout: 1800
-              prompt: >-
-                Review "{{ item }}" for {{ steps.feature.output.data.feature_dir }}: "compliance" → use the
-                compliance-review skill; "code-benefit-be" → act as the backend-reviewer agent
-                (agents/backend-reviewer.agent.md); "code-benefit-fe" → act as the frontend-reviewer agent
-                (agents/frontend-reviewer.agent.md). Write only that review's .md and .json in review/. Don't fix
-                anything. Reply in ≤5 lines.
+      # Empty while a job fails, so a red round spends no review tokens.
+      - id: reviews
+        type: fan-out
+        items: "{{ steps.review_list.output.data.reviews }}"
+        max_concurrency: 3
+        step:
+          id: review
+          type: prompt
+          integration: "{{ inputs.integration }}"
+          timeout: 1800
+          prompt: >-
+            Review "{{ item }}" for {{ steps.feature.output.data.feature_dir }}: "compliance" → you are the
+            compliance-reviewer agent (agents/compliance-reviewer/compliance-reviewer.agent.md), using its
+            compliance-review skill; "code-benefit-be" → you are the backend-reviewer agent
+            (agents/backend-reviewer.agent.md); "code-benefit-fe" → you are the frontend-reviewer agent
+            (agents/frontend-reviewer.agent.md). Write only that review's .md and .json in review/. Don't fix
+            anything. Reply in ≤5 lines.
 
       - id: verify_status
         type: shell
         run: "python3 workflows/benefit-feature/scripts/wf.py verify-status {{ steps.feature.output.data.feature_dir }}"
         output_format: json
 
-      - id: maybe_fix
-        type: if
-        condition: "{{ steps.verify_status.output.data.blocking > 0 }}"
-        then:
-          - id: snapshot
-            type: shell
-            run: "python3 workflows/benefit-feature/scripts/wf.py snapshot {{ steps.feature.output.data.feature_dir }}"
-            output_format: json
-
-          - id: fix
-            type: prompt
-            integration: "{{ inputs.integration }}"
-            timeout: 2400
-            prompt: >-
-              Fix what {{ steps.feature.output.data.review_dir }}/verify.md lists: failing jobs (read their logs) and every
-              critical or major finding in the review files it points to. Follow the lane rule files and Accepted ADRs;
-              keep each change in its owner's folders. Commit nothing. Reply in ≤5 lines.
-
-  - id: verify_clean
+  - id: final_gate
     type: shell
-    run: "python3 workflows/benefit-feature/scripts/wf.py status {{ steps.feature.output.data.review_dir }}/verify.json --require-clean"
-    output_format: json
-
-  - id: ownership_after_fixes
-    type: shell
-    run: "python3 workflows/benefit-feature/scripts/wf.py ownership {{ steps.feature.output.data.feature_dir }}"
-    output_format: json
-
-  - id: trace
-    type: shell
-    run: "python3 workflows/benefit-feature/scripts/wf.py trace {{ steps.feature.output.data.feature_dir }} {{ inputs.trace_mode }}"
+    run: "python3 workflows/benefit-feature/scripts/wf.py final-gate {{ steps.feature.output.data.feature_dir }}"
     output_format: json
 
   # ── 6. Ship: PRs, then the repos' own GitHub Actions ─────────────────────────────────────────────────
@@ -320,9 +327,11 @@ steps:
           Use the create-pr skill for {{ steps.feature.output.data.feature_dir }}, branch {{ steps.feature.output.data.branch }},
           for every repo with changes. Starting this run with pr_mode={{ inputs.pr_mode }} is the user's approval to push;
           don't ask again. pr_mode "draft" → draft PRs (--draft); "ask" → ready for review. Fill the PR template with the
-          FR IDs covered and the results in review/verify.md and review/trace.md. If the API contract changed, open the
-          benefit-be PR first and link the two. Write {{ steps.feature.output.data.review_dir }}/prs.json as
-          {"<repo>": "<PR URL>"}. Reply with the URLs.
+          FR IDs covered, the results in review/verify.md (including its Warnings section) and review/trace.md, and a
+          "Decided automatically - please review" section listing each entry in decisions/auto-decisions.json (ADR,
+          option chosen, the architect's recommendation, revisit-if) and any amendment suggested. If the
+          API contract changed, open the benefit-be PR first and link the two. Write
+          {{ steps.feature.output.data.review_dir }}/prs.json as {"<repo>": "<PR URL>"}. Reply with the URLs.
 
       - id: ci
         type: shell

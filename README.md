@@ -5,8 +5,8 @@ Central store for the AI-assisted development assets shared by the Benefit proje
 | Folder | Purpose |
 |---|---|
 | `docs/` | How the workflow works, with diagrams: start with [docs/workflow-architecture.md](docs/workflow-architecture.md) |
-| `workflows/` | `feature.md` (the stages) and the automated workflows `benefit-feature/` and `lane-chain/` |
-| `agents/` | Roles (architect, quality engineer, compliance reviewer) and code-review agents; see `agents/README.md` |
+| `workflows/` | `feature.md` (the stages) and the automated workflow `benefit-feature/` (its checks in `scripts/wf.py`, their tests in `tests/`) |
+| `agents/` | The agents, each a separate subagent: architect, decision-maker, quality engineer, compliance reviewer, backend and frontend reviewers; see `agents/README.md` |
 | `skills/` | Reusable skills / slash commands (one folder per skill, with `SKILL.md`) |
 | `specs/` | Functional specs and technical plans per feature |
 | `project-rules/` | Rule sets with IDs, mapped to repo paths in `project-rules/README.md` |
@@ -93,18 +93,20 @@ specify workflow status <run-id>      ·      specify workflow resume <run-id> [
 ```
 
 ```
-CHAIN     pick up spec → spec check ─(open questions?)→ [you]
-          → ARCHITECT: plan, research, data model, contracts, ADRs, scope → checks ─(a decision that's yours?)→ [you]
-          → TASKS + QUALITY ENGINEER: tasks by lane, test plan, QA tasks → checks → branches → contracts
-PARALLEL  one chain per lane: implement (tests first) → lane unit tests → fix
-CHAIN     QA tests (contract, integration, e2e, eval) → ownership check
-VERIFY    ≤3 rounds: tests and builds in parallel → if green: code + compliance reviews in parallel → fix
-CHAIN     traceability → draft PRs (pr_mode=draft) · [you] first (pr_mode=ask) · stop (none) → GitHub Actions
+CHAIN     sync → prepare (inputs + spec) ─(open questions?)→ [you]
+          → ARCHITECT: plan, research, data model, contracts, ADRs, scope → plan-gate
+          → DECISION-MAKER (if an ADR is open): decides it on the evidence → decisions-gate (→ architect updates the plan if needed)
+          → TASKS → QUALITY ENGINEER: test plan, QA tasks → tasks-gate → branches → contracts
+PARALLEL  one session per lane: implement (tests first) and get the lane's unit tests green
+CHAIN     QA tests (contract, integration, e2e, eval)
+VERIFY    ≤3 rounds: [fix] → tests, builds, evals, ownership, tasks, trace in parallel
+          → if green: only the reviews that need it, in parallel → status
+CHAIN     final-gate → draft PRs (pr_mode=draft) · [you] first (pr_mode=ask) · stop (none) → GitHub Actions
 ```
 
-- **People** are asked only for open spec questions, decisions that are theirs, and before pushing with `pr_mode=ask`. By default your review happens on the draft PRs in GitHub.
-- **Verification** is by script after every stage (`workflows/benefit-feature/scripts/wf.py`): spec, plan, decisions, scope, task tags, test plan coverage, file ownership, tests and builds, reviews, requirement traceability and CI. A failed check stops the run; fix it and `resume`.
-- **Tokens:** three AI sessions plan the whole feature (architect; tasks with quality engineering; contracts), reviews only run on green builds, re-reviews read only the change, and every role writes results to files and replies in a few lines (`agents/README.md`).
+- **People** are asked only for open spec questions, an ADR with no compliant option, and before pushing with `pr_mode=ask`. By default the decision-maker agent settles open ADRs (`decision_mode=auto`) and the draft PRs list every automatic decision, so your review of decisions and code happens on the PRs in GitHub. `decision_mode=ask` restores the decision gate.
+- **Verification** (`workflows/benefit-feature/scripts/wf.py`): one gate after each planning stage (spec, plan + ADRs + scope, tasks + test plan), and every check on the code (tests, builds, evals, file ownership, open tasks, planned tests defined and not skipped) inside the verify loop, so the fix step can repair any of them. Then reviews and CI. A failed gate stops the run; fix it and `resume`. The checks have their own tests: `python3 -m unittest discover -s workflows/benefit-feature/tests`.
+- **Tokens:** four agent sessions plan the whole feature (architect; tasks; quality engineer; contracts), plus the decision-maker only when an ADR is open; each lane is one session, reviews only run on green builds and rerun only where something changed or still blocks, re-reviews read only the change, and every role writes results to files and replies in a few lines (`agents/README.md`).
 - **Before the first run:** `gh auth login`; both repos cloned in `repos/`; and allow the scripts, `git`, `make`, `uv`, `pnpm`, `python3` and `gh` in your Claude Code settings (AI steps run unattended, up to four at once). The engine runs Claude Code; Copilot users follow [workflows/feature.md](workflows/feature.md) by hand.
 
 ## Claude Code and GitHub Copilot

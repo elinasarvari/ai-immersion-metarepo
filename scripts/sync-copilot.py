@@ -7,9 +7,9 @@
   agents/**/<name>.agent.md          -> .claude/agents/<name>.agent.md, .github/agents/...  (symlink)
 
 Skill dirs are skills/<name>/ (shared skills) and agents/<agent>/skills/<name>/ (skills that belong to one
-agent or role, kept next to its rules/). Agents are *.agent.md files anywhere under agents/.
+agent, kept next to its .agent.md). Agents are *.agent.md files anywhere under agents/.
 
-Only those exact files and folders are linked, so neither tool loads an agent's rules or skills as agents,
+Only those exact files and folders are linked, so neither tool loads an agent's skills as agents,
 and agent-owned skills never need a copy or link in the root skills/ folder.
 
 Usage: python3 scripts/sync-copilot.py [--check]

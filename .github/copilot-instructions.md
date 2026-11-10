@@ -15,27 +15,27 @@ Central store for shared AI-assisted development assets (see README.md for folde
 - When working inside a cloned repo, follow that repo's own `CLAUDE.md` / rules plus the rule sets that `project-rules/README.md` maps to the paths you touch. Commits for that project are made inside `repos/<name>` and pushed to its own `origin`.
 - The project has two repos: `benefit-be` (API, Temporal worker, agents, rules, RAG, MCP servers, DB, evals, analytics) and `benefit-fe` (React UI).
 
-## Rules, roles, agents and workflows
+## Rules, agents and workflows
 
 - **Rule sets** (`project-rules/`): every rule has an ID (`TW-3`, `AG-6`, …). `project-rules/README.md` maps each repo path to its lane and rule files. Generated code must satisfy them as hard constraints. Lanes (workflows, agents, data, platform-ui) are folder ownership, used for parallel work and rule mapping; three team members rotate between them (`specs/README.md`).
-- **Roles and agents** (`agents/`, summary and shared conventions in `agents/README.md`):
-  - **architect** (role): plans the feature and records significant decisions as ADRs. Skills: `architecture-plan`, `architecture-decision`, `architecture-capabilities`.
-  - **quality-engineer** (role): the test plan, and test and QA tasks. Skill: `test-strategy`.
-  - **compliance-reviewer** (role): checks the implementation against the constitution, rules, ADRs and test plan. Skill: `compliance-review`.
-  - **backend-reviewer**, **frontend-reviewer** (agents): senior code review per repo.
+- **Agents** (`agents/`, summary and shared conventions in `agents/README.md`). Each is a separate subagent with its own context, working through files; the workflow engine (or, in chat, the main session) starts them, in parallel where the work is independent:
+  - **architect**: plans the feature and records significant decisions as ADRs. Skills: `architecture-plan`, `architecture-decision`, `architecture-capabilities`.
+  - **decision-maker**: decides the open ADRs (product, policy, cost, scope, amendments) independently of the architect, and records each for review in the PR.
+  - **quality-engineer**: the test plan, and test and QA tasks. Skill: `test-strategy`.
+  - **compliance-reviewer**: checks the implementation against the constitution, rules, ADRs and test plan. Skill: `compliance-review`.
+  - **backend-reviewer**, **frontend-reviewer**: senior code review per repo.
 
-  A role is `rules/behavior.md` plus `skills/`; whoever runs one of its skills takes it on, bound by that behavior file. Never mark a `Needs decision` or `Proposed – needs amendment` ADR as accepted without the user's explicit answer.
+  An agent is a `*.agent.md` file (its rules), with its own procedures in `<agent>/skills/`. Only the user, or the decision-maker agent (in a run with `decision_mode=auto`, the default, or when the user asks it to decide), may accept a `Needs decision` or `Proposed – needs amendment` ADR. Nobody changes the constitution or a rule set without all three team members (Governance): the decision-maker picks a compliant option and leaves the amendment as a suggestion.
 - **Workflows** (`workflows/`): `feature.md` describes the stages. `benefit-feature/workflow.yml` runs them from an existing spec with Spec Kit's workflow engine:
-  1. architect plan
-  2. tasks and QA tasks
+  1. architect plan, then the decision-maker settles any open ADR (`decision_mode=auto`; `ask` = a gate for you)
+  2. tasks, then the quality engineer's test plan and QA tasks
   3. contracts
-  4. lanes in parallel (`lane-chain/workflow.yml`), then QA tests
-  5. verify loop: tests and builds in parallel, then code and compliance reviews in parallel, then fix
-  6. traceability
-  7. draft PRs, then GitHub Actions
+  4. lanes in parallel (one `speckit.implement` session each, which gets its own unit tests green), then QA tests
+  5. verify loop, up to 3 rounds: fix (from round 2), then tests, builds, evals and the script checks (ownership, open tasks, traceability) in parallel, then, only if green, the code and compliance reviews that need rerunning, in parallel
+  6. final gate, draft PRs, then GitHub Actions
 
-  A script check (`benefit-feature/scripts/wf.py`) follows every stage. It asks a person only for open spec questions, decisions that are theirs, or before pushing with `pr_mode=ask`. Start, resume or check a run with the **feature-workflow** skill. Never answer a gate (`spec_verdict`, `decision_verdict`, `pr_verdict`) unless the user explicitly decided what it shows.
-- **Docs:** `docs/workflow-architecture.md` explains the workflow with Mermaid diagrams. Update it in the same change whenever the workflow, roles, agents or gates change.
+  `benefit-feature/scripts/wf.py` holds every check: one gate after each planning stage, and every check on the code inside the verify loop, so the fix step can repair it. Its tests are in `benefit-feature/tests/` (`python3 -m unittest discover -s workflows/benefit-feature/tests`); run them after changing the workflow or `wf.py`. The workflow asks a person only for open spec questions, an ADR the decision-maker finds no compliant option for (or every open ADR with `decision_mode=ask`), or before pushing with `pr_mode=ask`. Start, resume or check a run with the **feature-workflow** skill. Never answer a gate (`spec_verdict`, `decision_verdict`, `pr_verdict`) unless the user explicitly decided what it shows.
+- **Docs:** `docs/workflow-architecture.md` explains the workflow with Mermaid diagrams. Update it in the same change whenever the workflow, agents or gates change.
 - **Token economy:** follow `agents/README.md`. Read only the mapped rule files and the diff, write results to files, reply briefly, and on re-reviews read only what changed.
 
 ## Keeping Claude Code and Copilot in step
@@ -94,6 +94,6 @@ git create-pr <repo-name> --branch feature/<NNN-feature> --message "<conventiona
 
 ## Skills
 
-Shared skills live in `skills/<name>/SKILL.md`. A skill that belongs to one agent or role lives only in that folder, as `agents/<agent>/skills/<name>/SKILL.md` (see `agents/architect/`); don't copy or link it into `skills/`. `.claude/skills/` and `.github/skills/` hold one generated link per skill from both places, so both tools find all of them. Inside skill files, write paths from the metarepo root, because they're read through those links.
+Shared skills live in `skills/<name>/SKILL.md`. A skill that belongs to one agent lives only in that folder, as `agents/<agent>/skills/<name>/SKILL.md` (see `agents/architect/`); don't copy or link it into `skills/`. `.claude/skills/` and `.github/skills/` hold one generated link per skill from both places, so both tools find all of them. Inside skill files, write paths from the metarepo root, because they're read through those links.
 
-Agents are `*.agent.md` files anywhere under `agents/`. `.claude/agents/` and `.github/agents/` hold one generated link per agent file, so neither tool loads an agent's or role's `rules/` or `skills/` files as agents. Never link the whole `agents/` or `skills/` folder; run `python3 scripts/sync-copilot.py` instead.
+Agents are `*.agent.md` files anywhere under `agents/`. `.claude/agents/` and `.github/agents/` hold one generated link per agent file, so neither tool loads an agent's `skills/` files as agents. Never link the whole `agents/` or `skills/` folder; run `python3 scripts/sync-copilot.py` instead.

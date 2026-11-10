@@ -41,6 +41,17 @@
 
 <!-- UI changes only: before / after. -->
 
+## Decided automatically - please review
+
+<!-- From specs/NNN-feature/decisions/auto-decisions.json: one line per ADR the decision-maker agent decided.
+     Delete this section if there are none. -->
+
+| ADR | Question | Chosen | Architect recommended | Revisit if |
+|---|---|---|---|---|
+|  |  |  |  |  |
+
+Amendments suggested (not made; need all three team members):
+
 ## Deployment notes
 
 <!-- Migrations, new env vars (add to .env.example), feature flags, rollout or rollback steps. Write "None" if not applicable. -->

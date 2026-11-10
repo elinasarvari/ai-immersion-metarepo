@@ -4,18 +4,24 @@ How a spec becomes merged code in `benefit-be` and `benefit-fe`. [benefit-featur
 
 | # | Stage | Who | Output | Checked by (`wf.py`) |
 |---|---|---|---|---|
-| 0 | Spec | you + `/speckit-specify`, `/speckit-clarify` | `spec.md` | `spec-check` (asks you if questions remain) |
-| 1 | Plan | architect role (`architecture-plan`) | `plan.md`, `research.md`, `data-model.md`, `contracts/`, `decisions/`, `scope.json` | `plan-check`, `decisions-check`, `scope-check` (asks you if a decision is yours) |
-| 2 | Tasks + QA | `/speckit-tasks`, then quality engineer role (`test-strategy`) | `tasks.md` tagged by lane, `test-plan.md` | `tasks-split`, `test-plan-check` |
-| 3 | Contracts | `/speckit-implement` on `[contracts]` tasks, alone | `packages/domain`, OpenAPI, dependencies | — |
-| 4 | Lanes, in parallel | `/speckit-implement` per lane (tests first), then its unit tests and fixes | code in each lane's folders | `lane-tests` |
-| 5 | QA tests | `/speckit-implement` on `[qa]` tasks | contract, integration, e2e and eval tests | `ownership` |
-| 6 | Verify, ≤3 rounds | jobs in parallel (`make check`, builds, evals) → if green, code reviewers + compliance review in parallel → fix | `review/verify.md` | `verify-status` |
-| 7 | Trace | script | `review/trace.md` | `trace` (every FR has a named test) |
-| 8 | Ship | `create-pr` skill | draft PRs, then GitHub Actions | `ci-wait` |
-| 9 | After merge | `sync-repos` skill | clones on the latest `main` | — |
+| 0 | Spec | you + `/speckit-specify`, `/speckit-clarify` | `spec.md` | `prepare` (asks you if questions remain) |
+| 1 | Plan | architect agent (`architecture-plan`) | `plan.md`, `research.md`, `data-model.md`, `contracts/`, `decisions/`, `scope.json` | `plan-gate` |
+| 1b | Decide | decision-maker agent, only if an ADR is open (`decision_mode=auto`); architect again if it chose another option | decided ADRs, `decisions/auto-decisions.json` | `decisions-gate`, `plan-gate` |
+| 2 | Tasks, then QA | `/speckit-tasks`, then the quality-engineer agent (`test-strategy`) in its own session | `tasks.md` tagged by lane, `test-plan.md` | `tasks-gate` |
+| 3 | Contracts | `/speckit-implement` on `[contracts]` tasks, alone | `packages/domain`, OpenAPI, dependencies | verify loop |
+| 4 | Lanes, in parallel | `/speckit-implement` per lane: tests first, then its unit tests green | code in each lane's folders, `lanes/<lane>/done.json` | verify loop |
+| 5 | QA tests | `/speckit-implement` on `[qa]` tasks | contract, integration, e2e and eval tests | verify loop |
+| 6 | Verify, ≤3 rounds | fix (from round 2) → jobs in parallel: `make check`, builds, evals, `ownership`, `tasks`, `trace` → if green, the reviews that need it, in parallel | `review/verify.md`, `review/trace.md` | `verify-status`, then `final-gate` |
+| 7 | Ship | `create-pr` skill | draft PRs, then GitHub Actions | `ci-wait` |
+| 8 | After merge | `sync-repos` skill | clones on the latest `main` | — |
 
-- **Order:** each stage consumes the one before. Contracts go first and alone because every lane depends on them. Lanes run in parallel because they own separate folders (`project-rules/backend-architecture.md`, Ownership). Reviews run only once tests and builds pass, so tokens aren't spent reviewing broken code.
-- **Gates:** a person is asked only for open spec questions, decisions that are theirs (product, policy, cost, rule changes), and before pushing when `pr_mode=ask`.
-- **Where code goes:** only inside `repos/<repo>`, on `feature/<NNN-feature>` from `origin/main`. Feature 009 may also write the metarepo's `scripts/factory/` and `templates/`.
-- **Manual path:** run each stage's skill or command in order, then the matching `python3 workflows/benefit-feature/scripts/wf.py <check> specs/<NNN-feature>`.
+- **Order:** each stage consumes the one before. Contracts go first and alone because every lane depends on them. Lanes run in parallel because they own separate folders (`project-rules/backend-architecture.md`, Ownership).
+- **Each check runs once.** A gate follows each planning stage (the skills run the same gate as their self-check, so they can fix their own output first). Every check on the code runs inside the verify loop, so a failure goes to the fix step instead of stopping the run. A round always ends on a verification, so no fix ships unchecked.
+- **Reviews** run only once every job passes, so tokens aren't spent reviewing broken code, and later rounds rerun only a review that has no result, still blocks, or whose repo changed. A re-review reads only `wf.py delta` (the change since it last looked).
+- **Never a silent pass:** a missing or unreadable result counts as blocking; a job that couldn't run (no `make` target) is a warning in `verify.md` and the PR.
+- **Agents:** every AI step is a separate agent session (`agents/README.md`) that works through files; the engine starts them, in parallel where the work is independent.
+- **Decisions:** the decision-maker decides each open ADR on the evidence, independently of the architect, and never changes the constitution or a rule set (it picks a compliant option and leaves the amendment as a suggestion). Every automatic decision is listed in the PR for review. `decision_mode=ask` makes them a gate for you instead.
+- **Gates for people:** a person is asked only for open spec questions, an ADR with no compliant option, and before pushing when `pr_mode=ask`.
+- **Where code goes:** only inside `repos/<repo>`, on `feature/<NNN-feature>` from `origin/main`, in the repos `scope.json` names. Feature 009 may also write the metarepo's `scripts/factory/` and `templates/`.
+- **Manual path:** run each stage's skill or command in order. After stages 1, 1b and 2: `wf.py plan-gate`, `decisions-gate`, `tasks-gate`. For 1b by hand, ask the user, or run the decision-maker agent if they want it decided for them. After stage 5: `wf.py job specs/<NNN> <job>` for each of `wf.py jobs specs/<NNN>`, then the **review-changes** skill, then `wf.py verify-status specs/<NNN>`.
+- **Testing the workflow itself:** `python3 -m unittest discover -s workflows/benefit-feature/tests` runs the tests of every check plus Spec Kit's validator on `workflow.yml`. Run it after any change to either.
