@@ -12,7 +12,7 @@
 
 - **Lane**: Knowledge & data (reporting store); Platform & UI (metrics page)
 - **Provides**: a reporting store built from case history and a program metrics page.
-- **Depends on**: 001 (case history, review tasks), 003 (data set and expected metric values),
+- **Depends on**: 001 (case history), 010 (review tasks), 003 (data set and expected metric values),
   006 (console shell), 007 (redetermination outcomes).
 - **Out of scope**: federal reporting file formats, real-time dashboards, exports, metrics for
   individual caseworkers.
@@ -133,7 +133,7 @@ Metric definitions:
 - **Procedural denial rate**: denials and coverage endings with reason code "missing
   information" (FR-001-16, FR-007-12) ÷ all denials and coverage endings.
 - **AI override rate**: AI findings and extracted values that a caseworker corrected or
-  dismissed (FR-001-19) ÷ AI findings and values presented on review tasks that were actioned.
+  dismissed (FR-010-01) ÷ AI findings and values presented on review tasks that were actioned.
 - **Open reviews by age**: open review tasks by days open (0–1, 2–3, 4 or more).
 
 ## Success Criteria *(mandatory)*

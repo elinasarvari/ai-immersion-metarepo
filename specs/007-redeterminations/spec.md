@@ -13,7 +13,7 @@
 - **Lane**: Workflows
 - **Provides**: the yearly redetermination process for every enrolled household. Used by 006
   (applicant view) and 008 (metrics).
-- **Depends on**: 001 (case lifecycle, review tasks, notices, demo clock), 002 (verification and
+- **Depends on**: 001 (case lifecycle), 010 (review tasks), 011 (notices, demo clock), 002 (verification and
   renewal form drafting), 003 (rules, data set), 005 (verification sources). 002 and 005 are
   stubbed until ready.
 - **Out of scope**: mid-period change reporting, appeals, the reconsideration period after
@@ -129,7 +129,7 @@ expected.
 - **FR-007-10**: A caseworker or supervisor MUST be able to start a household's redetermination on
   demand (for demos and catch-up), subject to FR-007-07.
 - **FR-007-11**: The 60-day start and 30-day response window MUST follow the demo time scale and
-  demo clock (FR-001-13, FR-001-15) when the demo profile is on.
+  demo clock (FR-001-13, FR-011-04, FR-011-05) when the demo profile is on.
 - **FR-007-12**: A redetermination MUST end with one outcome: renewed automatically, renewed after
   response, or ended by caseworker decision. An ending carries a reason code: income over limit,
   other rule not met, or missing information (no response).

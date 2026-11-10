@@ -147,7 +147,7 @@ doesn't match the agreed contract; confirm each is reported and the PR is blocke
   naming the setting.
 - **FR-000-05**: The system MUST support three user roles: applicant, caseworker and supervisor,
   with seeded demo accounts for each. Supervisors can do everything caseworkers can, plus the demo
-  clock (FR-001-15) and the escalated-task view (FR-006-01).
+  clock (FR-011-05) and the escalated-task view (FR-006-01).
 - **FR-000-06**: Every operation except health and readiness MUST require a valid, unexpired
   session.
 - **FR-000-07**: Sessions MUST expire after a configurable period (default 8 hours).
@@ -165,8 +165,8 @@ doesn't match the agreed contract; confirm each is reported and the PR is blocke
 - **FR-000-14**: Every data store MUST record that it holds synthetic data, every generated
   document MUST carry a visible "SYNTHETIC" marker, and every screen shows the banner in FR-006-11.
   Individual records do not need their own marker.
-- **FR-000-15**: Moved to FR-009-05 (quality and factory dashboard). The ID is kept so existing
-  references stay valid.
+- **FR-000-15**: Moved to the software factory's quality and factory dashboard, which is not a
+  feature spec. The ID is kept so existing references stay valid.
 - **FR-000-16**: Every PR in benefit-be and benefit-fe MUST run static checks (lint, strict type
   checks, dependency vulnerability scan, secrets scan) and all automated test levels, and MUST be
   blocked from merging if any fail.
