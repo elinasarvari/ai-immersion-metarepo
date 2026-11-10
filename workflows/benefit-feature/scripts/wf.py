@@ -26,10 +26,11 @@ Ship (CI loop: a failing check goes to a fix step, which pushes to the feature b
                                                 With pr_mode draft, marks the PRs ready for review once all green
   ci-gate     <feature_dir>                     fails unless the last CI run passed
 
-Script jobs (run by `job`, also usable by hand): ownership, tasks, trace:strict, trace:warn.
+Script jobs (run by `job`, also usable by hand): ownership, tasks, trace:strict, trace:warn, e2e.
+  ports                                         the stack ports something already listens on (never fails)
 Paths are relative to the metarepo root. The lane ownership map mirrors project-rules/backend-architecture.md.
 """
-import json, os, re, subprocess, sys, tempfile
+import json, os, re, socket, subprocess, sys, tempfile
 from pathlib import Path
 
 ROOT = Path(os.environ.get("WF_ROOT") or Path(__file__).parents[3]).resolve()
@@ -541,6 +542,33 @@ def job_trace(d, mode):
     return {"status": status, "cases": len(cases), "unproven": unproven, "problems": problems, "report": rel(rp)}
 
 
+# API, worker health, Vite, Temporal (gRPC, UI), MongoDB: what `make verify` starts for the e2e job.
+STACK_PORTS = [int(p) for p in os.environ.get("WF_STACK_PORTS", "8000,8001,5173,7233,8233,27017").split(",") if p]
+
+
+def busy_ports():
+    """[(port, holder)] for each stack port something listens on, IPv4 or IPv6 (Vite binds ::1)."""
+    busy = []
+    for port in STACK_PORTS:
+        used = False
+        for fam, host in ((socket.AF_INET, "127.0.0.1"), (socket.AF_INET6, "::1")):
+            try:
+                with socket.socket(fam, socket.SOCK_STREAM) as sk:
+                    sk.settimeout(0.5)
+                    used = used or sk.connect_ex((host, port)) == 0
+            except OSError:
+                pass
+        if used:
+            r = subprocess.run(["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "-Fpc"], capture_output=True, text=True)
+            fields = dict((ln[0], ln[1:]) for ln in r.stdout.splitlines() if ln[:1] in ("p", "c"))
+            busy.append((port, f"{fields.get('c', '?')} pid {fields.get('p', '?')}"))
+    return busy
+
+
+def ports():
+    out({"busy": [{"port": p, "holder": h} for p, h in busy_ports()]})
+
+
 def make_has(rd, target):
     mf = rd / "Makefile"
     return mf.exists() and re.search(rf"^{re.escape(target)}:", mf.read_text(), re.M)
@@ -558,18 +586,51 @@ def repo_job_cmd(repo, kind):
 
 
 def jobs(d, trace_mode):
-    js = []
+    # Each round's results come only from this round's jobs: a job file an agent left behind (by running
+    # `wf.py job` itself) would otherwise count as a failing job.
+    jd = d / "review" / "jobs"
+    for f in (jd.glob("*") if jd.is_dir() else []):
+        if f.is_file():
+            f.unlink()
+    js, e2e = [], False
     for repo in REPOS:
         files = changed_files(repo)
         if not files:
             continue
+        e2e = e2e or repo == "benefit-fe" or any(re.match(r"(apps|packages|db)/", f) for f in files)
         js.append(f"{repo}:check")
         if repo == "benefit-fe":
             js.append(f"{repo}:build")
         if repo == "benefit-be" and any(re.match(r"(packages/agents|packages/rag|evals)/", f) for f in files):
             js.append(f"{repo}:eval")
-    js += ["ownership", "tasks", f"trace:{trace_mode}"]
+    js += (["e2e"] if e2e else []) + ["ownership", "tasks", f"trace:{trace_mode}"]
     out({"jobs": js})
+
+
+def run_in_repo(repo, cmd, res, log_file):
+    """Runs cmd in the repo; sets res status/tail and writes the log.
+
+    The loop commits nothing, so a check that diffs a generated file against git (openapi-check's
+    `git diff --exit-code`) would fail every round. Stage the working tree for the command, then put the index back
+    exactly as it was: the diff then means "regenerating changed something". No GIT_INDEX_FILE is exported,
+    because tests that make their own git repos would inherit it."""
+    idx_path = (git(repo, "rev-parse", "--path-format=absolute", "--git-path", "index") or "").strip()
+    idx = Path(idx_path) if idx_path else None
+    saved = idx.read_bytes() if idx and idx.exists() else None
+    git(repo, "add", "-A")
+    try:
+        r = subprocess.run(cmd, shell=True, cwd=repo_dir(repo), capture_output=True, text=True, timeout=3600)
+        res["status"] = "pass" if r.returncode == 0 else "fail"
+        log = r.stdout + r.stderr
+    except subprocess.TimeoutExpired:
+        res["status"], log = "fail", "timed out after 3600s"
+    finally:
+        if idx and saved is not None:
+            idx.write_bytes(saved)
+        elif idx and idx.exists():
+            idx.unlink()
+    log_file.write_text(log)
+    res["tail"] = log[-2000:]
 
 
 def job(d, name):
@@ -589,15 +650,17 @@ def job(d, name):
         if not cmd:  # never a silent pass: a skipped job is a warning in verify.md and the PR
             res.update(status="warn", problems=[f"repos/{head} has no '{arg}' target, so this job didn't run"])
         else:
-            try:
-                r = subprocess.run(cmd, shell=True, cwd=repo_dir(head), capture_output=True, text=True,
-                                   timeout=3600)
-                res["status"] = "pass" if r.returncode == 0 else "fail"
-                log = r.stdout + r.stderr
-            except subprocess.TimeoutExpired:
-                res["status"], log = "fail", "timed out after 3600s"
-            (jd / f"{name.replace(':', '-')}.log").write_text(log)
-            res["tail"] = log[-2000:]
+            run_in_repo(head, cmd, res, jd / f"{name.replace(':', '-')}.log")
+    elif name == "e2e":  # the stack and e2e, the way CI's e2e job runs them
+        busy = busy_ports()
+        if busy:  # never borrow or wipe another stack (make verify runs make reset); CI still runs e2e on the PR
+            res.update(status="warn", problems=[f"e2e didn't run here: port {p} is in use ({h}). Stop that stack to "
+                                                "run it locally; CI's e2e job runs it on the PR" for p, h in busy])
+        elif not make_has(repo_dir("benefit-be"), "verify"):
+            res.update(status="warn", problems=["repos/benefit-be has no 'verify' target, so e2e didn't run"])
+        else:
+            res["cmd"] = "make verify"
+            run_in_repo("benefit-be", "make verify", res, jd / "e2e.log")
     else:
         res.update(status="fail", problems=[f"unknown job '{name}'"])
     (jd / f"{name.replace(':', '-')}.json").write_text(json.dumps(res, indent=2))
@@ -853,6 +916,8 @@ def main(argv):
         if mode not in ("strict", "warn"):
             out({"problems": [f"trace mode must be strict or warn, got '{mode}'"]}, ok=False)
         return jobs(fdir(pos[0]), mode)
+    if cmd == "ports" and not pos:
+        return ports()
     if cmd == "job" and len(pos) == 2:
         return job(fdir(pos[0]), pos[1])
     if cmd == "delta" and len(pos) == 2 and pos[1] in REPOS:

@@ -70,7 +70,7 @@ flowchart TB
     subgraph verify["Verify loop · ≤6 rounds"]
         direction TB
         fix["Fix (from round 2)<br/>everything verify.md lists<br/>coding model first, then judgement"]:::ai
-        jobs["Jobs, in parallel<br/>make check · build · eval<br/>ownership · tasks · trace"]:::script
+        jobs["Jobs, in parallel<br/>make check · build · eval · e2e<br/>ownership · tasks · trace"]:::script
         reviews["Reviews, in parallel, only on green<br/>code benefit-be · code benefit-fe · compliance<br/>only those with no result, blocking, or changed"]:::ai
         status["verify-status"]:::script
         fix --> jobs
@@ -144,7 +144,7 @@ flowchart LR
 | 3 | Contracts (AI) | Feature branches from `origin/main` in the repos in `scope.json`, then the shared changes every lane depends on, done first and alone. | domain models, OpenAPI, dependencies | verify loop |
 | 4 | Lanes (AI ×4) | Each lane implements its own tasks, tests first, in its own folders, and gets its own unit tests green in the same session. | code per lane, `lanes/<lane>/done.json` | verify loop |
 | 5 | QA tests (AI) | Tests that span lanes or repos: contract, integration, end-to-end, eval. | tests | verify loop |
-| 6 | Verify (script + AI) | Fix (from round 2), then in parallel: `make check`, builds, evals, `ownership` (files in their lane), `tasks` (none left open) and `trace` (every planned test defined by its exact name and not skipped). If all green, the reviews that need it, in parallel. | `review/verify.md`, `review/trace.md` | `verify-status`, `final-gate` |
+| 6 | Verify (script + AI) | Fix (from round 2), then in parallel: `make check`, builds, evals, `e2e` (benefit-be's `make verify`: the stack and `pnpm e2e`, as in CI), `ownership` (files in their lane), `tasks` (none left open) and `trace` (every planned test defined by its exact name and not skipped). If all green, the reviews that need it, in parallel. | `review/verify.md`, `review/trace.md` | `verify-status`, `final-gate` |
 | 7 | Ship (AI + script) | Draft PRs from the feature branch (never `main`), one per repo and linked, backend first if the API changed. Then each repo's GitHub Actions: a red check's log goes to a CI fix step, which fixes it, runs `make check`, commits and pushes to the same branch, and CI runs again (up to 3 rounds). When all checks are green, the draft PRs are marked ready for review. | PR URLs, `review/ci.md` | `ci-wait`, `ci-gate` |
 
 ## 4. Who does what
@@ -179,13 +179,15 @@ With the defaults (`decision_mode=auto`, `pr_mode=draft`), your review happens o
 
 **Verification**
 - Each check runs once. One gate per planning stage (`prepare`, `plan-gate`, `tasks-gate`); the skills run the same gate as their self-check so they can fix their own output first.
-- Every check on the code runs inside the verify loop, so the fix step can repair it: tests, builds, evals, `ownership`, open `tasks` (including work a lane recorded in `blocked.md`) and `trace`.
+- Every check on the code runs inside the verify loop, so the fix step can repair it: tests, builds, evals, `e2e`, `ownership`, open `tasks` (including work a lane recorded in `blocked.md`) and `trace`.
 - `trace` counts a planned test only where it is defined (a Python `def`, a `test(`/`it(` title, an eval case id), in the repo the test plan names, and not skipped. A name in a comment, a skipped test or a renamed test doesn't count.
 - Parallel lanes share one working tree, so `ownership` fails any file a lane doesn't own.
 - Never a silent pass: a missing or unreadable result counts as blocking, and a job that couldn't run (no `make` target) is a warning in `verify.md` and the PR.
 - Each repo's own GitHub Actions must pass on the PR. CI differs from a laptop (no `.env`, services only in the integration job), so a red check goes to a CI fix step that pushes to the feature branch until it's green (up to 3 rounds). Only then is a draft marked ready for review, so nobody reviews code CI hasn't passed. `trace` also flags a planned unit test placed in a folder whose tests need MongoDB or Temporal (`tests/db/`, `tests/integration/`), the mistake behind feature 001's first red CI.
 - Tasks are checked twice before any code: the quality engineer checks they cover the plan (every ADR's "Work this creates", every module in the Project Structure, every requirement) and adds what's missing; `tasks-gate` checks their tags and coverage, and moves a `[contracts]` task that waits for lane work ("after T020") to the QA step, which runs after the lanes.
 - The verify loop keeps going while the blocking count falls, up to 6 rounds, and stops early after 2 rounds without progress (`review/history.json`); the first fix uses `coding_model`, later fixes `judgement_model`, and every fix adds the test that would have caught its finding.
+- The stack is started by a script, not by an agent: when a feature changes code, the `e2e` job runs benefit-be's `make verify`, which starts MongoDB, Temporal and the app and runs the API and `pnpm e2e` tests the way CI's e2e job does. Running the stack, e2e or the quickstart is never a task, so no task stays open because an agent couldn't keep a server up. If a stack port (8000, 8001, 5173, 7233, 8233, 27017) is already taken, for example by your own `make dev`, the job doesn't run, because `make verify` resets the database. It leaves a non-blocking warning that the PR repeats, and CI's e2e job still runs on the PR. `run.sh` lists the taken ports at start.
+- The fix step fixes the code to meet the requirement, never the test. For each failing test it first looks up what the test proves: its case in `test-plan.md`, the requirement in `spec.md`, and any ADR. Then it changes the code to meet that requirement. It never weakens a test (expected values, pins, thresholds, names, skips), and changes a test only where it contradicts the spec, plan or an ADR. A failure caused by the machine (a missing tool, an unpinned version, a missing login) is recorded as an environment problem, not patched in the code. Each round's reasoning is in `review/fixes.md`.
 - Before handing over, each lane reviews its own diff against the reviewer's checklist and the ADRs' "How we verify it", and the quality engineer plans the failure paths reviewers block on (retries running out, every API error body, recorded refusals), so fewer findings reach the reviews at all.
 - Running a feature again (its spec changed) updates instead of starting over: `prepare` clears the earlier run's lane reports, the tasks step keeps each ticked task the code on the branch still satisfies, reopens the ones that no longer match and adds tasks only for what isn't built, and the quality engineer extends `test-plan.md`, keeping existing case IDs.
 - After the code, the `tasks` job in every verify round blocks while any task is open; the tests, `trace` and the reviews prove the ticked ones were really done.

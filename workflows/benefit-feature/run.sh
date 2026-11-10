@@ -50,6 +50,19 @@ check_tools() {  # $1 = the settings file the run will use
   note "tools: specify, claude, git, gh, uv, pnpm, make, python3 ✓  permissions: .claude/settings.json ✓"
 }
 
+check_ports() {  # warns only: the verify loop's e2e job skips itself (warning, not blocking) while a port is taken
+  local busy
+  busy="$(python3 "$SELF/workflows/benefit-feature/scripts/wf.py" ports \
+    | python3 -c 'import json,sys; print("\n".join("port %s: %s" % (b["port"], b["holder"]) for b in json.load(sys.stdin)["busy"]))' 2>/dev/null || true)"
+  if [ -n "$busy" ]; then
+    yellow "  ! stack ports in use, so the verify loop's e2e job won't run here (CI still runs it on the PR):"
+    printf '%s\n' "$busy" | sed 's/^/      /'
+    note "  (stop that stack first to run e2e locally)"
+  else
+    note "stack ports free: e2e can run locally ✓"
+  fi
+}
+
 check_gh() {  # only needed when the run may push
   gh auth status >/dev/null 2>&1 || die "gh is not logged in (gh auth login); needed to open PRs. Use pr_mode none to skip."
   note "gh: logged in ✓"
@@ -261,7 +274,7 @@ list_worktrees() {
 cmd="${1:-}"; shift || true
 case "$cmd" in
   check)
-    echo "Preflight (changes nothing)"; check_tools "$MAIN/.claude/settings.json"; check_gh; check_clones
+    echo "Preflight (changes nothing)"; check_tools "$MAIN/.claude/settings.json"; check_gh; check_clones; check_ports
     note "feature worktrees: $WT_HOME"; green "✓ ready" ;;
   prepare|start)
     in_place=""; args=()
@@ -281,6 +294,7 @@ case "$cmd" in
       prepare_worktree "$folder"; home="$WT"
     fi
     [ "$cmd" = "prepare" ] || check_tools "$home/.claude/settings.json"  # the permissions this run will use
+    [ "$cmd" = "prepare" ] || check_ports
     if [ "$cmd" = "prepare" ]; then green "✓ prepared $home"; exit 0; fi
     run_env "$home"
     green "✓ ready: $folder, pr_mode=$pr_mode, in $home"
@@ -294,6 +308,7 @@ case "$cmd" in
     echo "Preflight for run $RUN_ID ($RUN_HOME)"
     check_tools "$RUN_HOME/.claude/settings.json"
     [ "$(pr_mode_of)" = "none" ] || check_gh
+    check_ports
     run_env "$RUN_HOME"
     green "✓ resuming $RUN_ID"
     note "watch it in another terminal: workflows/benefit-feature/run.sh watch $RUN_ID"

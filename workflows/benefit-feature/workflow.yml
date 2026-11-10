@@ -158,12 +158,14 @@ steps:
       Makefile/Procfile), done first and alone, so a [contracts] task never depends on a lane task. Work that has to
       run after the lanes (regenerating openapi.json, running make check, walking the quickstart, cross-lane tests) is
       [qa]. Every other task touches only its lane's folders. Mention the FR IDs each task serves; every FR in the
-      spec needs at least one task. UPDATE MODE when tasks.md already exists (an earlier run of this feature): don't
+      spec needs at least one task. Running checks, starting the stack, e2e tests or walking quickstart.md is not a
+      task: the verify loop's jobs do it (check, build, e2e); write the test that proves the step instead. UPDATE MODE when tasks.md already exists (an earlier run of this feature): don't
       rewrite it. Like the speckit-converge skill, compare it with the spec, the plan and the code already on branch
       {{ steps.feature.output.data.branch }} in each repo (git -C repos/<repo> diff origin/main...HEAD): keep each [X]
       task that the code still satisfies; set back to [ ] any task whose code no longer matches the spec or plan, and
       say why on the task; add new tasks, with the next free numbers, only for what isn't built yet (new or changed
-      requirements, stories and screens). Never renumber or delete a task. Reply in ≤5 lines.
+      requirements, stories and screens). Never renumber or delete a task; mark an open task whose only work is
+      running checks, the stack, e2e or the quickstart [X] with "covered by the verify loop's jobs". Reply in ≤5 lines.
 
   - id: quality_engineer
     type: prompt
@@ -175,7 +177,8 @@ steps:
       skill for {{ steps.feature.output.data.feature_dir }}: write test-plan.md, add the test-first and [qa] tasks
       to tasks.md, and check the tasks cover the plan (its step 3). If test-plan.md already exists (an earlier run),
       extend it: keep every existing case and its ID and test name, correct a case only where the spec changed it,
-      and add cases, with the next free TC numbers, for the new or changed requirements. Reply in ≤10 lines.
+      and add cases, with the next free TC numbers, for the new or changed requirements. Each quickstart step
+      a person would check in the browser becomes an e2e case (the verify loop's e2e job runs them), not a task. Reply in ≤10 lines.
 
   - id: tasks_gate
     type: shell
@@ -280,9 +283,20 @@ steps:
               Fix everything {{ steps.feature.output.data.review_dir }}/verify.md lists as blocking: failing jobs (read
               their logs), open tasks (do them, including the work in lanes/*/blocked.md, then mark them [X] in tasks.md),
               missing or skipped planned tests (review/trace.md), files outside their lane, and every critical or major
-              finding in the review files it points to. For each finding, add or correct the test that would have caught
-              it, so it can't come back. Follow the lane rule files and Accepted ADRs; keep each change in its owner's
-              folders. Run make check in each repo you changed before finishing. Commit nothing. Reply in ≤5 lines.
+              finding in the review files it points to. UNDERSTAND BEFORE YOU FIX: for each failing or missing test, find
+              what it is for - its test case in {{ steps.feature.output.data.feature_dir }}/test-plan.md (by TC ID or test
+              name, which starts with the FR ID), the requirement or acceptance scenario in spec.md it proves, and any
+              Accepted ADR it checks; for a test from an earlier feature, that feature's spec. State the behaviour it
+              protects and why the code fails it, then change the code so it meets that requirement. Never make a test pass
+              by weakening it: don't change its expected values, pins, thresholds or test name, and don't skip, xfail,
+              delete or loosen it. Change a test only where it contradicts the spec, the plan or an Accepted ADR, and then
+              cite the FR or ADR. If a failure comes from the machine, not the code (a missing tool, a different tool
+              version than the pinned one, a service or login that isn't there), don't change code, pins or tests for it:
+              record it as an environment problem. Write {{ steps.feature.output.data.review_dir }}/fixes.md, one entry
+              per failure: test or check, the FR/TC/ADR it proves, why it failed, what you changed (or "environment:"
+              and what the machine needs). For each review finding, add or correct the test that would have caught it, so
+              it can't come back. Follow the lane rule files and Accepted ADRs; keep each change in its owner's folders.
+              Run make check in each repo you changed before finishing. Commit nothing. Reply in ≤5 lines.
 
       - id: job_list
         type: shell

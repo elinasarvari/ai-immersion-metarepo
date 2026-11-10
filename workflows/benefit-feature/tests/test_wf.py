@@ -5,8 +5,9 @@ Run from the metarepo root:  python3 -m unittest discover -s workflows/benefit-f
 Each test builds a throwaway metarepo (specs/ + two git clones under repos/) in a temp folder and points wf.py at
 it with WF_ROOT, so nothing in the real workspace is read or changed.
 """
-import json, os, subprocess, sys, tempfile, textwrap, unittest
+import json, os, socket, subprocess, sys, tempfile, textwrap, unittest
 from pathlib import Path
+from unittest import mock
 
 WF = Path(__file__).resolve().parents[1] / "scripts" / "wf.py"
 FD = "specs/010-demo"
@@ -391,7 +392,8 @@ class ScriptJobs(WfCase):
         self.assertEqual(data["jobs"], ["ownership", "tasks", "trace:warn"])
         self.repo_file("benefit-be", "packages/agents/prompt.py", "x = 1\n")
         code, data, _ = self.wf("jobs", FD)
-        self.assertEqual(data["jobs"], ["benefit-be:check", "benefit-be:eval", "ownership", "tasks", "trace:strict"])
+        self.assertEqual(data["jobs"], ["benefit-be:check", "benefit-be:eval", "e2e", "ownership", "tasks",
+                                        "trace:strict"])
 
     def test_a_repo_job_with_no_target_warns_instead_of_passing_silently(self):
         res = self.job("benefit-be:eval")
@@ -399,6 +401,46 @@ class ScriptJobs(WfCase):
         self.repo_file("benefit-be", "Makefile", "check:\n\t@exit 3\n")
         self.assertEqual(self.job("benefit-be:check")["status"], "fail")
         self.assertTrue((self.fd / "review" / "jobs" / "benefit-be-check.log").exists())
+
+    def test_a_check_diffing_a_generated_file_sees_uncommitted_work_but_still_catches_drift(self):
+        rd = self.root / "repos" / "benefit-be"
+        self.repo_file("benefit-be", "spec.json", "v1\n")
+        sh("git", "add", "spec.json", cwd=rd)
+        sh("git", "commit", "-qm", "spec", cwd=rd)
+        # The feature changed the generated file and the loop committed nothing: still a pass.
+        self.repo_file("benefit-be", "spec.json", "v2\n")
+        self.repo_file("benefit-be", "Makefile", "check:\n\tgit diff --exit-code spec.json\n")
+        self.assertEqual(self.job("benefit-be:check")["status"], "pass")
+        # Regenerating changes the file: drift, so a fail.
+        self.repo_file("benefit-be", "Makefile", "check:\n\techo v3 > spec.json\n\tgit diff --exit-code spec.json\n")
+        self.assertEqual(self.job("benefit-be:check")["status"], "fail")
+        # The real index was never touched.
+        self.assertEqual(subprocess.run(["git", "diff", "--cached", "--name-only"], cwd=rd, capture_output=True,
+                                        text=True).stdout, "")
+        # A check whose tests make and commit to their own git repo still works (no GIT_INDEX_FILE leaks in).
+        own = self.root / "own-repo"
+        self.repo_file("benefit-be", "Makefile",
+                       f"check:\n\tgit init -q {own} && git -C {own} -c user.name=t -c user.email=t@example.com"
+                       " commit -q --allow-empty -m x\n")
+        self.assertEqual(self.job("benefit-be:check")["status"], "pass")
+
+    def test_e2e_only_for_code_changes_and_never_on_a_busy_stack_port(self):
+        self.repo_file("benefit-be", "docs/notes.md", "x\n")
+        self.assertNotIn("e2e", self.wf("jobs", FD)[1]["jobs"])
+        with socket.socket() as busy:
+            busy.bind(("127.0.0.1", 0))
+            busy.listen()
+            with mock.patch.dict(os.environ, {"WF_STACK_PORTS": str(busy.getsockname()[1])}):
+                self.repo_file("benefit-be", "Makefile", "verify:\n\t@touch ran\n")
+                res = self.job("e2e")
+        self.assertEqual(res["status"], "warn")
+        self.assertIn("in use", res["problems"][0])
+        self.assertFalse((self.root / "repos/benefit-be/ran").exists())
+
+    def test_each_round_counts_only_its_own_jobs(self):
+        self.write("review/jobs/trace.json", json.dumps({"job": "trace", "status": "fail"}))
+        self.wf("jobs", FD)
+        self.assertFalse((self.fd / "review" / "jobs" / "trace.json").exists())
 
     def test_unknown_job_is_recorded_as_failing(self):
         self.assertEqual(self.job("nope")["status"], "fail")
