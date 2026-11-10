@@ -5,7 +5,7 @@ Exit codes: 0 = pass, 1 = the check failed (the workflow run stops there), 2 = u
 
 Gates (one after each planning stage; the skills also run them as their self-check):
   prepare     <feature> <pr_mode> <trace_mode> [decision_mode]  validates the inputs, selects the spec, checks spec.md
-  plan-gate   <feature_dir>                     plan.md, ADRs (decisions/) and scope.json; lists the open ADRs
+  plan-gate   <feature_dir>                     plan.md, ADRs (decisions/) and scope.json (incl. the feature map's target repos); lists the open ADRs
   decisions-gate <feature_dir>                  after the decision-maker: none open, each recorded; does the plan need updating?
   tasks-gate  <feature_dir>                     every task tagged with a lane; test-plan.md covers every FR
 
@@ -211,6 +211,19 @@ def adr_status(text):
     return None
 
 
+def feature_map_repos(d):
+    """Target repos for feature folder `d` in the specs/README.md feature map ([] if it isn't listed).
+
+    The map is the documented source of which repos a feature touches, so a plan can't quietly drop
+    one (for example the screens in benefit-fe).
+    """
+    for line in read(ROOT / "specs" / "README.md").splitlines():
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) >= 3 and f"({d.name}/spec.md)" in cells[0]:
+            return [r for r in REPOS if r in cells[2]]
+    return []
+
+
 def plan_gate(d):
     problems, accepted, open_adrs = [], [], []
     counts = {"accepted": 0, "auto_decided": 0, "needs_decision": 0, "needs_amendment": 0, "superseded": 0}
@@ -262,6 +275,12 @@ def plan_gate(d):
         if p:
             problems += [f"scope.json targets {r}, but plan.md never names repos/{r}" for r in sc_repos
                          if r in REPOS and r not in repos]
+        mapped = feature_map_repos(d)
+        problems += [f"the feature map (specs/README.md) lists {r} for this feature, but scope.json doesn't"
+                     for r in mapped if r not in sc_repos]
+        if "benefit-fe" in mapped and "platform-ui-lane" not in lanes:
+            problems.append("the feature map lists benefit-fe for this feature (its screens), "
+                            "so scope.json needs platform-ui-lane, which owns benefit-fe")
     out({**counts, "open": len(open_adrs), "open_adrs": open_adrs, "accepted_adrs": accepted,
          "lanes": lanes, "repos": sc_repos, "problems": problems}, ok=not problems)
 

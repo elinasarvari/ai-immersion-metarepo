@@ -13,13 +13,17 @@
 - **Lane**: Workflows
 - **Provides**: case states, outcomes and transitions; durable progress across restarts; case
   history; the review gate (create a task, wait, resume); the case clock; decision deadline
-  tracking; the coverage period for an approved application. Used by 006, 007, 008, 010 and 011.
-- **Depends on**: 000 (sign-in, configuration); 002 (document verification), 003
+  tracking; the coverage period for an approved application; the case list and the case page,
+  where 002, 003, 004, 010 and 011 add their sections. Used by 002, 003, 004, 007, 008, 010
+  and 011.
+- **Depends on**: 000 (sign-in, configuration, the app shell); 002 (document verification), 003
   (determination), 010 (the full set of review reasons and actions) and 011 (notices and
   explanations), each stubbed until ready.
 - **Split into 001, 010 and 011** (2026-11-10). 010 Review queue and caseworker actions and 011
   Applicant waits, notices and demo clock now hold the requirements listed under "Moved
   requirements".
+- **Screens added** (2026-11-10): the screens for this feature moved here from 006 (US4 to US6,
+  FR-001-24 to FR-001-27). The existing plan predates this and must be redone.
 - **Out of scope**: appeals, mid-period change reporting, multiple programs, notice delivery
   outside the applicant portal, applicant withdrawal, assigning cases to individual caseworkers.
 
@@ -88,6 +92,76 @@ flag.
 1. **Given** a case 36 days old and undecided, **When** its status is viewed, **Then** it shows 9
    days remaining and is flagged at risk.
 
+### User Story 4 - Applicant applies for coverage (Priority: P1)
+
+An applicant signs in, fills in the application for their household and submits it. They see the
+case reference and decision deadline or, if their household already has an open case or active
+coverage, why they can't apply and a link to that case.
+
+**Why this priority**: Every new case starts here, and it is the first thing the demo shows.
+
+**Independent Test**: In the browser, sign in as a demo applicant, submit a complete application,
+and confirm the confirmation page and the new case on the caseworker's case list. Pay stub upload
+is added by 002 (FR-002-17) and isn't needed for this test.
+
+**Acceptance Scenarios**:
+
+1. **Given** a signed-in applicant with no open case, **When** they submit a complete application,
+   **Then** they see a confirmation with the case reference and decision deadline, and the case
+   is Submitted.
+2. **Given** an incomplete application, **When** they try to submit, **Then** each missing field is
+   named and nothing is submitted.
+3. **Given** an applicant whose household already has an open case or active coverage, **When**
+   they submit, **Then** they are told why and given a link to that case, and no case is opened.
+4. **Given** an applicant presses submit twice, **When** both arrive, **Then** one case is opened
+   and both show the same confirmation.
+
+---
+
+### User Story 5 - Applicant sees the status of their cases (Priority: P2)
+
+An applicant sees each of their open cases with its state and decision deadline.
+
+**Why this priority**: Answers "what's happening with my case" without contacting anyone.
+
+**Independent Test**: In the browser, sign in as an applicant with an open case and check its
+state and deadline; sign in as an applicant from another household and confirm the case can't be
+reached.
+
+**Acceptance Scenarios**:
+
+1. **Given** an applicant with an open case, **When** they sign in, **Then** they see each open
+   case with its state and decision deadline.
+2. **Given** applicant A, **When** they try to open a case belonging to another household (for
+   example by changing the address), **Then** they see the same "not found" as for a case that
+   doesn't exist, and the attempt is logged.
+
+---
+
+### User Story 6 - Caseworker opens a case (Priority: P1)
+
+A caseworker sees the list of cases with their state, days remaining and at-risk flag, opens one,
+and sees its state, deadline, coverage period and history. Later features add their sections to
+this page.
+
+**Why this priority**: The case page is where every later feature shows its part, and where the
+caseworker approves or overrides a denial.
+
+**Independent Test**: In the browser, sign in as a caseworker, filter the case list by state, open
+a case, check its history against the recorded case events, and approve a denial.
+
+**Acceptance Scenarios**:
+
+1. **Given** open cases, **When** a caseworker opens the case list, **Then** each case shows its
+   reference, state, days remaining to the decision deadline and at-risk flag, soonest deadline
+   first, and the list can be filtered by state.
+2. **Given** a case, **When** the caseworker opens it, **Then** they see its state, received date,
+   decision deadline and days remaining, its outcome and coverage period once decided, and its
+   history with time, actor and reason for each entry.
+3. **Given** a case waiting on a review task, **When** the caseworker opens it, **Then** they can
+   take the actions the task offers (until 010 lands: approve the denial or override to approve,
+   with a reason), and the case page shows the result.
+
 ### Edge Cases
 
 - A caseworker overrides an adverse determination to approve: the case is decided as Approved
@@ -96,6 +170,8 @@ flag.
 - The system restarts while a case waits on a review task: the case is still waiting on the same
   task afterwards, and no second task is created.
 - The demo profile is on: case history shows both case-clock and real times.
+- The session expires while an applicant fills in the application: their entries are kept, they
+  are asked to sign in again, and they return to the form.
 
 ## Requirements *(mandatory)*
 
@@ -134,6 +210,23 @@ flag.
 - **FR-001-23**: Submitting the same application twice (same submission reference) MUST open one
   case. A new application MUST be refused, with the reason, while the household has an open case
   or a coverage period that has not ended.
+- **FR-001-24**: Applicants MUST be able to fill in and submit an application from the applicant
+  portal. The form collects, for each household member: name, date of birth, relationship to the
+  applicant, citizenship or qualifying immigration status (attested), Medicare entitlement (yes
+  or no), and each job with employer, pay frequency and declared monthly gross income, or zero
+  income; plus the household's Illinois address. Missing fields are named before anything is
+  submitted. Each submission carries a reference, so a repeated submit opens one case
+  (FR-001-23). Pay stub upload is FR-002-17. (Was FR-006-07, form part.)
+- **FR-001-25**: An application refused because the household already has an open case or active
+  coverage (FR-001-23) MUST say why and link to that case. (Was FR-006-18.)
+- **FR-001-26**: When an applicant signs in, the portal MUST show each of their open cases with its
+  state and decision deadline. Open requests for information are FR-011-10. (Was FR-006-03,
+  status part.)
+- **FR-001-27**: Caseworkers and supervisors MUST be able to list cases with reference, state, days
+  remaining and at-risk flag (FR-001-11), soonest deadline first and filterable by state, and
+  open a case page showing its state, dates, outcome, coverage period and full history
+  (FR-001-10), from which they take the actions an open review task offers. 002, 003, 004, 010
+  and 011 add their sections to this page. (Was FR-006-09, states part.)
 
 ### Moved requirements
 
@@ -175,6 +268,8 @@ IDs are not reused. References elsewhere point to the new IDs.
   automatic denials.
 - **SC-001-05**: A restart test (stop the worker mid-case, restart, confirm no repeated effects)
   and a workflow replay test against recorded case histories pass on every PR.
+- **SC-001-06**: A demo applicant submits an application in the browser in under 5 minutes. (Was
+  SC-006-02; the pay stub part is SC-002-06.)
 
 ## Assumptions
 

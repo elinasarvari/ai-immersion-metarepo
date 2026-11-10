@@ -233,6 +233,29 @@ class Decisions(WfCase):
                 [{"adr": "ADR-010-02", "kind": "product", "chosen": chosen, "recommended": recommended,
                   "revisit_if": "volumes exceed 10k cases"}]))
 
+    def test_plan_gate_requires_the_target_repos_from_the_feature_map(self):
+        feature_map = (
+            "| Feature | Lane | Target repo(s) | Depends on | Day 1? |\n|---|---|---|---|---|\n"
+            "| [010 Demo](010-demo/spec.md) | Workflows | benefit-be, benefit-fe | 000 | No |\n"
+        )
+        self.write("specs/README.md", feature_map, base=self.root)
+        self.write("plan.md", PLAN.replace(" and repos/benefit-fe", ""))
+        self.write("scope.json", json.dumps({"lanes": ["workflows-lane"], "repos": ["benefit-be"]}))
+
+        code, data, _ = self.wf("plan-gate", FD)
+
+        self.assertEqual(code, 1, data)
+        self.assertTrue(any("feature map" in p and "benefit-fe" in p for p in data["problems"]), data)
+        self.assertTrue(any("platform-ui-lane" in p for p in data["problems"]), data)
+
+    def test_plan_gate_passes_when_scope_covers_the_feature_map(self):
+        feature_map = "| [010 Demo](010-demo/spec.md) | Workflows | benefit-be, benefit-fe | 000 | No |\n"
+        self.write("specs/README.md", feature_map, base=self.root)
+
+        code, data, _ = self.wf("plan-gate", FD)
+
+        self.assertEqual(code, 0, data)
+
     def test_plan_gate_lists_open_adrs_of_both_kinds(self):
         self.open_adr("Proposed – needs amendment")
         code, data, _ = self.wf("plan-gate", FD)

@@ -13,10 +13,10 @@
 - **Lane**: Knowledge & data (search); Agents (decision explanations)
 - **Provides**: search over the Illinois policy manual returning cited passages, and plain-language
   explanations of determinations. Used by 011 (explanations requested after each
-  determination), 010 (explanation review tasks), 002 (notice drafts), 005 (policy search tool) and 006 (shows stored
-  explanations).
+  determination), 010 (explanation review tasks), 002 (notice drafts) and 005 (policy search
+  tool). It also shows stored explanations to caseworkers and applicants.
 - **Depends on**: 000 (configuration, AI provider), 003 (determinations and rule traces; stubbed
-  until ready).
+  until ready), 001 (the case page and coverage periods), 002 (the AI activity section).
 - **Out of scope**: other states' manuals, non-medical chapters, answering general questions
   without citations, keeping the manual automatically up to date, changing or overriding any
   determination.
@@ -96,6 +96,29 @@ number matches the determination and every rule has a citation.
    **Then** it says no citation is available for that rule and the explanation is marked for
    caseworker review.
 
+### User Story 5 - Read the explanation of a decision (Priority: P2)
+
+Caseworkers see each decision's explanation on the case page. Applicants see their past
+applications and decisions for every coverage period, each with the explanation they were given
+at the time.
+
+**Why this priority**: Explanations only help if people can read them; this also shows the
+system's transparency in the demo.
+
+**Independent Test**: In the browser, open a determined case as a caseworker and check the stored
+explanation and its citations; sign in as a returning demo applicant and check the decisions for
+each coverage period.
+
+**Acceptance Scenarios**:
+
+1. **Given** a determined case, **When** the caseworker opens it, **Then** they see the
+   caseworker explanation stored with the determination, with its citations, exactly as generated
+   at the time.
+2. **Given** an applicant with past decisions, **When** they open their history, **Then** they see
+   each coverage period's decision with its plain-language explanation as recorded at the time.
+3. **Given** a case with explanation runs, **When** the caseworker opens its AI activity, **Then**
+   each explanation run shows its model, provider, cost and the result of its checks.
+
 ### Edge Cases
 
 - A section is very long: it is split, and every part keeps its section number and title.
@@ -141,6 +164,13 @@ number matches the determination and every rule has a citation.
 - **FR-004-14**: The evaluation command MUST also score explanations on the known-answer
   determinations: the share whose numbers all match (target 100%) and the citation rate per rule
   (target at least 95%), failing below either target.
+- **FR-004-15**: The case page (FR-001-27) MUST show each determination's caseworker explanation,
+  with its citations, as stored at the time (FR-004-13). (Was FR-006-09, explanations part.)
+- **FR-004-16**: Applicants MUST be able to see their past applications and decisions for every
+  coverage period, each with its applicant explanation as recorded at the time. (Was FR-006-04.)
+- **FR-004-17**: Each explanation run MUST appear in the case's AI activity (FR-002-20) with its
+  model, provider, cost and the result of its checks (FR-004-11, FR-004-12). (Was FR-006-14,
+  explanations part.)
 
 ### Key Entities
 
