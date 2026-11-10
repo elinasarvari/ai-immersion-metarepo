@@ -5,3 +5,7 @@
 repos/*
 !repos/.gitkeep
 .gitmodules
+
+# Spec Kit workflow run state (per machine) and check logs from workflows/benefit-feature
+.specify/workflows/runs/
+specs/*/review/*.log

@@ -1,60 +1,21 @@
-# Feature workflow: spec → plan → implement → review gate → PR
+# Feature workflow
 
-The standard path for any feature in `benefit-be` and/or `benefit-fe`. Each step names who does it and what must be true before moving on.
+How a spec becomes merged code in `benefit-be` and `benefit-fe`. [benefit-feature/workflow.yml](benefit-feature/workflow.yml) runs it automatically (`/feature-workflow`). This page explains each stage, and is the manual path (for example in Copilot).
 
-## 0. Prepare
-- The repos are linked: `repos/benefit-be`, `repos/benefit-fe` (`clone-repo` skill).
-- Run `skills/sync-repos/sync-repos.sh` (`sync-repos` skill) so both repos are initialised and on the latest `main`.
-- **Gate:** no problems reported. Any repo left alone is either the one this feature continues, or the user has decided what to do with it.
+| # | Stage | Who | Output | Checked by (`wf.py`) |
+|---|---|---|---|---|
+| 0 | Spec | you + `/speckit-specify`, `/speckit-clarify` | `spec.md` | `spec-check` (asks you if questions remain) |
+| 1 | Plan | architect role (`architecture-plan`) | `plan.md`, `research.md`, `data-model.md`, `contracts/`, `decisions/`, `scope.json` | `plan-check`, `decisions-check`, `scope-check` (asks you if a decision is yours) |
+| 2 | Tasks + QA | `/speckit-tasks`, then quality engineer role (`test-strategy`) | `tasks.md` tagged by lane, `test-plan.md` | `tasks-split`, `test-plan-check` |
+| 3 | Contracts | `/speckit-implement` on `[contracts]` tasks, alone | `packages/domain`, OpenAPI, dependencies | — |
+| 4 | Lanes, in parallel | `/speckit-implement` per lane (tests first), then its unit tests and fixes | code in each lane's folders | `lane-tests` |
+| 5 | QA tests | `/speckit-implement` on `[qa]` tasks | contract, integration, e2e and eval tests | `ownership` |
+| 6 | Verify, ≤3 rounds | jobs in parallel (`make check`, builds, evals) → if green, code reviewers + compliance review in parallel → fix | `review/verify.md` | `verify-status` |
+| 7 | Trace | script | `review/trace.md` | `trace` (every FR has a named test) |
+| 8 | Ship | `create-pr` skill | draft PRs, then GitHub Actions | `ci-wait` |
+| 9 | After merge | `sync-repos` skill | clones on the latest `main` | — |
 
-## 1. Specify (main assistant)
-- `/speckit-specify <what to build>`, then `/speckit-clarify` if anything is unclear.
-- **Gate:** `spec.md` has no open `[NEEDS CLARIFICATION]` markers.
-
-## 2. Plan (main assistant + lane agents)
-1. Decide which lanes the feature touches (see the map in `project-rules/README.md`).
-2. Ask each affected lane agent, in plan mode, for its section: `workflows-lane`, `agents-lane`, `data-lane`, `platform-ui-lane`. They can run in parallel.
-3. `/speckit-plan` with those sections. `plan.md` must include:
-   - **Target repos:** `repos/benefit-be` and/or `repos/benefit-fe`
-   - **Project structure** following `project-rules/backend-architecture.md` and `project-rules/frontend-ui.md`
-   - **Contracts** between lanes (`packages/domain` models, signals, MCP tools, API endpoints) and any OpenAPI change (`PL-3`)
-   - **Rules at risk:** the rule IDs each lane flagged
-4. `/speckit-checklist` (optional).
-- **Gate:** every lane in scope has a section, and contracts are agreed before any code is written.
-
-## 3. Tasks (main assistant)
-- `/speckit-tasks`. Tag every task with its lane and repo, for example `[workflows][benefit-be]`.
-- Order the work: contracts in `packages/domain` first, then each lane's tasks, with the tests written before the implementation (`testing.md`).
-- `/speckit-analyze` to check the spec, plan and tasks are consistent.
-- **Gate:** no task without a lane tag; no lane task without its required tests.
-
-## 4. Implement (main assistant)
-- `/speckit-implement`. Code is written only inside `repos/<repo>` (feature 009 may also write the metarepo's `scripts/factory/` and `templates/`).
-- Before writing each task, read the rule files for that task's lane. Follow them as hard constraints.
-- Work on a feature branch in each repo (`feature/<NNN-feature>`), created from `origin/main`.
-
-## 5. Review gate (`review-changes` skill)
-Run in parallel:
-- **Rules:** each lane agent whose paths changed, in review mode.
-- **Code review:** `backend-reviewer` if `benefit-be` changed, `frontend-reviewer` if `benefit-fe` changed.
-
-Then:
-1. Any FAIL or REQUEST CHANGES: fix the blocking findings, then ask only the agents that raised them to review again.
-2. Repeat until every lane reports PASS and every code reviewer reports APPROVE.
-- **Gate:** no blocking findings left. Don't open a PR with a known violation.
-
-## 6. Verify (main assistant)
-- `make check` in each changed repo (`benefit-be`: ruff, mypy, pytest, gitleaks, pip-audit; `benefit-fe`: ESLint, Prettier, `tsc`, Vitest, Playwright, `pnpm audit`).
-- `make eval` if agents, retrieval or extraction changed (`AG-17`, `KD-8`).
-- `/speckit-converge` to find anything in the spec that isn't built yet. If it adds tasks, go back to step 4.
-- **Gate:** all checks pass and eval scores are at or above the thresholds.
-
-## 7. Pull requests (`create-pr` skill)
-- One PR per changed repo, using the same branch name, filled from the PR template.
-- Include in each PR: the review results (PASS per lane, APPROVE from the code reviewer), check and eval results, and links to the sibling PR.
-- If the OpenAPI spec changed, open the `benefit-be` PR first, then the `benefit-fe` PR that regenerates the client.
-- Confirm with the user before pushing.
-
-## 8. After merge
-- Run `skills/sync-repos/sync-repos.sh --commit` (`sync-repos` skill). It fast-forwards each repo to the merged `main` and commits the new pointers. Feature branches still in progress are left alone and not recorded.
-- Commit the feature's `specs/` folder in the metarepo.
+- **Order:** each stage consumes the one before. Contracts go first and alone because every lane depends on them. Lanes run in parallel because they own separate folders (`project-rules/backend-architecture.md`, Ownership). Reviews run only once tests and builds pass, so tokens aren't spent reviewing broken code.
+- **Gates:** a person is asked only for open spec questions, decisions that are theirs (product, policy, cost, rule changes), and before pushing when `pr_mode=ask`.
+- **Where code goes:** only inside `repos/<repo>`, on `feature/<NNN-feature>` from `origin/main`. Feature 009 may also write the metarepo's `scripts/factory/` and `templates/`.
+- **Manual path:** run each stage's skill or command in order, then the matching `python3 workflows/benefit-feature/scripts/wf.py <check> specs/<NNN-feature>`.
