@@ -142,6 +142,16 @@ class Gates(WfCase):
                 self.assertEqual(self.wf("prepare", "010", mode, "strict")[0], 0)
         self.assertEqual(self.wf("prepare", "010", "ready", "strict")[0], 1)
 
+    def test_a_new_run_clears_an_earlier_runs_lane_reports_and_knows_it_is_an_update(self):
+        self.write("lanes/workflows-lane/done.json", json.dumps({"tasks": ["T002"]}))
+        self.write("lanes/workflows-lane/blocked.md", "old note\n")
+        code, data, _ = self.wf("prepare", "010", "draft", "strict")
+        self.assertEqual(code, 0)
+        self.assertTrue(data["update"], "tasks.md exists, so this run updates an earlier one")
+        self.assertEqual(len(data["cleared_lane_reports"]), 2)
+        self.assertFalse((self.fd / "lanes/workflows-lane/done.json").exists())
+        self.assertFalse((self.fd / "lanes/workflows-lane/blocked.md").exists())
+
     def test_prepare_rejects_bad_inputs_and_bad_spec(self):
         self.assertEqual(self.wf("prepare", "010", "yolo", "strict")[0], 1)
         self.assertEqual(self.wf("prepare", "999", "draft", "strict")[0], 1)

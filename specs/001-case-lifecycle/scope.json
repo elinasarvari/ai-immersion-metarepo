@@ -1,5 +1,0 @@
-{
-  "lanes": ["workflows-lane", "data-lane", "platform-ui-lane"],
-  "repos": ["benefit-be"],
-  "reason": "workflows-lane: CaseWorkflow, state table, activities, worker repositories (apps/worker/). data-lane: migration 0002_case_lifecycle with validators and indexes (db/). platform-ui-lane: Scope.for_worker and case_now in packages/platform/ (ADR-001-03, ADR-001-06), plus the three case endpoints in apps/api/ if ADR-001-05 stays Option A."
-}

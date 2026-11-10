@@ -195,8 +195,17 @@ def prepare(feature, pr_mode, trace_mode, decision_mode="auto"):
     r = rel(d)
     (ROOT / ".specify").mkdir(exist_ok=True)
     (ROOT / ".specify" / "feature.json").write_text(json.dumps({"feature_directory": str(d)}) + "\n")
+    # An earlier run's lane reports name its task IDs; left in place, the verify `tasks` job would tick off
+    # this run's tasks that happen to reuse them. Each run starts without them.
+    cleared = []
+    for f in sorted((d / "lanes").glob("*/*")):
+        if f.is_file() and f.name in ("done.json", "blocked.md"):
+            f.unlink()
+            cleared.append(rel(f))
+    existing = (d / "tasks.md").exists()
     spec = check_spec(d)
     out({"feature_dir": r, "feature": d.name, "branch": f"feature/{d.name}", "spec_file": f"{r}/spec.md",
+         "update": existing, "cleared_lane_reports": cleared,
          "review_dir": f"{r}/review", "pr_mode": pr_mode, "trace_mode": trace_mode, "decision_mode": decision_mode, **spec,
          "problems": problems + spec["problems"]}, ok=not (problems or spec["problems"]))
 

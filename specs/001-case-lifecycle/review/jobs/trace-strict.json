@@ -1,8 +1,0 @@
-{
-  "job": "trace:strict",
-  "status": "pass",
-  "cases": 77,
-  "unproven": [],
-  "problems": [],
-  "report": "specs/001-case-lifecycle/review/trace.md"
-}

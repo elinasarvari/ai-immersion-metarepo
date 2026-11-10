@@ -186,7 +186,19 @@ run_dirs() {  # every run, newest first
 find_run() {  # $1 = run id, NNN feature, or empty for the latest; sets RUN_ID and RUN_HOME
   local p=""
   if [ -z "${1:-}" ]; then p="$(run_dirs | head -1 || true)"
-  elif [[ "$1" =~ ^[0-9]{3}$ ]]; then p="$(ls -td "$WT_HOME/$1"-*/.specify/workflows/runs/*/ 2>/dev/null | head -1 || true)"
+  elif [[ "$1" =~ ^[0-9]{3}$ ]]; then  # the feature's worktree runs, and in-place runs of it in this checkout
+    p="$(python3 -c 'import glob, json, os, sys
+n, main, wt = sys.argv[1:4]
+runs = glob.glob(wt + "/" + n + "-*/.specify/workflows/runs/*/")
+for d in glob.glob(main + "/.specify/workflows/runs/*/"):
+    try:
+        feature = json.load(open(d + "inputs.json"))["inputs"].get("feature", "")
+    except (OSError, ValueError, KeyError):
+        continue
+    if feature.startswith(n):
+        runs.append(d)
+runs.sort(key=os.path.getmtime, reverse=True)
+print(runs[0] if runs else "")' "$1" "$MAIN" "$WT_HOME")"
   else p="$(ls -d "$MAIN/.specify/workflows/runs/$1/" "$WT_HOME"/*/.specify/workflows/runs/"$1"/ 2>/dev/null | head -1 || true)"
   fi
   [ -n "$p" ] || die "no run found for '${1:-latest}'; start one with: run.sh start <feature>"

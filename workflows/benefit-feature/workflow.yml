@@ -158,7 +158,12 @@ steps:
       Makefile/Procfile), done first and alone, so a [contracts] task never depends on a lane task. Work that has to
       run after the lanes (regenerating openapi.json, running make check, walking the quickstart, cross-lane tests) is
       [qa]. Every other task touches only its lane's folders. Mention the FR IDs each task serves; every FR in the
-      spec needs at least one task. Reply in ≤5 lines.
+      spec needs at least one task. UPDATE MODE when tasks.md already exists (an earlier run of this feature): don't
+      rewrite it. Like the speckit-converge skill, compare it with the spec, the plan and the code already on branch
+      {{ steps.feature.output.data.branch }} in each repo (git -C repos/<repo> diff origin/main...HEAD): keep each [X]
+      task that the code still satisfies; set back to [ ] any task whose code no longer matches the spec or plan, and
+      say why on the task; add new tasks, with the next free numbers, only for what isn't built yet (new or changed
+      requirements, stories and screens). Never renumber or delete a task. Reply in ≤5 lines.
 
   - id: quality_engineer
     type: prompt
@@ -168,7 +173,9 @@ steps:
     prompt: >-
       You are the quality-engineer agent (agents/quality-engineer/quality-engineer.agent.md). Use its test-strategy
       skill for {{ steps.feature.output.data.feature_dir }}: write test-plan.md, add the test-first and [qa] tasks
-      to tasks.md, and check the tasks cover the plan (its step 3). Reply in ≤10 lines.
+      to tasks.md, and check the tasks cover the plan (its step 3). If test-plan.md already exists (an earlier run),
+      extend it: keep every existing case and its ID and test name, correct a case only where the spec changed it,
+      and add cases, with the next free TC numbers, for the new or changed requirements. Reply in ≤10 lines.
 
   - id: tasks_gate
     type: shell

@@ -157,6 +157,12 @@ def stage_rows(state, evs, now):
         secs = None
         if i["start"]:
             secs = ((i["end"] or now) - i["start"]).total_seconds()
+        # Gates that this run's settings switch off: say so up front instead of showing a pending "YOU".
+        inputs = state.get("inputs") or {}
+        off = {"pr_approval": inputs.get("pr_mode", "draft") != "ask" and f"pr_mode={inputs.get('pr_mode', 'draft')}: no approval",
+               "decision_questions": inputs.get("decision_mode", "auto") != "ask" and "decision_mode=auto: the decision-maker decides"}
+        if off.get(sid) and st in (None, "completed"):
+            st, note = "skipped", off[sid]
         rows.append((sid, label, who, st or "pending", secs, note))
     return rows
 
