@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
-# Branch, commit, push and open a PR for changes inside a linked submodule (repos/<name>).
+# Branch, commit, push and open a PR for changes inside a cloned repo (repos/<name>).
 #
 # Usage:
 #   create-pr.sh <repo-name> --branch <branch> --message <commit-msg>
 #                [--title <pr-title>] [--body-file <file>] [--base main] [--draft] [--no-pr]
 #
-# - Works only on submodules registered under repos/ in .gitmodules.
-# - Pushes to that submodule's own `origin`, so code always lands in the right repository.
+# - repos/<name> is a plain git clone (git-ignored by the metarepo, made by clone-repo.sh).
+# - Pushes to that clone's own `origin`, so code always lands in the right repository.
 # - Never pushes to the base branch and never force-pushes.
+# - Checks `gh` is logged in before pushing anything, unless --no-pr is given.
+# - With --no-pr, or after pushing, prints the compare URL so a PR can be opened in the browser.
 set -euo pipefail
 
 die() { echo "Error: $*" >&2; exit 1; }
@@ -27,6 +29,7 @@ while [ $# -gt 0 ]; do
     *) die "unknown option: $1" ;;
   esac
 done
+case "$name" in ""|.|..|*/*) die "invalid repo name: $name" ;; esac
 [ -n "$branch" ] || die "--branch is required"
 [ "$branch" != "$base" ] || die "branch must differ from base ($base)"
 git check-ref-format --branch "$branch" >/dev/null 2>&1 || die "invalid branch name: $branch"
@@ -35,15 +38,19 @@ case "$body_file" in ""|/*) ;; *) body_file="$PWD/$body_file" ;; esac
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 root="$(cd "$script_dir/../.." && pwd -P)"
-path="repos/$name"
-git -C "$root" config -f "$root/.gitmodules" --get "submodule.$path.url" >/dev/null 2>&1 \
-  || die "$path is not a registered submodule (add it with skills/clone-repo/clone-repo.sh)"
-dir="$root/$path"
-[ -e "$dir/.git" ] || die "$path is not initialised (run: git submodule update --init $path)"
+dir="$root/repos/$name"
+[ -d "$dir/.git" ] || die "repos/$name is not a git clone (clone it with skills/clone-repo/clone-repo.sh <url>)"
 cd "$dir"
+remote_url="$(git remote get-url origin 2>/dev/null)" || die "repos/$name has no 'origin' remote"
+echo "Repository: repos/$name -> $remote_url"
 
-remote_url="$(git remote get-url origin)"
-echo "Repository: $path -> $remote_url"
+# owner/repo, for the compare URL and for gh
+slug="$(printf '%s' "$remote_url" | sed -E 's#^(https?://[^/]+/|git@[^:]+:|ssh://git@[^/]+/)##; s#\.git$##')"
+
+if [ -z "$no_pr" ]; then
+  command -v gh >/dev/null || die "gh CLI not found; install it, or pass --no-pr to only push"
+  gh auth status >/dev/null 2>&1 || die "gh is not logged in; run 'gh auth login', or pass --no-pr to only push"
+fi
 
 git fetch origin "$base" --quiet || die "could not fetch origin/$base"
 
@@ -63,6 +70,15 @@ fi
 if [ -n "$(git status --porcelain)" ]; then
   [ -n "$message" ] || die "--message is required to commit the pending changes"
   git add -A
+  secret_files="$(git diff --cached --name-only | grep -E '(^|/)\.env$|(^|/)\.env\.[^e]|keyfile$|\.pem$|id_rsa' || true)"
+  if [ -n "$secret_files" ]; then
+    git reset --quiet
+    die "refusing to commit secrets file(s): $(printf '%s' "$secret_files" | tr '\n' ' '). Add them to .gitignore"
+  fi
+  if command -v gitleaks >/dev/null; then
+    gitleaks protect --staged --no-banner >/dev/null 2>&1 \
+      || { git reset --quiet; die "gitleaks found a secret in the staged changes; run 'gitleaks protect --staged' to see it"; }
+  fi
   git commit -m "$message"
 fi
 
@@ -71,13 +87,22 @@ ahead="$(git rev-list --count "origin/$base..HEAD")"
 
 git push -u origin "$branch"
 
-if [ -n "$no_pr" ]; then echo "Pushed $branch (PR creation skipped)"; exit 0; fi
-command -v gh >/dev/null || die "gh CLI not found; branch is pushed, open the PR manually"
-
-if existing="$(gh pr view "$branch" --json url -q .url 2>/dev/null)" && [ -n "$existing" ]; then
-  echo "PR already exists (updated with new commits): $existing"; exit 0
+if [ -n "$no_pr" ]; then
+  case "$remote_url" in
+    *github.com*) echo "Pushed $branch (PR creation skipped). Open it here: https://github.com/$slug/compare/$base...$branch?expand=1" ;;
+    *) echo "Pushed $branch (PR creation skipped)." ;;
+  esac
+  exit 0
 fi
-args=(--base "$base" --head "$branch" --title "${title:-$message}")
+
+state="$(gh pr view "$branch" --repo "$slug" --json state -q .state 2>/dev/null || true)"
+if [ "$state" = "OPEN" ]; then
+  echo "PR already open (updated with the new commits): $(gh pr view "$branch" --repo "$slug" --json url -q .url)"
+  exit 0
+fi
+args=(--repo "$slug" --base "$base" --head "$branch")
+pr_title="${title:-$message}"
+[ -z "$pr_title" ] || args+=(--title "$pr_title")
 if [ -n "$body_file" ]; then args+=(--body-file "$body_file"); else args+=(--fill-first); fi
 [ -z "$draft" ] || args+=(--draft)
 gh pr create "${args[@]}"

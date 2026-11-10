@@ -4,15 +4,15 @@ Central store for shared AI-assisted development assets (see README.md for folde
 
 ## Linked repositories (`repos/`)
 
-- External repositories are linked as **git submodules** at `repos/<repo-name>`. The metarepo records only the URL and pinned commit (`.gitmodules`), not their files.
+- External repositories are plain git clones at `repos/<repo-name>`. `repos/` is git-ignored: the metarepo never commits their files and there are no submodules or `.gitmodules`.
 - When the user gives one or more repo URLs to add, link or pull in, use the **clone-repo** skill (`skills/clone-repo/SKILL.md`):
   ```bash
   skills/clone-repo/clone-repo.sh <git-url> [folder-name]
   ```
-  If the submodule is already registered, the script initialises/updates it instead.
-- To check or update the linked repos (after a fresh checkout, after PRs merge, or before starting work), use the **sync-repos** skill: `skills/sync-repos/sync-repos.sh [--check | --commit]`. It only fast-forwards clean submodules on `main` and only records pointers that are merged into `main`.
-- Never add submodules outside `repos/`, never embed credentials in URLs, and never remove a submodule without asking.
-- When working inside a linked repo, follow that repo's own `CLAUDE.md` / rules plus the rule sets that `project-rules/README.md` maps to the paths you touch. Commits for that project are made inside `repos/<name>`; then commit the updated pointer in the metarepo.
+  If the clone already exists, the script fast-forward pulls it instead.
+- To check or update the clones (after a fresh checkout, after PRs merge, or before starting work), use the **sync-repos** skill: `skills/sync-repos/sync-repos.sh [--check]`. It only fast-forwards clean clones on `main`, and leaves feature branches and local changes alone.
+- Never clone outside `repos/`, never embed credentials in URLs, and never delete a clone without asking.
+- When working inside a cloned repo, follow that repo's own `CLAUDE.md` / rules plus the rule sets that `project-rules/README.md` maps to the paths you touch. Commits for that project are made inside `repos/<name>` and pushed to its own `origin`.
 - The project has two repos: `benefit-be` (API, Temporal worker, agents, rules, RAG, MCP servers, DB, evals, analytics) and `benefit-fe` (React UI).
 
 ## Rule sets, lane agents and workflows
@@ -55,7 +55,7 @@ Rules:
 - Run the `.specify/scripts/bash/*.sh` scripts exactly as the skills say. Don't create feature folders by hand.
 - When building one of the linked projects, work inside `repos/<name>` and use that project's own build and test commands.
 - Don't edit `.specify/templates` or `.specify/scripts` unless asked. Update them with `specify integration upgrade`.
-- `plan.md` must name the target repo(s) (`repos/<name>`). `/speckit-implement` writes code only inside those submodules, never in the metarepo. The one exception is feature 009 (delivery factory), whose plan may also target the metarepo's `scripts/factory/` and `templates/`.
+- `plan.md` must name the target repo(s) (`repos/<name>`). `/speckit-implement` writes code only inside those clones, never in the metarepo. The one exception is feature 009 (delivery factory), whose plan may also target the metarepo's `scripts/factory/` and `templates/`.
 - For backend work, the "Project Structure" section of `plan.md` must use the layout and import boundaries in `project-rules/backend-architecture.md`. Don't invent a different structure.
 - `/speckit-plan`: get each affected lane agent's section (plan mode) and include it. `/speckit-tasks`: tag every task with its lane and repo.
 - `/speckit-implement`: before each task, read the rule files for its lane. Afterwards, run the **review-changes** skill: every affected lane agent must report PASS and the code reviewer for each changed repo must report APPROVE before any PR is opened.
@@ -69,10 +69,10 @@ skills/create-pr/create-pr.sh <repo-name> --branch feature/<NNN-feature> --messa
   --title "<pr title>" --body-file <pr-body.md> [--draft]
 ```
 
-- It runs inside `repos/<name>` and pushes to that submodule's own `origin`, then opens a PR against `main` with `gh` (requires `gh auth login`).
+- It runs inside `repos/<name>` and pushes to that clone's own `origin`, then opens a PR against `main` with `gh` (requires `gh auth login`; with `--no-pr` it only pushes and prints the compare link).
 - Branch name = Spec Kit feature folder name with a type prefix (`feature/003-user-login`). Use the same branch in every repo the feature touches, with one PR per repo, and link the PRs to each other.
 - Confirm the repo, branch, files and PR title with the user before pushing. Never push to `main`, force-push or skip hooks.
-- The metarepo commits only `specs/`, feature 009's `scripts/factory/` and `templates/`, and, after the PRs merge, the updated submodule pointers (`sync-repos.sh --commit`).
+- The metarepo commits only its own files (`specs/`, feature 009's `scripts/factory/`, `templates/`, rules and skills), never the clones. After the PRs merge, fast-forward the clones with `sync-repos.sh`.
 
 ## Skills
 

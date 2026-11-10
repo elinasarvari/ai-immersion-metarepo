@@ -20,13 +20,13 @@ Each project's `CLAUDE.md` points back to the rules in `project-rules/`.
 
 ## Linked repositories
 
-Project repos are git submodules under `repos/`. Ask Claude Code or GitHub Copilot to "add <url>", or run directly:
+Project repos are plain git clones under `repos/`, which is git-ignored (no submodules). Ask Claude Code or GitHub Copilot to "add <url>", or run directly:
 
 ```bash
 skills/clone-repo/clone-repo.sh https://github.com/OWNER/benefit-fe.git
 ```
 
-After cloning this metarepo, fetch them with `git submodule update --init --recursive`.
+After cloning this metarepo, clone each project repo with `skills/clone-repo/clone-repo.sh <url>`, and keep them current with `skills/sync-repos/sync-repos.sh`.
 
 `.claude/skills` and `.github/skills` are symlinks to `skills/`, so both tools discover the same skills.
 

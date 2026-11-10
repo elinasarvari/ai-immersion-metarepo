@@ -1,38 +1,45 @@
 ---
 name: create-pr
-description: Create a feature branch, commit, push and open a pull request against main for code changes made inside a linked repository under repos/ (git submodule). Use after /speckit-implement or any code change in repos/<name> when the user asks to push, ship, open/create a PR, or raise a pull request.
+description: Create a feature branch, commit, push and open a pull request against main for code changes made inside a cloned repository under repos/. Use after /speckit-implement or any code change in repos/<name> when the user asks to push, ship, open/create a PR, or raise a pull request.
 ---
 
-# Create a PR in the linked repository
+# Create a PR in a cloned repository
 
-Code changes live inside the submodule `repos/<name>`; each submodule pushes to its **own** `origin`, so the PR always goes to the right repository. The metarepo is never pushed by this skill.
+`repos/<name>` is a plain git clone (made by the **clone-repo** skill and git-ignored by the metarepo, so there are no submodules). Each clone pushes to its **own** `origin`, so the PR always goes to the right repository. This skill never pushes the metarepo.
 
 ## Steps
 
-1. **Find the target repo(s).** Run `git -C repos/<name> status --short` for each submodule (list them with `git config -f .gitmodules --get-regexp path`). Only repos with changes or unpushed commits get a PR. If the feature's `specs/<NNN-feature>/plan.md` names target repos, they must match.
+1. **Find the target repo(s).** List the clones with `ls repos/`, then run `git -C repos/<name> status --short` and `git -C repos/<name> log --oneline origin/main..HEAD` for each. Only repos with changes or unpushed commits get a PR. If the feature's `specs/<NNN-feature>/plan.md` names target repos, they must match.
 2. **Pick the branch name.** Default to the Spec Kit feature name (the `specs/` folder, e.g. `003-user-login`), prefixed by type: `feature/003-user-login` (or `fix/…`). Use the **same branch name in every repo** touched by one feature.
-3. **Write the commit message and PR body.**
+3. **Check `gh`.** Run `gh auth status`. If it isn't logged in, ask the user to run `gh auth login` (it is interactive, so you can't do it for them), or use `--no-pr`: the script then pushes and prints the GitHub compare link for opening the PR in the browser.
+4. **Write the commit message and PR body.**
    - Commit: Conventional Commits, e.g. `feat(login): add password reset flow`.
    - PR body: use the target repo's `.github/pull_request_template.md` if it has one, otherwise `templates/github/pull_request_template.md` from the metarepo. Fill every section (Summary from `spec.md`, the spec path, How to test with the commands you ran and their results, sibling PRs for multi-repo features), tick only the checklist items that are actually true, delete sections that don't apply, and remove the `<!-- -->` hints. Write it to a temporary file (scratchpad or temp dir, not in the repo).
-4. **Confirm with the user** before pushing: show repo, remote URL, branch, files changed, commit message, PR title. Skip only if the user already said to go ahead.
-5. **Run, per repo:**
+5. **Confirm with the user** before pushing: show repo, remote URL, branch, files changed, commit message, PR title. Skip only if the user already said to go ahead.
+6. **Run, per repo:**
 
    ```bash
    skills/create-pr/create-pr.sh <repo-name> \
      --branch feature/003-user-login \
      --message "feat(login): add password reset flow" \
      --title "feat(login): add password reset flow" \
-     --body-file /path/to/pr-body.md [--draft] [--base main]
+     --body-file /path/to/pr-body.md [--draft] [--base main] [--no-pr]
    ```
 
-   The script: verifies `repos/<name>` is a registered submodule → fetches `origin/main` → creates/switches to the branch (carrying the uncommitted changes) → commits → pushes with upstream → runs `gh pr create --base main`. Re-running on the same branch adds a new commit and updates the existing PR.
-6. **Multi-repo features:** after all PRs exist, edit each PR body to link its siblings (`gh pr edit <url> --body-file …`).
-7. **Report** the PR URL(s).
+   The script:
+   1. Checks that `repos/<name>` is a git clone with an `origin`.
+   2. Checks that `gh` is installed and logged in, unless `--no-pr`. It stops before pushing anything if not.
+   3. Fetches `origin/main`, then creates or switches to the branch, carrying any uncommitted changes.
+   4. Commits the changes. It refuses to commit `.env`, keyfiles, `.pem` or `id_rsa` files, and runs `gitleaks protect --staged` when gitleaks is installed.
+   5. Pushes with upstream, then runs `gh pr create --base main`. With `--no-pr` it prints the compare link instead.
+
+   Re-running on the same branch adds a new commit and updates the open PR.
+7. **Multi-repo features:** after all PRs exist, edit each PR body to link its siblings (`gh pr edit <url> --body-file …`).
+8. **Report** the PR URL(s), or the compare links when `--no-pr` was used.
 
 ## Rules
 
 - Never commit or push to `main`; never force-push; never use `--no-verify`.
-- Run the project's build/tests (from its own README / `project-rules/`) before pushing; report failures instead of pushing broken code unless the user says to open a draft PR (`--draft`).
-- Don't push secrets: check the diff for `.env`, keys and tokens before committing.
-- Requires `gh auth login`. If `gh` is unauthenticated or the repo isn't on GitHub, use `--no-pr` and give the user the branch name to open the PR manually.
-- Do **not** bump the submodule pointer in the metarepo to an unmerged feature branch. After the PR merges, update it with `git submodule update --remote repos/<name>` and commit that in the metarepo (along with the `specs/` folder).
+- Run the project's build and tests (from its own README and `project-rules/`) before pushing (`make verify` in `benefit-be` runs both repos). Report failures instead of pushing broken code, unless the user asks for a draft PR (`--draft`).
+- Don't push secrets: the script blocks the common cases, but still read the diff before committing.
+- The metarepo never records the clones. After the PRs merge, fast-forward the clones with the **sync-repos** skill, and commit only the metarepo's own files (such as `specs/`) in the metarepo.
