@@ -132,6 +132,7 @@ doesn't match the agreed contract; confirm each is reported and the PR is blocke
 - A dependency (database, workflow server) is down: readiness reports not ready; health still
   reports the process is alive.
 - A log message would include personal data: it is masked before writing.
+- A keyboard-only or screen reader user uses any screen: every flow can be completed.
 
 ## Requirements *(mandatory)*
 
@@ -147,7 +148,7 @@ doesn't match the agreed contract; confirm each is reported and the PR is blocke
   naming the setting.
 - **FR-000-05**: The system MUST support three user roles: applicant, caseworker and supervisor,
   with seeded demo accounts for each. Supervisors can do everything caseworkers can, plus the demo
-  clock (FR-011-05) and the escalated-task view (FR-006-01).
+  clock (FR-011-05) and the escalated-task view (FR-010-07).
 - **FR-000-06**: Every operation except health and readiness MUST require a valid, unexpired
   session.
 - **FR-000-07**: Sessions MUST expire after a configurable period (default 8 hours).
@@ -163,7 +164,7 @@ doesn't match the agreed contract; confirm each is reported and the PR is blocke
   API and Amazon Bedrock, with no code changes.
 - **FR-000-13**: Every outbound call MUST have a timeout and a bounded retry with backoff.
 - **FR-000-14**: Every data store MUST record that it holds synthetic data, every generated
-  document MUST carry a visible "SYNTHETIC" marker, and every screen shows the banner in FR-006-11.
+  document MUST carry a visible "SYNTHETIC" marker, and every screen shows the banner in FR-000-29.
   Individual records do not need their own marker.
 - **FR-000-15**: Moved to the software factory's quality and factory dashboard, which is not a
   feature spec. The ID is kept so existing references stay valid.
@@ -206,6 +207,13 @@ doesn't match the agreed contract; confirm each is reported and the PR is blocke
   of birth and identity numbers are masked). The tracing service starts with the one-command run
   (FR-000-01) and reports its own health; if it is down, AI runs continue and readiness reports
   tracing as degraded. Tracing is off in CI.
+- **FR-000-29**: Every screen, in every feature, MUST show a visible "synthetic data" banner. (Was
+  FR-006-11.)
+- **FR-000-30**: Every screen, in every feature, MUST meet WCAG 2.1 AA and be usable by keyboard
+  alone and with a screen reader. (Was FR-006-10.)
+- **FR-000-31**: Applicants MUST see only records belonging to their own household, on every
+  screen and operation; any other request MUST be refused, logged and reveal nothing about
+  whether the record exists. Caseworkers and supervisors can see all cases. (Was FR-006-05.)
 
 ### Key Entities
 
@@ -232,6 +240,10 @@ doesn't match the agreed contract; confirm each is reported and the PR is blocke
 - **SC-000-08**: A full CI run completes in under 15 minutes.
 - **SC-000-09**: For any demo case, every AI run can be found in the tracing service by case ID,
   and a scan of the traces finds zero personal data.
+- **SC-000-10**: 100% of cross-household access attempts in testing are refused, on every screen.
+  (Was SC-006-03.)
+- **SC-000-11**: An automated accessibility check reports zero serious or critical issues on every
+  screen. (Was SC-006-04.)
 
 ## Assumptions
 

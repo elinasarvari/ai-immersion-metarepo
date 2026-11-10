@@ -13,16 +13,15 @@
 - **Lane**: Workflows
 - **Provides**: the full set of review reasons and the actions each one allows (FR-010-01);
   reminders and escalation for open tasks; the fallback to review when verification or
-  determination keeps failing; the limit on automatic requests for information. Used by 006, 007,
-  008 and 011.
-- **Depends on**: 001 (cases, the review gate, case history, the case clock); 002 (verification
+  determination keeps failing; the limit on automatic requests for information; the review queue
+  and task screens. Used by 007, 008 and 011.
+- **Depends on**: 001 (cases, the review gate, case history, the case clock, the case page); 002 (verification
   findings and drafted requests for information), 004 (explanation checks) and 007 (missed
   redetermination deadlines, coverage end dates), each stubbed until ready.
 - **Split from**: 001 Case lifecycle (2026-11-10). Old IDs map to new ones: FR-001-19 →
   FR-010-01, FR-001-08 → FR-010-02, FR-001-12 → FR-010-03, FR-001-21 → FR-010-04.
 - **Out of scope**: assigning tasks to individual caseworkers, notifications by email or text,
-  supervisor-only queues, the screens that show the queue (006), timing of the applicant's
-  response window (011).
+  supervisor-only queues, timing of the applicant's response window (011).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -96,6 +95,30 @@ and confirm the reminder and then the escalated flag.
 3. **Given** a redetermination review task open when the household's coverage end date passes,
    **When** that date passes, **Then** the task is flagged as escalated.
 
+### User Story 4 - Caseworker works the review queue (Priority: P1)
+
+A caseworker sees the open review tasks in one shared queue ordered by deadline, opens one, sees
+its reason and evidence, and takes one of the actions that reason allows.
+
+**Why this priority**: This is how human control actually happens.
+
+**Independent Test**: In the browser, with seeded review tasks of every reason, sign in as a
+caseworker, act on each task type and confirm the case resumes; sign in as a supervisor and filter
+to escalated tasks.
+
+**Acceptance Scenarios**:
+
+1. **Given** open review tasks, **When** the caseworker opens the queue, **Then** tasks are listed
+   by soonest decision deadline (redeterminations, which have none, by coverage end date), showing
+   reason, days remaining or coverage end date, at-risk status, and reminder and escalation
+   flags.
+2. **Given** an open task, **When** the caseworker opens it, **Then** they see its reason and
+   evidence and only the actions the reason allows, and actions marked * ask for a reason.
+3. **Given** a task already actioned, **When** a second caseworker tries to act on it, **Then** the
+   action is refused with who acted and when.
+4. **Given** a task open for 4 days, **When** a supervisor filters the queue to escalated tasks,
+   **Then** it is listed, showing how long it has been open.
+
 ### Edge Cases
 
 - A caseworker overrides an adverse determination to approve: the case is decided as Approved
@@ -105,6 +128,7 @@ and confirm the reminder and then the escalated flag.
 - A "Request information" action when the case has already had its one automatic request: the
   request is still drafted, because it is a caseworker action (FR-010-04).
 - "Extend by 15 days" chosen a second time for the same request: refused (once per request).
+- Two caseworkers open the same task: the second action is refused with "already actioned by …".
 
 ## Requirements *(mandatory)*
 
@@ -123,7 +147,7 @@ and confirm the reminder and then the escalated flag.
   | Explanation review | An explanation fails its checks (FR-004-11) | Approve as is; Edit and approve. Does not block the decision. |
 
   Correcting a value and dismissing a finding both count as overrides of AI output (FR-002-11,
-  FR-006-02).
+  FR-002-19).
 - **FR-010-02**: If a review task is not actioned within 2 days, the system MUST remind
   caseworkers by marking the task "reminder" in the queue (there are no email or text
   notifications); after 4 days, or when a household's coverage end date passes while its
@@ -136,6 +160,14 @@ and confirm the reminder and then the escalated flag.
   MUST be refused and recorded as a rejected action.
 - **FR-010-06**: A caseworker action submitted more than once for the same task MUST be applied
   once.
+- **FR-010-07**: The caseworker console MUST show one shared review queue of open tasks sorted by
+  decision deadline (redeterminations by coverage end date), showing reason, days remaining or
+  coverage end date, at-risk status, and the reminder and escalation flags (FR-010-02).
+  Supervisors can filter it to escalated tasks. (Was FR-006-01.)
+- **FR-010-08**: A task screen MUST show the task's reason and evidence and offer only the actions
+  its reason allows (FR-010-01), asking for a reason where one is required (FR-010-05). A task
+  already actioned MUST refuse further actions and say who acted. (Was FR-006-01 and
+  FR-006-12.)
 
 ### Key Entities
 
@@ -154,6 +186,8 @@ and confirm the reminder and then the escalated flag.
 - **SC-010-03**: 100% of tasks left open past 2 and 4 days (case clock) in testing carry the
   reminder and escalated flags respectively.
 - **SC-010-04**: Zero caseworker actions are applied twice in testing.
+- **SC-010-05**: A caseworker completes a review in the browser (open, read the evidence, act) in
+  under 2 minutes. (Was SC-006-01.)
 
 ## Assumptions
 

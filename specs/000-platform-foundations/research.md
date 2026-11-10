@@ -451,12 +451,12 @@ In `benefit-fe`:
 
   | File | Built by |
   |---|---|
-  | `mismatch-request-info.spec.ts` | 002/001 |
+  | `mismatch-request-info.spec.ts` | 002/011 |
   | `restart-resume.spec.ts` | 001 |
-  | `missed-deadline-override.spec.ts` | 001/006 |
+  | `missed-deadline-override.spec.ts` | 011/010 |
   | `automatic-renewal.spec.ts` | 007 |
   | `renewal-one-document.spec.ts` | 007 |
-  | `applicant-blocked-other-household.spec.ts` | 006/005 |
+  | `applicant-blocked-other-household.spec.ts` | 001/005 |
 
   This way they show up as pending and are not silently skipped. 009's traceability report reads this annotation.
 - The backend runs with `LLM_MODE=fake` (FR-000-20).
@@ -524,7 +524,7 @@ In `benefit-fe`:
   - `is_marked(data: bytes, media_type: str) -> bool`: used by tests and the reset check. It reads the metadata or comment, and for PDFs it also extracts the text to confirm the label is on the page.
 - **Who calls it.**
   - The seed generator (003) stamps every document it writes to `db/seeds/generated/`: pay stubs, identity documents and scans.
-  - Notice rendering (001, 006) stamps every notice and drafted request before it is stored or shown.
+  - Notice rendering (011) stamps every notice and drafted request before it is stored or shown.
   - 000 ships the helper and its tests. The features that generate documents call it.
 - **Where the label goes.** The label sits in a margin band, never over the body, so the AI extraction in 002 still reads the document content. The 002 extraction evals run on stamped documents, so any effect shows up in the scores.
 - **Enforcement.**

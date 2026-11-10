@@ -256,7 +256,7 @@ benefit-fe/
 - `issue_user_token`, `issue_system_credential`, `verify_system_credential`
 - `AuditWriter`
 - `serve_health`, readiness probes
-- `stamp_pdf`, `stamp_image`, `stamp_text`, `is_marked`, which 003 seeds and 001/006 notices call (R24)
+- `stamp_pdf`, `stamp_image`, `stamp_text`, `is_marked`, which 003 seeds and 011 notices call (R24)
 
 **Needs**:
 - From K&D: the `users`, `households`, `audit_log` and `_meta` collections with their validators; the scoped repository helpers; the reset entry point; the fake embedder.

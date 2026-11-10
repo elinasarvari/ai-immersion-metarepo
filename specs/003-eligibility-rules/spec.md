@@ -12,8 +12,10 @@
 
 - **Lane**: Knowledge & data
 - **Provides**: determinations with explanation traces for any household and as-of date; the
-  synthetic data set and test sets every lane uses. Used by 001, 002, 006, 007, 008 and 011.
-- **Depends on**: 000 (configuration). Nothing else; it must work standalone.
+  synthetic data set and test sets every lane uses; the determination section on the case
+  page. Used by 001, 002, 004, 007, 008 and 011.
+- **Depends on**: 000 (configuration). The rules engine depends on nothing else and must work
+  standalone; only the determination section needs 001's case page.
 - **Out of scope**: eligibility groups other than adults 19–64 on income; disability, long-term
   care and spend-down rules; other programs; real personal data.
 
@@ -93,6 +95,24 @@ known-answer tests.
 2. **Given** the generated data, **When** any record or document is inspected, **Then** it is
    marked as synthetic.
 
+### User Story 5 - Caseworker sees why a case was decided (Priority: P2)
+
+A caseworker opens a determined case and sees the result and, rule by rule, what was checked.
+
+**Why this priority**: A determination a caseworker can't inspect can't be approved with
+confidence.
+
+**Independent Test**: In the browser, open seeded determined cases as a caseworker (Eligible,
+Ineligible and Cannot determine) and compare each rule shown with the stored determination.
+
+**Acceptance Scenarios**:
+
+1. **Given** a determined case, **When** the caseworker opens it, **Then** they see the result,
+   the reason code, the as-of date and rule set version, and for each rule its ID, inputs used,
+   threshold and outcome.
+2. **Given** a "Cannot determine" result, **When** the caseworker opens the case, **Then** the
+   missing items are listed.
+
 ### Edge Cases
 
 - Income exactly at the limit: eligible (limit is inclusive).
@@ -144,7 +164,7 @@ known-answer tests.
   whole dollar (for example, one person in the current year: $1,782).
 - **FR-003-16**: Residency, citizenship or immigration status and Medicare entitlement MUST be
   attested facts on each household member: seeded for seeded households, and taken from the
-  application form (FR-006-07) or redetermination response for new ones. Identity and income are
+  application form (FR-001-24) or redetermination response for new ones. Identity and income are
   checked through the simulated verification sources (005, FR-002-13).
 - **FR-003-17**: Household monthly income MUST be the sum, over household members, of each
   member's documented monthly income from verified pay stubs (002), across all of their jobs. A
@@ -165,9 +185,13 @@ known-answer tests.
 - **FR-003-22**: The data set MUST include completed history loaded directly into the stores
   (not run through workflows): decided cases from the previous program year and current coverage
   periods, with their determinations, pre-written explanations, notices, review tasks and
-  caseworker actions, so that applicant history (006), redeterminations (007) and metric expected
+  caseworker actions, so that applicant history (004), redeterminations (007) and metric expected
   values (008) work from a fresh reset. Pre-written explanations meet the same checks as
   generated ones (FR-004-11).
+- **FR-003-23**: The case page (FR-001-27) MUST show each determination: result, reason code,
+  as-of date, rule set version and, for each rule, its ID, inputs used, threshold and outcome
+  (FR-003-05), with the missing items for "Cannot determine". (Was FR-006-09, determinations
+  part.)
 
 ### Key Entities
 

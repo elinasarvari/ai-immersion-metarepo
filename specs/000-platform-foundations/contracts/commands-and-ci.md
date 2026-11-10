@@ -70,9 +70,9 @@ Each journey has a spec file in `benefit-fe/e2e/` from the start, marked `test.f
 
 | Spec file | Journey | Built by |
 |---|---|---|
-| `mismatch-request-info.spec.ts` | Mismatch and request for information | 002, 001 |
+| `mismatch-request-info.spec.ts` | Mismatch and request for information | 002, 011 |
 | `restart-resume.spec.ts` | Restart and resume | 001 |
-| `missed-deadline-override.spec.ts` | Missed deadline and override | 001, 006 |
+| `missed-deadline-override.spec.ts` | Missed deadline and override | 011, 010 |
 | `automatic-renewal.spec.ts` | Automatic renewal | 007 |
 | `renewal-one-document.spec.ts` | Renewal needing one document | 007 |
-| `applicant-blocked-other-household.spec.ts` | An applicant blocked from another household's records | 006, 005 |
+| `applicant-blocked-other-household.spec.ts` | An applicant blocked from another household's records | 001, 005 |

@@ -25,21 +25,31 @@ republish to the same URL.
 | Feature | Lane | Target repo(s) | Depends on | In Day 1 contracts PR? |
 |---|---|---|---|---|
 | [000 Platform foundations](000-platform-foundations/spec.md) | Platform & UI | benefit-be, benefit-fe | none | Yes |
-| [001 Case lifecycle](001-case-lifecycle/spec.md) | Workflows | benefit-be | 000, 002*, 003*, 010*, 011* | Yes (states, signals, case clock) |
-| [002 Document verification](002-document-verification/spec.md) | Agents | benefit-be | 000, 003, 004, 005 | Interface only |
-| [003 Eligibility rules and synthetic data](003-eligibility-rules/spec.md) | Knowledge & data | benefit-be | 000 | Yes (rules interface) |
-| [004 Policy search and decision explanations](004-policy-search/spec.md) | Knowledge & data, Agents | benefit-be | 000, 003* | Interface only |
+| [001 Case lifecycle](001-case-lifecycle/spec.md) | Workflows | benefit-be, benefit-fe | 000, 002*, 003*, 010*, 011* | Yes (states, signals, case clock) |
+| [002 Document verification](002-document-verification/spec.md) | Agents | benefit-be, benefit-fe | 000, 001, 003, 004, 005 | Interface only |
+| [003 Eligibility rules and synthetic data](003-eligibility-rules/spec.md) | Knowledge & data | benefit-be, benefit-fe | 000 (001 for its case page section) | Yes (rules interface) |
+| [004 Policy search and decision explanations](004-policy-search/spec.md) | Knowledge & data, Agents | benefit-be, benefit-fe | 000, 001, 002, 003* | Interface only |
 | [005 Agent tool access](005-agent-tool-access/spec.md) | Platform & UI | benefit-be | 000, 003, 004 | Yes (tool schemas) |
-| [006 Caseworker console and applicant portal](006-caseworker-applicant-portal/spec.md) | Platform & UI | benefit-fe, benefit-be | 000, 001, 003, 004, 007, 010, 011 | Yes (REST API) |
-| [007 Redeterminations](007-redeterminations/spec.md) | Workflows | benefit-be | 001, 002, 003, 005, 010, 011 | No |
-| [008 Program metrics](008-program-metrics/spec.md) | Knowledge & data, Platform & UI | benefit-be, benefit-fe | 001, 003, 006, 007, 010 | No |
-| [010 Review queue and caseworker actions](010-review-queue/spec.md) | Workflows | benefit-be | 001, 002*, 004*, 007* | Yes (review reasons and actions) |
-| [011 Applicant waits, notices and demo clock](011-applicant-waits-notices/spec.md) | Workflows | benefit-be | 000, 001, 010, 002*, 003*, 004* | Yes (notice types, timers, advance-clock signal) |
+| [007 Redeterminations](007-redeterminations/spec.md) | Workflows | benefit-be, benefit-fe | 001, 002, 003, 005, 010, 011 | No |
+| [008 Program metrics](008-program-metrics/spec.md) | Knowledge & data, Platform & UI | benefit-be, benefit-fe | 000, 001, 003, 007, 010 | No |
+| [010 Review queue and caseworker actions](010-review-queue/spec.md) | Workflows | benefit-be, benefit-fe | 001, 002*, 004*, 007* | Yes (review reasons and actions) |
+| [011 Applicant waits, notices and demo clock](011-applicant-waits-notices/spec.md) | Workflows | benefit-be, benefit-fe | 000, 001, 010, 002*, 003*, 004* | Yes (notice types, timers, advance-clock signal) |
 
 \* Built against stubs until the real implementation lands.
 
 001 was split on 2026-11-10: 010 and 011 took over the review actions, waits, notices and demo
 clock. Moved requirement IDs are listed in 001 under "Moved requirements".
+
+006 (Caseworker console and applicant portal) was retired on 2026-11-10. Its screens moved into
+the features whose operations they use, and the rules every screen follows moved to 000
+(FR-000-29 to FR-000-31). The old IDs map to the new ones in
+[006's spec](006-caseworker-applicant-portal/spec.md).
+
+**Full stack by default.** A feature with a person in its stories ships its screens with its
+backend: its stories are tested in the browser, and its target repos above include
+`benefit-fe`, so the Platform & UI lane (which owns `benefit-fe`) builds its screens as part of
+the feature. A feature whose only users are other systems (005) is backend only. The planning
+workflow checks that a feature's `scope.json` includes every target repo listed here.
 
 ## Lanes and the folders they own
 
@@ -52,7 +62,7 @@ folders; changes anywhere else go through the owning lane.
 | **Workflows** | 001, 007, 010, 011 | `apps/worker/` | none |
 | **Agents** | 002, 004 (explanations) | `packages/agents/`; extraction, explanation and agent-success evals in `evals/` | none |
 | **Knowledge & data** | 003, 004 (search), 008 (reporting store) | `packages/rag/`, `packages/rules/`, `db/` (baseline migration, `db/seeds/`), `analytics/`, `data/policy/`; retrieval evals | none |
-| **Platform & UI** | 000, 005, 006, 008 (metrics page) | `apps/api/`, `packages/mcp_servers/`, `packages/platform/`, `Makefile`, `Procfile`, `.env.example`, CI workflows; metarepo `scripts/factory/` (software factory) | whole repo |
+| **Platform & UI** | 000, 005, 008 (metrics page) | `apps/api/`, `packages/mcp_servers/`, `packages/platform/`, `Makefile`, `Procfile`, `.env.example`, CI workflows; metarepo `scripts/factory/` (software factory) | whole repo, including the screens of every full-stack feature |
 
 Shared: `packages/domain/` changes only through a contracts PR reviewed by every lane.
 Tests in `tests/` mirror the source tree and belong to the lane that owns the source folder.
@@ -129,7 +139,7 @@ definitions.
   - `tool_credential` is the case-scoped system credential the worker mints for one agent step
     (FR-000-22). Agents pass it to every tool call and never log or return it.
 - **Agent tools** (005): input and output schema for each of the 11 tools.
-- **REST API** (006): endpoint list and OpenAPI document; the UI builds against stub
+- **REST API** (each feature adds its own endpoints): endpoint list and OpenAPI document; the UI builds against stub
   responses until each endpoint is real. The OpenAPI file is committed in benefit-be (FR-000-26).
 - **Repo setup and PR template** (software factory, outside the feature specs): agent instructions, PR template fields, required checks
   and branch protection in both code repos, in place before the first feature branch.
@@ -151,7 +161,7 @@ checked against current regulation, and every spec uses them.
 | Poverty guideline, current year | $15,500 + $5,200 per additional person (annual) | 003 |
 | Policy manual | Training edition written by the team, 25–40 sections | 004 |
 | Day counting | Calendar days for every window and reminder | all |
-| Review reminder / escalation | 2 days / 4 days (escalated tasks flagged for supervisors) | 010, 006 |
+| Review reminder / escalation | 2 days / 4 days (escalated tasks flagged for supervisors) | 010 |
 | Demo time scale | 1 day = 1 minute, plus a supervisor "advance clock" action | 011, 007 |
 | Seeded years | 2 (previous and current program years) | 003 |
 | Program years | Calendar years: previous 2025, current 2026 | 003 |
@@ -161,7 +171,7 @@ checked against current regulation, and every spec uses them.
 | Pay stub recency | Dated within 45 days before receipt (or redetermination start) | 002 |
 | Mismatch threshold | More than 10% between declared, documented or source income | 002, 007 |
 | Requests for information | At most one drafted automatically per case; one 15-day extension per request | 010 |
-| Uploads | PDF, PNG or JPEG, up to 10 MB each, up to 10 files | 006 |
+| Uploads | PDF, PNG or JPEG, up to 10 MB each, up to 10 files | 002 |
 | Session length | 8 hours | 000 |
 | Metrics refresh | Every hour; every 5 minutes in the demo profile; on demand | 008 |
 
@@ -170,7 +180,7 @@ checked against current regulation, and every spec uses them.
 If the team is behind at a checkpoint, cut in this order. Every cut keeps the demo story intact.
 
 1. P3 stories: deadline visibility (001 US3) and upcoming redeterminations (007 US4,
-   FR-006-16).
+   FR-007-17).
 2. Program metrics down to four (008 assumptions).
 3. Review escalation flag at 4 days (keep the 2-day reminder).
 4. Automated accessibility check (keep accessible markup; check by hand).
@@ -236,7 +246,7 @@ before the contracts PR.
       finding (FR-002-01, FR-002-14).
 - [ ] Verification calls the identity and income sources; that check sets "identity verified"
       (FR-002-13, FR-005-12).
-- [ ] The application form fields (FR-006-07); attested facts come from it for new households
+- [ ] The application form fields (FR-001-24, was FR-006-07); attested facts come from it for new households
       (FR-003-16).
 - [ ] Evaluation runs on a household snapshot per case (FR-003-19).
 - [ ] Any failed rule means Ineligible; income over limit wins as the reason code (FR-003-20,
@@ -257,4 +267,4 @@ before the contracts PR.
       (FR-000-28); "agent success" defined with a 90% threshold (FR-002-10).
 - [ ] Metric periods, AI override rate definition, refresh interval (FR-008-01, FR-008-08).
 - [ ] New screens and actions the demo needs: AI activity, notices list, upcoming
-      redeterminations, start redetermination (FR-006-14 to FR-006-17).
+      redeterminations, start redetermination (now FR-002-20, FR-011-09, FR-007-17, FR-007-18).

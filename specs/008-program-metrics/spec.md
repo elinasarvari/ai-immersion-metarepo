@@ -13,7 +13,7 @@
 - **Lane**: Knowledge & data (reporting store); Platform & UI (metrics page)
 - **Provides**: a reporting store built from case history and a program metrics page.
 - **Depends on**: 001 (case history), 010 (review tasks), 003 (data set and expected metric values),
-  006 (console shell), 007 (redetermination outcomes).
+  000 (app shell), 007 (redetermination outcomes).
 - **Out of scope**: federal reporting file formats, real-time dashboards, exports, metrics for
   individual caseworkers.
 

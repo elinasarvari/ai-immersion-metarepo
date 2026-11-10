@@ -13,9 +13,9 @@
 - **Lane**: Workflows
 - **Provides**: the "Awaiting applicant" wait and its response deadline; configurable waiting
   periods and the demo time scale; the supervisor "advance clock" action; the catalogue of
-  notices sent to applicants; requesting and storing decision explanations. Used by 006, 007 and
-  008.
-- **Depends on**: 001 (cases, states, case history, the case clock); 010 (review reasons and
+  notices sent to applicants; requesting and storing decision explanations; the screens for
+  notices, responses and the demo clock. Used by 007 and 008.
+- **Depends on**: 001 (cases, states, case history, the case clock, the case page); 010 (review reasons and
   actions); 000 (configuration profiles, supervisor role); 002 (AI-drafted notices), 003 (the
   rule-by-rule trace, FR-003-05) and 004 (explanations), each stubbed until ready.
 - **Split from**: 001 Case lifecycle (2026-11-10). Old IDs map to new ones: FR-001-05 →
@@ -23,8 +23,7 @@
   FR-011-04, FR-001-15 → FR-011-05, FR-001-17 → FR-011-06, FR-001-14 → FR-011-07. The case clock
   itself stays in FR-001-13.
 - **Out of scope**: notice delivery outside the applicant portal, notices in languages other
-  than English, the redetermination form's own 30-day window (007), the screens that show
-  notices and the advance-clock button (006).
+  than English, the redetermination form's own 30-day window (007).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -98,6 +97,66 @@ and confirm a caseworker review task appears.
    **Then** a "Missed response deadline" review task is created and the case is not denied
    automatically.
 
+### User Story 4 - Caseworker approves notices (Priority: P1)
+
+A caseworker reviews each drafted or adverse notice on the case page, edits it if needed, and
+approves it before it reaches the applicant.
+
+**Why this priority**: No AI-drafted or adverse notice reaches an applicant without approval.
+
+**Independent Test**: In the browser, approve one draft unchanged and edit another, then sign in
+as the applicant and confirm only the approved versions appear.
+
+**Acceptance Scenarios**:
+
+1. **Given** a drafted notice, **When** the caseworker approves it unchanged, **Then** it is
+   delivered to the applicant's portal.
+2. **Given** a drafted notice, **When** the caseworker edits and approves it, **Then** the edited
+   version is delivered and both versions are kept in the case history.
+3. **Given** a favourable template notice (approval or automatic renewal), **When** it is created,
+   **Then** it is delivered without approval.
+
+---
+
+### User Story 5 - Applicant reads notices and answers requests (Priority: P1)
+
+An applicant sees the notices delivered to them and any open request for information, with what
+is needed and the due date, and responds by uploading documents and confirming details.
+
+**Why this priority**: The request-for-information journey is the core of the demo.
+
+**Independent Test**: In the browser, sign in as the demo applicant with an open request, open the
+notice, upload the requested pay stub, and confirm the case leaves "Awaiting applicant".
+
+**Acceptance Scenarios**:
+
+1. **Given** delivered notices, **When** the applicant opens their notices, **Then** each is listed
+   with its type and date and can be opened.
+2. **Given** an open request for information, **When** the applicant signs in, **Then** they see
+   what is needed and the due date, and can respond by uploading documents and confirming
+   details; the case then leaves "Awaiting applicant" (FR-011-03).
+
+---
+
+### User Story 6 - Supervisor advances the demo clock (Priority: P1)
+
+In the demo profile, a supervisor presses "Advance clock" on a case page to fire its next pending
+wait.
+
+**Why this priority**: The 3-minute demo depends on it (SC-011-01).
+
+**Independent Test**: In the browser with the demo profile on, sign in as a supervisor, advance
+the clock on a case awaiting the applicant, and confirm the missed-deadline review task appears;
+sign in as a caseworker and confirm there's no button.
+
+**Acceptance Scenarios**:
+
+1. **Given** the demo profile is on and a case has a pending wait, **When** a supervisor presses
+   "Advance clock" on the case page, **Then** the wait fires and the history records the demo
+   action.
+2. **Given** a caseworker, or the demo profile is off, **When** they open a case, **Then** no
+   "Advance clock" button is shown.
+
 ### Edge Cases
 
 - The applicant responds after the deadline but before a caseworker acts: the response is
@@ -147,6 +206,18 @@ and confirm a caseworker review task appears.
   it MUST retry later without delaying the decision. An adverse notice waits for the applicant
   explanation; if it is still unavailable after the retry limit, the notice uses the
   rule-by-rule trace (FR-003-05) as its explanation and the review task says so.
+- **FR-011-08**: AI-drafted and adverse notices MUST be delivered only after a caseworker approves
+  them from the case page. The caseworker may edit before approving, and both the edited and the
+  original versions are kept. Favourable template notices are delivered directly. (Was
+  FR-006-06.)
+- **FR-011-09**: Applicants MUST see a list of the notices delivered to them, with type and date,
+  and be able to open each one. (Was FR-006-15.)
+- **FR-011-10**: When an applicant signs in, the portal MUST show each open request for information
+  with what is needed and its due date, and let them respond by uploading documents (FR-002-17)
+  and confirming details. (Was FR-006-03, requests part, and FR-006-08, request part.)
+- **FR-011-11**: In the demo profile only, supervisors MUST be able to advance a case's clock
+  (FR-011-05) from the case page; the button is not shown to other roles or outside the demo
+  profile. (Was FR-006-13.)
 
 ### Key Entities
 

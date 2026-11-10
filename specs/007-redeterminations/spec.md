@@ -11,9 +11,9 @@
 ## Lane & Dependencies
 
 - **Lane**: Workflows
-- **Provides**: the yearly redetermination process for every enrolled household. Used by 006
-  (applicant view) and 008 (metrics).
-- **Depends on**: 001 (case lifecycle), 010 (review tasks), 011 (notices, demo clock), 002 (verification and
+- **Provides**: the yearly redetermination process for every enrolled household, and its screens
+  for caseworkers and applicants. Used by 008 (metrics).
+- **Depends on**: 001 (case lifecycle, the case page), 010 (review tasks), 011 (notices, demo clock), 002 (verification and
   renewal form drafting), 003 (rules, data set), 005 (verification sources). 002 and 005 are
   stubbed until ready.
 - **Out of scope**: mid-period change reporting, appeals, the reconsideration period after
@@ -86,13 +86,55 @@ Caseworkers can see households whose redeterminations start in the next 30 days.
 
 **Why this priority**: Helps planning; feeds metrics.
 
-**Independent Test**: List upcoming redeterminations for the seeded data and compare with
-expected.
+**Independent Test**: In the browser, open the upcoming redeterminations page as a caseworker for
+the seeded data and compare the list with the expected households.
 
 **Acceptance Scenarios**:
 
-1. **Given** seeded households, **When** the caseworker views upcoming redeterminations, **Then**
-   households starting in the next 30 days are listed with their coverage end dates.
+1. **Given** seeded households, **When** the caseworker opens the upcoming redeterminations page,
+   **Then** households starting in the next 30 days are listed with their coverage end dates, each
+   linking to its household page.
+
+### User Story 5 - Applicant responds to a renewal (Priority: P1)
+
+An applicant whose redetermination needs something from them sees what to confirm and by when,
+confirms or corrects the pre-filled details, and uploads pay stubs.
+
+**Why this priority**: Without a way to respond, every renewal that needs one document ends in
+review; this is one of the demo journeys.
+
+**Independent Test**: In the browser, sign in as the demo applicant whose renewal needs one
+document, confirm the details, upload a pay stub, and confirm the redetermination continues and
+renews.
+
+**Acceptance Scenarios**:
+
+1. **Given** an applicant with a redetermination waiting for them, **When** they sign in, **Then**
+   they see what they need to confirm, if anything, and the deadline.
+2. **Given** the renewal form, **When** the applicant confirms or corrects the pre-filled household
+   members, jobs and income and uploads pay stubs, **Then** a new household snapshot is created
+   and the redetermination continues.
+
+---
+
+### User Story 6 - Start a redetermination on demand (Priority: P2)
+
+A caseworker or supervisor opens a household page and starts its redetermination, for demos and
+catch-up.
+
+**Why this priority**: The demo can't wait for the daily schedule.
+
+**Independent Test**: In the browser, open a household with active coverage as a supervisor, press
+"Start redetermination", follow the link to the new case, then press it again and confirm no
+second redetermination starts.
+
+**Acceptance Scenarios**:
+
+1. **Given** a household with active coverage, **When** a caseworker or supervisor presses "Start
+   redetermination" on its household page, **Then** a redetermination opens and the page links to
+   it.
+2. **Given** a redetermination already running for that coverage period, **When** the button is
+   pressed again, **Then** no second one starts and the page links to the running one.
 
 ### Edge Cases
 
@@ -148,6 +190,15 @@ expected.
 - **FR-007-16**: An applicant's redetermination response MUST let them confirm or correct the
   pre-filled items (household members, jobs and income) and upload pay stubs; it creates a new
   household snapshot for the case (FR-003-19).
+- **FR-007-17**: The caseworker console MUST have an upcoming redeterminations page listing the
+  households whose redeterminations start in the next 30 days, with their coverage end dates
+  (FR-007-09). (Was FR-006-16.)
+- **FR-007-18**: Caseworkers and supervisors MUST be able to open a household page (members,
+  coverage periods and cases) and start the household's redetermination from it (FR-007-10).
+  When one is already running for the period, the page links to it instead. (Was FR-006-17.)
+- **FR-007-19**: When an applicant signs in with a redetermination waiting for them, the portal
+  MUST show what they need to confirm, if anything, and the deadline, and let them respond as in
+  FR-007-16, uploading pay stubs with FR-002-17. (Was FR-006-08, redetermination part.)
 
 ### Key Entities
 
