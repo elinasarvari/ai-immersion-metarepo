@@ -128,6 +128,12 @@ class Gates(WfCase):
         self.assertEqual((data["feature_dir"], data["branch"], data["open"]), (FD, "feature/010-demo", 1))
         self.assertTrue((self.root / ".specify" / "feature.json").exists())
 
+    def test_prepare_accepts_number_folder_name_or_path(self):
+        for arg in ("010", "010-demo", "specs/010-demo"):
+            with self.subTest(arg):
+                code, data, _ = self.wf("prepare", arg, "ask", "strict")
+                self.assertEqual((code, data.get("feature_dir")), (0, FD), data)
+
     def test_prepare_rejects_bad_inputs_and_bad_spec(self):
         self.assertEqual(self.wf("prepare", "010", "yolo", "strict")[0], 1)
         self.assertEqual(self.wf("prepare", "999", "draft", "strict")[0], 1)
@@ -426,6 +432,72 @@ class WorkflowFile(unittest.TestCase):
                 "print(chr(10).join(errs)); sys.exit(1 if errs else 0)")
         r = subprocess.run([str(py), "-c", code, str(WF.parents[1] / "workflow.yml")], capture_output=True, text=True)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+
+WATCH = WF.parent / "watch.py"
+RUN_SH = WF.parents[1] / "run.sh"
+
+
+class Monitor(unittest.TestCase):
+    """scripts/watch.py (the live view) and run.sh (the entry point)."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        (self.root / "specs" / "010-demo").mkdir(parents=True)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def run_dir(self, status, events, current, results=None):
+        d = self.root / ".specify" / "workflows" / "runs" / "abc12345"
+        d.mkdir(parents=True, exist_ok=True)
+        t = "2026-11-10T18:00:0{}+00:00"
+        (d / "log.jsonl").write_text("\n".join(json.dumps(dict(e, timestamp=t.format(i % 10)))
+                                               for i, e in enumerate(events)))
+        (d / "state.json").write_text(json.dumps({"status": status, "current_step_id": current,
+                                                  "created_at": t.format(0), "step_results": results or {}}))
+        (d / "inputs.json").write_text(json.dumps({"inputs": {"feature": "010-demo", "pr_mode": "ask"}}))
+        return d
+
+    def watch(self):
+        r = subprocess.run([sys.executable, str(WATCH), "abc12345", "--once"], capture_output=True, text=True,
+                           env={**os.environ, "WF_ROOT": str(self.root)})
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return r.stdout
+
+    def test_every_top_level_step_of_the_workflow_has_a_stage(self):
+        import re
+        ids = re.findall(r"^  - id: (\w+)", (WF.parents[1] / "workflow.yml").read_text(), re.M)
+        sys.path.insert(0, str(WATCH.parent))
+        import watch
+        self.assertEqual(ids, [s[0] for s in watch.STAGES], "watch.STAGES is out of step with workflow.yml")
+
+    def test_a_failed_run_shows_where_why_and_how_to_continue(self):
+        ev = lambda e, sid, **k: {"event": e, "step_id": sid, **k}
+        self.run_dir("failed", [ev("step_started", "sync"), ev("step_completed", "sync", status="completed"),
+                                ev("step_started", "architect"), ev("step_failed", "architect", error="Prompt exited with code 1")],
+                     "architect", {"architect": {"status": "failed", "error": "Prompt exited with code 1",
+                                                 "output": {"stderr": "Permission denied for Write"}}})
+        out = self.watch()
+        self.assertRegex(out, r"✓ .*Sync the repos")
+        self.assertRegex(out, r"✗ .*Architect")
+        self.assertIn("Stopped at 'architect'", out)
+        self.assertIn("Permission denied for Write", out)
+        self.assertIn("run.sh resume abc12345", out)
+
+    def test_a_paused_run_shows_the_gate_and_its_verdict_input(self):
+        self.run_dir("paused", [{"event": "step_started", "step_id": "pr_approval"},
+                                {"event": "step_started", "step_id": "pr_approval:approve_pr"}], "approve_pr")
+        out = self.watch()
+        self.assertIn("Waiting for you at 'approve_pr'", out)
+        self.assertIn("-i pr_verdict=approve", out)
+
+    def test_run_sh_parses_and_shows_usage(self):
+        self.assertEqual(subprocess.run(["bash", "-n", str(RUN_SH)]).returncode, 0)
+        r = subprocess.run(["bash", str(RUN_SH)], capture_output=True, text=True)
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("run.sh start", r.stdout)
 
 
 if __name__ == "__main__":

@@ -12,8 +12,10 @@ Runs [workflows/benefit-feature/workflow.yml](../../workflows/benefit-feature/wo
 The spec must already exist (write it with `/speckit-specify` first). Ask which `pr_mode` the user wants unless they said; starting with `pr_mode=draft` is their approval to push draft PRs.
 
 ```bash
-specify workflow run workflows/benefit-feature/workflow.yml -i feature=<NNN> [-i pr_mode=draft|ask|none] [-i trace_mode=strict|warn] [-i decision_mode=auto|ask] --json < /dev/null
+workflows/benefit-feature/run.sh start <NNN> [draft|ask|none] [-i trace_mode=strict|warn] [-i decision_mode=auto|ask] < /dev/null
 ```
+
+Always use `run.sh`, never `specify workflow run` directly: it runs the preflight, puts the clones on an up-to-date `main` (or stops with the reason), and passes `.claude/settings.json` to every agent step with `--settings`, which works even if the folder was never trusted. Without it, agent steps can't write and end with "Prompt exited with code 1". Tell the user they can follow the run live with `workflows/benefit-feature/run.sh watch` in a second terminal.
 
 Note the `run_id`. Never pass a `*_verdict` input when starting. `decision_mode=auto` (the default) lets the decision-maker agent settle open ADRs; tell the user the draft PRs list each one for review. Use `ask` only if they want to decide themselves.
 
@@ -25,11 +27,11 @@ Note the `run_id`. Never pass a `*_verdict` input when starting. `decision_mode=
 | `approve_decisions` | only with `decision_mode=ask`: an ADR is `Needs decision` or needs an amendment | `decisions/README.md` | `decision_verdict` |
 | `approve_pr` | `pr_mode=ask` | `review/verify.md`, `review/trace.md`, the diff | `pr_verdict` |
 
-Help the user answer (edit `spec.md`, or record the ADR answer per `architecture-decision` step 9). Only after their explicit answer: `specify workflow resume <run_id> -i <input>=approve|reject --json < /dev/null`. Never answer for them, and never use one gate's input for another.
+Help the user answer (edit `spec.md`, or record the ADR answer per `architecture-decision` step 9). Only after their explicit answer: `workflows/benefit-feature/run.sh resume <run_id> -i <input>=approve|reject < /dev/null`. Never answer for them, and never use one gate's input for another.
 
 ## Failures
 
-`specify workflow status <run_id>` names the failed step; its JSON output lists `problems`. Fix, then `specify workflow resume <run_id> --json < /dev/null`.
+`python3 workflows/benefit-feature/scripts/watch.py <run_id> --once` shows every stage, the failed step, its last output and the usual cause (`run.sh status <run_id>` gives the engine's own view; always pass the id, since without one it lists every run). Fix, then `workflows/benefit-feature/run.sh resume <run_id> < /dev/null`.
 
 | Step | Usually means |
 |---|---|
@@ -39,4 +41,4 @@ Help the user answer (edit `spec.md`, or record the ADR answer per `architecture
 | `final_gate` | still blocking after 3 rounds (a failing job, an open task, a missing or skipped planned test, a file outside its lane, or a review finding); see `review/verify.md` |
 | `ci` | GitHub Actions failed on a PR |
 
-AI steps run as `claude -p`, up to four at once, using the user's permission settings. If one fails on a permission, say which; don't change settings yourself.
+AI steps run as `claude -p`, up to four at once, with the permissions in `.claude/settings.json` (passed by `run.sh`). If one fails on a permission, say which command was refused and suggest the allow rule; don't change settings yourself.

@@ -3,7 +3,8 @@
 One command takes an approved spec to draft pull requests in `benefit-be` and `benefit-fe`. Separate agents plan, decide, build and review; scripts check every step; you're asked only when automation can't decide, and you review the result on the draft PRs.
 
 ```bash
-specify workflow run workflows/benefit-feature/workflow.yml -i feature=003   # or /feature-workflow in chat
+workflows/benefit-feature/run.sh start 003 ask    # or /feature-workflow in chat
+workflows/benefit-feature/run.sh watch            # live progress, in a second terminal
 ```
 
 A designed version of this page is published as an artifact: [Benefits Feature Pipeline](https://claude.ai/artifact/M1L7pdUf9uMiZK6A2LhJ94) (private; share it from the page's Share menu). This file is the source of truth; update it when the workflow changes.
@@ -181,21 +182,28 @@ With the defaults (`decision_mode=auto`, `pr_mode=draft`), your review happens o
 
 ## 7. Running it
 
+Always go through `run.sh`. It checks the machine, prepares the repos, and gives every agent step its permissions before handing over to the engine.
+
 ```bash
-# once
-gh auth login                       # and clone both repos into repos/ (/clone-repo)
-
-# build spec 003 (from a terminal, gates ask you directly)
-specify workflow run workflows/benefit-feature/workflow.yml -i feature=003
-specify workflow run workflows/benefit-feature/workflow.yml -i feature=003 -i pr_mode=none   # rehearsal
-
-# follow it
-specify workflow status <run-id>    # which step, and why it stopped
-specify workflow resume <run-id>    # after fixing a failed check
-specify workflow resume <run-id> -i decision_verdict=approve
+R=workflows/benefit-feature/run.sh
+$R check                       # preflight only: tools, gh login, permissions file, repos (changes nothing)
+$R start 003 ask               # start; pr_mode draft (default) | ask | none (rehearsal)
+$R watch                       # live view of the latest run (second terminal); Ctrl+C stops watching only
+$R status                      # the engine's own summary of the latest run
+$R resume                      # continue the latest run after fixing what stopped it
+$R resume <run-id> -i pr_verdict=approve      # answer a gate, only after you decided
 ```
 
-AI steps run unattended (`claude -p`, up to four at once), so they can't ask permission: allow the scripts, `git`, `make`, `uv`, `pnpm`, `python3` and `gh` in your Claude Code settings first. The engine runs Claude Code; Copilot users follow the same stages by hand from [workflows/feature.md](../workflows/feature.md).
+**What `start` does before the engine runs:**
+- checks that `specify`, `claude`, `git`, `gh` (logged in, unless `pr_mode=none`), `uv`, `pnpm` and `make` are installed, and that `.claude/settings.json` is valid
+- puts each clone on an up-to-date `main`: it switches a clean clone that has nothing unpushed, fast-forwards it to `origin/main`, and stops with the reason for anything else
+- passes `.claude/settings.json` to every `claude -p` step with `--settings` (through `SPECKIT_INTEGRATION_CLAUDE_EXTRA_ARGS`)
+
+AI steps run unattended, so they can't ask for permission. Claude Code applies a project's `.claude/settings.json` on its own only after someone trusts the folder interactively; passing it with `--settings` works without that, on any machine. Starting the engine directly, without `run.sh`, skips all three checks, and an agent step then typically ends with "Prompt exited with code 1" and writes nothing.
+
+**`watch`** shows each stage (✓ done, ▶ running, ✗ failed, ⏸ waiting for you, – not needed, · not started) with its duration, the agent sessions running now, what each agent has produced (`plan.md`, ADRs, tasks done, test cases, verify results, PR links) and, when the run stops, the failed step, its last output, the usual cause and the exact command to continue. It only reads files.
+
+The engine runs Claude Code; Copilot users follow the same stages by hand from [workflows/feature.md](../workflows/feature.md).
 
 ## 8. Where things live
 
@@ -204,7 +212,9 @@ ai-immersion-metarepo/
 ├── docs/workflow-architecture.md      this page
 ├── workflows/
 │   ├── feature.md                     the stages, and the manual path
+│   ├── benefit-feature/run.sh         start, resume, watch, check (use this)
 │   ├── benefit-feature/workflow.yml   the pipeline
+│   ├── benefit-feature/scripts/watch.py  live progress view
 │   ├── benefit-feature/scripts/wf.py  every check
 │   └── benefit-feature/tests/         tests for every check + workflow.yml validation
 ├── agents/

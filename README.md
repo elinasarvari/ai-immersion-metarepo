@@ -88,8 +88,9 @@ Full explanation with architecture and pipeline diagrams: [docs/workflow-archite
 Write the spec (`/speckit-specify`), then build it end to end:
 
 ```bash
-specify workflow run workflows/benefit-feature/workflow.yml -i feature=003            # or /feature-workflow in chat
-specify workflow status <run-id>      ·      specify workflow resume <run-id> [-i <gate>_verdict=approve]
+workflows/benefit-feature/run.sh start 003 ask   # preflight, repos on main, agent permissions, then the run (or /feature-workflow)
+workflows/benefit-feature/run.sh watch           # live progress in a second terminal
+workflows/benefit-feature/run.sh resume          # continue after fixing what stopped it   ·   run.sh check = preflight only
 ```
 
 ```

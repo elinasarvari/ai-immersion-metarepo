@@ -170,7 +170,12 @@ def prepare(feature, pr_mode, trace_mode, decision_mode="auto"):
         problems.append(f"pr_mode must be draft, ask or none, got '{pr_mode}'")
     if trace_mode not in ("strict", "warn"):
         problems.append(f"trace_mode must be strict or warn, got '{trace_mode}'")
-    cands = [ROOT / feature] if "/" in feature else sorted((ROOT / "specs").glob(f"{feature}-*"))
+    if "/" in feature:  # specs/001-case-lifecycle
+        cands = [ROOT / feature]
+    elif (ROOT / "specs" / feature).is_dir():  # 001-case-lifecycle
+        cands = [ROOT / "specs" / feature]
+    else:  # 001
+        cands = sorted((ROOT / "specs").glob(f"{feature}-*"))
     cands = [c for c in cands if (c / "spec.md").exists()]
     if len(cands) != 1:
         out({"problems": problems + [f"expected one spec folder for '{feature}' with spec.md, found {len(cands)}"]},
