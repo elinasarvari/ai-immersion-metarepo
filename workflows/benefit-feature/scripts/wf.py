@@ -627,17 +627,23 @@ def jobs(d, trace_mode):
     out({"jobs": js})
 
 
-def run_in_repo(repo, cmd, res, log_file):
-    """Runs cmd in the repo; sets res status/tail and writes the log.
+def run_in_repo(repo, cmd, res, log_file, stage=None):
+    """Runs cmd in the repo; sets res status/tail and writes the log. `stage`: the repos whose working tree the
+    command checks against git (default: just this one; e2e's `make verify` checks both).
 
     The loop commits nothing, so a check that diffs a generated file against git (openapi-check's
     `git diff --exit-code`) would fail every round. Stage the working tree for the command, then put the index back
     exactly as it was: the diff then means "regenerating changed something". No GIT_INDEX_FILE is exported,
     because tests that make their own git repos would inherit it."""
-    idx_path = (git(repo, "rev-parse", "--path-format=absolute", "--git-path", "index") or "").strip()
-    idx = Path(idx_path) if idx_path else None
-    saved = idx.read_bytes() if idx and idx.exists() else None
-    git(repo, "add", "-A")
+    saved = {}
+    for rp in stage or [repo]:
+        if not (repo_dir(rp) / ".git").exists():
+            continue
+        idx_path = (git(rp, "rev-parse", "--path-format=absolute", "--git-path", "index") or "").strip()
+        if idx_path:
+            idx = Path(idx_path)
+            saved[idx] = idx.read_bytes() if idx.exists() else None
+            git(rp, "add", "-A")
     try:
         r = subprocess.run(cmd, shell=True, cwd=repo_dir(repo), capture_output=True, text=True, timeout=3600)
         res["status"] = "pass" if r.returncode == 0 else "fail"
@@ -645,10 +651,11 @@ def run_in_repo(repo, cmd, res, log_file):
     except subprocess.TimeoutExpired:
         res["status"], log = "fail", "timed out after 3600s"
     finally:
-        if idx and saved is not None:
-            idx.write_bytes(saved)
-        elif idx and idx.exists():
-            idx.unlink()
+        for idx, data in saved.items():
+            if data is not None:
+                idx.write_bytes(data)
+            elif idx.exists():
+                idx.unlink()
     log_file.write_text(log)
     res["tail"] = log[-2000:]
 
@@ -680,7 +687,7 @@ def job(d, name):
             res.update(status="warn", problems=["repos/benefit-be has no 'verify' target, so e2e didn't run"])
         else:
             res["cmd"] = "make verify"
-            run_in_repo("benefit-be", "make verify", res, jd / "e2e.log")
+            run_in_repo("benefit-be", "make verify", res, jd / "e2e.log", stage=REPOS)
     else:
         res.update(status="fail", problems=[f"unknown job '{name}'"])
     (jd / f"{name.replace(':', '-')}.json").write_text(json.dumps(res, indent=2))
