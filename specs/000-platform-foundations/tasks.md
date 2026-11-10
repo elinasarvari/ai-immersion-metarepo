@@ -676,7 +676,7 @@ description: "Task list for 000 Platform Foundations"
 - [ ] T150 Run the whole of [quickstart.md](quickstart.md) §1–§10 on a clean Mac account, and time §1 against SC-000-01 (under 30 min). Search the Phoenix traces for planted synthetic personal data for SC-000-09, and check a client error against its log line for SC-000-05 (under 1 min). [PUI]
 - [X] T151 Run the `review-changes` skill on both branches: backend and frontend reviewers plus all four lane agents. Fix every rule violation it reports. [PUI]
 - [X] T152 Write `specs/000-platform-foundations/handoff.md` from the template in `specs/README.md`, and tick the completed tasks in this file. List the open people inputs P1–P4 from [plan.md](plan.md). [PUI]
-- [ ] T153 Open the linked PRs in `benefit-be` and `benefit-fe` with the `create-pr` skill. Each PR lists every `FR-000-xx` it covers and the OpenAPI change (PL-3). [PUI]
+- [X] T153 Open the linked PRs in `benefit-be` and `benefit-fe` with the `create-pr` skill. Each PR lists every `FR-000-xx` it covers and the OpenAPI change (PL-3). [PUI]
 
 ---
 

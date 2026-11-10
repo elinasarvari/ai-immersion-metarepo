@@ -71,7 +71,7 @@ git create-pr <repo-name> --branch feature/<NNN-feature> --message "<conventiona
 
 `git create-pr` is a git alias for `skills/create-pr/create-pr.sh`, defined in the committed `.gitconfig`. Enable it once per clone of the metarepo with `git config --local include.path ../.gitconfig`.
 
-- It runs inside `repos/<name>` and pushes to that clone's own `origin`, then opens a PR against `main` with `gh` (requires `gh auth login`; with `--no-pr` it only pushes and prints the compare link).
+- It runs inside `repos/<name>` and pushes to that clone's own `origin`, then opens a PR against `main`: with `gh` if it is logged in, otherwise through GitHub's API with the token git already uses. With `--no-pr` it only pushes and prints the compare link.
 - Branch name = Spec Kit feature folder name with a type prefix (`feature/003-user-login`). Use the same branch in every repo the feature touches, with one PR per repo, and link the PRs to each other.
 - Confirm the repo, branch, files and PR title with the user before pushing. Never push to `main`, force-push or skip hooks.
 - The metarepo commits only its own files (`specs/`, feature 009's `scripts/factory/`, `templates/`, rules and skills), never the clones. After the PRs merge, fast-forward the clones with `sync-repos.sh`.

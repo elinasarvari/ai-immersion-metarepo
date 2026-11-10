@@ -9,7 +9,8 @@
 # - repos/<name> is a plain git clone (git-ignored by the metarepo, made by clone-repo.sh).
 # - Pushes to that clone's own `origin`, so code always lands in the right repository.
 # - Never pushes to the base branch and never force-pushes.
-# - Checks `gh` is logged in before pushing anything, unless --no-pr is given.
+# - Opens the PR with gh if it is logged in, otherwise with GitHub's API and the token git already
+#   uses for this remote (no `gh auth login` needed). Checks this before pushing anything.
 # - With --no-pr, or after pushing, prints the compare URL so a PR can be opened in the browser.
 set -euo pipefail
 
@@ -49,9 +50,17 @@ echo "Repository: repos/$name -> $remote_url"
 # owner/repo, for the compare URL and for gh
 slug="$(printf '%s' "$remote_url" | sed -E 's#^(https?://[^/]+/|git@[^:]+:|ssh://git@[^/]+/)##; s#\.git$##')"
 
+# Open the PR with gh when it is logged in, otherwise with GitHub's API and the token git
+# already uses for this remote (github_api.py). Check before pushing anything.
+pr_tool=""
 if [ -z "$no_pr" ]; then
-  command -v gh >/dev/null || die "gh CLI not found; install it, or pass --no-pr to only push"
-  gh auth status >/dev/null 2>&1 || die "gh is not logged in; run 'gh auth login', or pass --no-pr to only push"
+  case "$remote_url" in *github.com*) ;; *) die "origin is not on GitHub; pass --no-pr to only push" ;; esac
+  if command -v gh >/dev/null && gh auth status >/dev/null 2>&1; then
+    pr_tool="gh"
+  else
+    python3 "$script_dir/github_api.py" check "$slug" || die "can't open PRs: log in with 'gh auth login', or pass --no-pr to only push"
+    pr_tool="api"
+  fi
 fi
 
 git fetch origin "$base" --quiet || die "could not fetch origin/$base"
@@ -94,6 +103,11 @@ if [ -n "$no_pr" ]; then
     *github.com*) echo "Pushed $branch (PR creation skipped). Open it here: https://github.com/$slug/compare/$base...$branch?expand=1" ;;
     *) echo "Pushed $branch (PR creation skipped)." ;;
   esac
+  exit 0
+fi
+
+if [ "$pr_tool" = "api" ]; then
+  python3 "$script_dir/github_api.py" create "$slug" "$base" "$branch" "${title:-$message}" "$body_file" "${draft:+1}"
   exit 0
 fi
 

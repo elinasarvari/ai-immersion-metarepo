@@ -11,7 +11,7 @@ description: Create a feature branch, commit, push and open a pull request again
 
 1. **Find the target repo(s).** List the clones with `ls repos/`, then run `git -C repos/<name> status --short` and `git -C repos/<name> log --oneline origin/main..HEAD` for each. Only repos with changes or unpushed commits get a PR. If the feature's `specs/<NNN-feature>/plan.md` names target repos, they must match.
 2. **Pick the branch name.** Default to the Spec Kit feature name (the `specs/` folder, e.g. `003-user-login`), prefixed by type: `feature/003-user-login` (or `fix/…`). Use the **same branch name in every repo** touched by one feature.
-3. **Check `gh`.** Run `gh auth status`. If it isn't logged in, ask the user to run `gh auth login` (it is interactive, so you can't do it for them), or use `--no-pr`: the script then pushes and prints the GitHub compare link for opening the PR in the browser.
+3. **No `gh` login needed.** The script opens the PR with `gh` when `gh` is logged in, and otherwise with GitHub's API (`github_api.py`) using the same token `git push` already uses (from the git credential helper, never printed). If neither works, it stops before pushing. Use `--no-pr` to only push and print the compare link.
 4. **Write the commit message and PR body.**
    - Commit: Conventional Commits, e.g. `feat(login): add password reset flow`.
    - PR body: use the target repo's `.github/pull_request_template.md` if it has one, otherwise `templates/github/pull_request_template.md` from the metarepo. Fill every section (Summary from `spec.md`, the spec path, How to test with the commands you ran and their results, sibling PRs for multi-repo features), tick only the checklist items that are actually true, delete sections that don't apply, and remove the `<!-- -->` hints. Write it to a temporary file (scratchpad or temp dir, not in the repo).
@@ -30,13 +30,13 @@ description: Create a feature branch, commit, push and open a pull request again
 
    The script:
    1. Checks that `repos/<name>` is a git clone with an `origin`.
-   2. Checks that `gh` is installed and logged in, unless `--no-pr`. It stops before pushing anything if not.
+   2. Unless `--no-pr`, checks that it can open PRs (logged-in `gh`, or a git credential that can push to the repo). It stops before pushing anything if not.
    3. Fetches `origin/main`, then creates or switches to the branch, carrying any uncommitted changes.
    4. Commits the changes. It refuses to commit `.env`, keyfiles, `.pem` or `id_rsa` files, and runs `gitleaks protect --staged` when gitleaks is installed.
-   5. Pushes with upstream, then runs `gh pr create --base main`. With `--no-pr` it prints the compare link instead.
+   5. Pushes with upstream, then opens the PR against `main` (or reports the one already open). With `--no-pr` it prints the compare link instead.
 
    Re-running on the same branch adds a new commit and updates the open PR.
-7. **Multi-repo features:** after all PRs exist, edit each PR body to link its siblings (`gh pr edit <url> --body-file …`).
+7. **Multi-repo features:** after all PRs exist, edit each PR body to link its siblings: `gh pr edit <url> --body-file …`, or without `gh`, `python3 skills/create-pr/github_api.py edit-body <owner/repo> <number> <body-file>`.
 8. **Report** the PR URL(s), or the compare links when `--no-pr` was used.
 
 ## Rules

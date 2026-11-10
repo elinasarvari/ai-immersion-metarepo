@@ -24,7 +24,7 @@ The database is **MongoDB only** (draft constitution 2.0.0, research R27). `.spe
 
 ## CI on GitHub (2026-11-09)
 
-- Both branches are pushed. CI also runs on pushes to `feature/**`, so it runs without a PR.
+- Both branches are pushed, and the PRs are open: elinasarvari/benefit-be#1 and elinasarvari/benefit-fe#1. CI also runs on pushes to `feature/**`, so it runs without a PR.
 - benefit-be: all 6 jobs green in 2m50s. benefit-fe: all 4 jobs green in 1m25s (SC-000-08: under 15 minutes).
 - Gate check (T120): a throwaway benefit-be branch with a lint error, a failing test and an undocumented route failed `static`, `unit` and `contract` as intended. The branch is deleted.
 - Merge the two PRs together. Until benefit-fe's PR merges, any benefit-be branch without a same-named benefit-fe branch fails `e2e`, because benefit-fe `main` is still the old npm scaffold (and the same in reverse).
@@ -42,4 +42,4 @@ The database is **MongoDB only** (draft constitution 2.0.0, research R27). `.spe
 
 ## Next task
 
-Open the two linked PRs (T153; needs `gh auth login`, or use the compare links). T150 (the full quickstart on a clean Mac account, timing section 1) is also still to do; sections 2 to 5 and 7 were exercised by hand and by tests.
+PRs are open and linked: elinasarvari/benefit-be#1 and elinasarvari/benefit-fe#1. Merge them together after review. T150 (the full quickstart on a clean Mac account, timing section 1) is also still to do; sections 2 to 5 and 7 were exercised by hand and by tests.
