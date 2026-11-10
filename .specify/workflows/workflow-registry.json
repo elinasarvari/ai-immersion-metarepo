@@ -8,6 +8,14 @@
       "source": "bundled",
       "installed_at": "2026-11-09T17:08:09.953255+00:00",
       "updated_at": "2026-11-09T17:08:09.953263+00:00"
+    },
+    "lane-chain": {
+      "name": "Benefits Case lane chain",
+      "version": "0.2.0",
+      "description": "One lane inside benefit-feature: implement the lane's tasks (tests first) \u2192 run the lane's unit tests \u2192 fix (up to 2 rounds). Runs in parallel with the other lanes; started by benefit-feature, not by hand.",
+      "source": "workflows/lane-chain",
+      "installed_at": "2026-11-10T18:32:45.214389+00:00",
+      "updated_at": "2026-11-10T18:32:45.215916+00:00"
     }
   }
 }

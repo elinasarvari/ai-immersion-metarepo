@@ -105,7 +105,11 @@ def changed_files(repo: str):
 
 
 def spec_frs(d: Path):
-    return sorted({f"FR-{a}-{b}" for a, b in FR_RE.findall(read(d / "spec.md"))})
+    """The feature's own requirements (FR-<NNN>-xx for specs/<NNN>-name). IDs of other specs that
+    spec.md only refers to belong to those specs, so tasks, test plan and trace don't need them."""
+    own = re.match(r"(\d{3})-", d.name)
+    return sorted({f"FR-{a}-{b}" for a, b in FR_RE.findall(read(d / "spec.md"))
+                   if own is None or a == own.group(1)})
 
 
 # ---------------------------------------------------------------------------------------------------

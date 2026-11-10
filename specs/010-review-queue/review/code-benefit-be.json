@@ -1,0 +1,18 @@
+{
+  "blocking": 0,
+  "verdict": "PASS",
+  "round": 4,
+  "counts": {"critical": 0, "major": 0, "minor": 9},
+  "resolved": ["CR-BE-1", "CR-BE-2", "CR-BE-3", "CR-BE-4", "CR-BE-10"],
+  "findings": [
+    {"id": "CR-BE-5", "severity": "minor", "file": "benefit-be:apps/worker/workflows/review.py", "line": 416, "rule": "correctness", "summary": "Deferred signals are re-queued behind later arrivals, which breaks arrival order."},
+    {"id": "CR-BE-6", "severity": "minor", "file": "benefit-be:apps/worker/workflows/review.py", "line": 408, "rule": "correctness", "summary": "An action for an unknown task is dropped without a rejected record."},
+    {"id": "CR-BE-7", "severity": "minor", "file": "benefit-be:apps/worker/workflows/review.py", "line": 170, "rule": "correctness", "summary": "extend_15_days is unlimited when the task has no request_id ref."},
+    {"id": "CR-BE-8", "severity": "minor", "file": "benefit-be:packages/domain/review.py", "line": 125, "rule": "correctness", "summary": "A reason made only of whitespace passes the reason_required check."},
+    {"id": "CR-BE-9", "severity": "minor", "file": "benefit-be:db/migrations/versions/0002_review_queue.py", "line": 194, "rule": "design", "summary": "The unique action_id index duplicates _id."},
+    {"id": "CR-BE-11", "severity": "minor", "file": "benefit-be:apps/worker/workflows/review.py", "line": 167, "rule": "correctness", "summary": "dismiss_finding accepts a finding_id that is not among the task's finding evidence refs."},
+    {"id": "CR-BE-12", "severity": "minor", "file": "benefit-be:apps/worker/repositories/caseworker_actions.py", "line": 77, "rule": "correctness/temporal", "summary": "Permanent Mongo errors (DuplicateKeyError, a validator WriteError) are retryable, so they loop hourly instead of holding the case. Intentionally deferred."},
+    {"id": "CR-BE-13", "severity": "minor", "file": "benefit-be:apps/worker/workflows/review.py", "line": 302, "rule": "temporal/determinism", "summary": "alongside uses asyncio.wait, which the SDK documents as non-deterministic (it uses sets). It is safe only because the result is not iterated. Use workflow.wait instead."},
+    {"id": "CR-BE-14", "severity": "minor", "file": "benefit-be:apps/worker/workflows/review.py", "line": 307, "rule": "temporal/cancellation", "summary": "finally cancels the loop and main tasks without awaiting them, so on a workflow cancel or host error the run finishes before the children run their cancellation or cleanup. Await them after cancelling, and document that hosts must return only when review.idle."}
+  ]
+}
