@@ -1,0 +1,6 @@
+[
+  {"adr": "ADR-001-04", "kind": "amendment", "chosen": "Option B", "recommended": "Option B",
+   "revisit_if": "The team amends TW-5 to allow updates with a validator and a spike confirms updates work on the installed Temporal dev server."},
+  {"adr": "ADR-001-05", "kind": "scope", "chosen": "Option A", "recommended": "Option A",
+   "revisit_if": "006 is scheduled to merge with or before 001, or the team rules that features must keep the lanes in the feature map."}
+]

@@ -1,0 +1,14 @@
+{
+  "blocking": 0,
+  "verdict": "PASS",
+  "findings": [
+    {"id": "C-1", "severity": "minor", "file": "metarepo:specs/001-case-lifecycle/data-model.md", "line": 17, "rule": "BA-8, data-model.md, T002", "summary": "SubmissionRefusal in data-model.md lists two values; packages/domain/case.py:113 and contracts/rest-api.openapi.yaml:22 add submission_reference_in_use. Update the data model and say in the PR that the shared contract changed (BA-8)."},
+    {"id": "C-2", "severity": "minor", "file": "benefit-be:apps/worker/workflows/case.py", "line": 362, "rule": "TW-14, TW-7", "summary": "New retry-exhaustion path (_until_done timer loop) adds timer commands no recorded history covers; existing replays (TC-46) pass. Record a history of an outage run so later edits to this path are replay-checked."},
+    {"id": "C-3", "severity": "minor", "file": "benefit-be:apps/worker/repositories/stub_results.py", "line": 26, "rule": "KD-2, constitution I", "summary": "Still open from round 1: determination stub defaults to eligible for unseeded households (fail-open); default to cannot_determine."},
+    {"id": "C-4", "severity": "minor", "file": "benefit-be:db/migrations/versions/0002_case_lifecycle.py", "line": 333, "rule": "database.md", "summary": "Still open from round 1: indexes cases.state_deadline and review_tasks.status_opened serve no query in this change."}
+  ],
+  "resolved": [
+    {"id": "prev C-1", "rule": "ADR-001-04, US1-AS5", "summary": "Fixed: signal_action returns False when undelivered and the service records caseworker_actions(outcome rejected) plus audit entry in one transaction, idempotent on request_id (apps/api/services/cases.py:236, apps/api/repositories/cases.py:139)."},
+    {"id": "prev C-2", "rule": "TC-34", "summary": "Fixed: TC-34 now signals after the decision and asserts action_rejected (no_open_task) after the deciding change; the completed-workflow case is proven at API level (tests/apps/api/routers/test_cases.py:508) and in Mongo (tests/integration/test_case_audit.py:812)."}
+  ]
+}

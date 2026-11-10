@@ -1,0 +1,9 @@
+{
+  "ci": {
+    "benefit-be": "pass"
+  },
+  "failing": 0,
+  "ready": [
+    "https://github.com/elinasarvari/benefit-be/pull/2"
+  ]
+}

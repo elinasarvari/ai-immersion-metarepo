@@ -1,0 +1,98 @@
+uv run ruff check .
+All checks passed!
+uv run ruff format --check .
+221 files already formatted
+uv run mypy
+Success: no issues found in 109 source files
+uv run pytest -m unit 
+============================= test session starts ==============================
+platform darwin -- Python 3.12.13, pytest-9.2.0, pluggy-1.7.0
+rootdir: /Users/elina.sarvari/repos/ai-immersion-metarepo/repos/benefit-be
+configfile: pyproject.toml
+plugins: platformdirs-4.14.5, hypothesis-6.170.15, langsmith-0.14.17, playwright-0.10.0, anyio-4.16.0, asyncio-1.4.1.post1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collected 433 items / 191 deselected / 242 selected
+
+tests/apps/api/dependencies/test_authz.py .......                        [  2%]
+tests/apps/api/middleware/test_request_context.py ...                    [  4%]
+tests/apps/api/repositories/test_cases.py ...                            [  5%]
+tests/apps/api/routers/test_applications.py ...                          [  6%]
+tests/apps/api/routers/test_auth.py ..........                           [ 10%]
+tests/apps/api/routers/test_cases.py ..............                      [ 16%]
+tests/apps/api/routers/test_health.py .....                              [ 18%]
+tests/apps/api/services/test_cases.py ...........                        [ 23%]
+tests/apps/api/test_errors.py .............                              [ 28%]
+tests/apps/worker/activities/test_agent_step.py ....                     [ 30%]
+tests/apps/worker/activities/test_case_record.py .                       [ 30%]
+tests/apps/worker/activities/test_stubs.py ....                          [ 32%]
+tests/apps/worker/test_health.py ...                                     [ 33%]
+tests/apps/worker/test_interceptors.py ...                               [ 34%]
+tests/apps/worker/test_main.py ..                                        [ 35%]
+tests/apps/worker/test_policies.py .                                     [ 35%]
+tests/db/seeds/test_reset.py .                                           [ 36%]
+tests/packages/agents/llm/test_factory.py ...........                    [ 40%]
+tests/packages/agents/llm/test_fake.py ..........                        [ 45%]
+tests/packages/agents/llm/test_pricing.py ....                           [ 46%]
+tests/packages/agents/test_tracing.py .......                            [ 49%]
+tests/packages/domain/test_case.py ..........                            [ 53%]
+tests/packages/domain/test_health.py ...                                 [ 54%]
+tests/packages/platform/auth/test_passwords.py ...                       [ 56%]
+tests/packages/platform/auth/test_tokens.py ..........                   [ 60%]
+tests/packages/platform/test_clock.py ..............                     [ 66%]
+tests/packages/platform/test_logging.py ................................ [ 79%]
+.......                                                                  [ 82%]
+tests/packages/platform/test_resilience.py ......                        [ 84%]
+tests/packages/platform/test_scope_filter.py ...........                 [ 89%]
+tests/packages/platform/test_settings.py ............                    [ 94%]
+tests/packages/platform/test_synthetic.py ......                         [ 96%]
+tests/packages/rag/test_fake_models.py .....                             [ 98%]
+tests/scripts/test_resolve_sibling_ref.py ..                             [ 99%]
+tests/test_marker_assignment.py .                                        [100%]
+
+===================== 242 passed, 191 deselected in 21.59s =====================
+uv run pytest -m workflow 
+============================= test session starts ==============================
+platform darwin -- Python 3.12.13, pytest-9.2.0, pluggy-1.7.0
+rootdir: /Users/elina.sarvari/repos/ai-immersion-metarepo/repos/benefit-be
+configfile: pyproject.toml
+plugins: platformdirs-4.14.5, hypothesis-6.170.15, langsmith-0.14.17, playwright-0.10.0, anyio-4.16.0, asyncio-1.4.1.post1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collected 433 items / 346 deselected / 87 selected
+
+tests/apps/worker/test_policies.py .                                     [  1%]
+tests/apps/worker/workflows/test_calendar.py ...                         [  4%]
+tests/apps/worker/workflows/test_case.py ......................          [ 29%]
+tests/apps/worker/workflows/test_case_replay.py ..                       [ 32%]
+tests/apps/worker/workflows/test_case_restart.py ...                     [ 35%]
+tests/apps/worker/workflows/test_case_states.py ........................ [ 63%]
+.............................                                            [ 96%]
+tests/apps/worker/workflows/test_smoke.py .                              [ 97%]
+tests/apps/worker/workflows/test_smoke_replay.py .                       [ 98%]
+tests/apps/worker/workflows/test_smoke_restart.py .                      [100%]
+
+===================== 87 passed, 346 deselected in 11.69s ======================
+uv run pytest -m contract 
+============================= test session starts ==============================
+platform darwin -- Python 3.12.13, pytest-9.2.0, pluggy-1.7.0
+rootdir: /Users/elina.sarvari/repos/ai-immersion-metarepo/repos/benefit-be
+configfile: pyproject.toml
+plugins: platformdirs-4.14.5, hypothesis-6.170.15, langsmith-0.14.17, playwright-0.10.0, anyio-4.16.0, asyncio-1.4.1.post1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collected 433 items / 414 deselected / 19 selected
+
+tests/contract/test_case_lifecycle_contract.py ..                        [ 10%]
+tests/contract/test_ci_workflow.py ...                                   [ 26%]
+tests/contract/test_every_route_protected.py ..........                  [ 78%]
+tests/contract/test_openapi.py ...                                       [ 94%]
+tests/contract/test_tool_schemas.py .                                    [100%]
+
+====================== 19 passed, 414 deselected in 4.57s ======================
+uv run python -m scripts.export_openapi
+wrote openapi/openapi.json
+git diff --exit-code openapi/openapi.json
+gitleaks detect --no-banner
+uv run pip-audit
+[90m2:05PM[0m [32mINF[0m [1m11 commits scanned.[0m
+[90m2:05PM[0m [32mINF[0m [1mscanned ~1330409 bytes (1.33 MB) in 718ms[0m
+[90m2:05PM[0m [32mINF[0m [1mno leaks found[0m
+No known vulnerabilities found
