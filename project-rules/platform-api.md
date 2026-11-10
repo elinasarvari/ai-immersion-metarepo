@@ -15,7 +15,7 @@ Applies to `benefit-be/apps/api/`, `packages/mcp_servers/`, `Makefile`, `Procfil
 
 ## MCP servers (`packages/mcp_servers/`)
 - **PL-8** Built with the official `mcp` Python SDK (FastMCP). Each server is its own process with its own entry in the `Procfile`.
-- **PL-9** Each server owns one area: `case-mcp` (Postgres), `docs-mcp` (MongoDB and local files), `verify-mcp` (mocked income and identity checks) and `policy-mcp` (hybrid search and reranking).
+- **PL-9** Each server owns one area: `case-mcp` (cases, determinations and audit in MongoDB), `docs-mcp` (MongoDB and local files), `verify-mcp` (mocked income and identity checks) and `policy-mcp` (hybrid search and reranking).
 - **PL-10** Tool inputs and outputs are typed Pydantic models with clear descriptions, because the agents read them.
 
 ## Logging and operations

@@ -1,0 +1,231 @@
+openapi: 3.1.0
+info:
+  title: 'benefit-be API: platform foundations (000)'
+  version: 0.1.0
+  description: |
+    Contract for the endpoints that feature 000 provides. It is merged into benefit-be's
+    generated `openapi/openapi.json` (FR-000-26), which is the file that benefit-fe generates
+    its client from.
+
+    - Every route is under `/api/v1` (PL-1); the paths below include the prefix.
+    - Every route needs a valid, unexpired session (FR-000-06), except `health`, `ready` and
+      `auth/login`.
+    - Every 4xx and 5xx response uses `ErrorEnvelope` (FR-000-08) and carries an `X-Request-ID`
+      header with the same value as `error.reference_id`.
+    - Tokens with `typ=system` (agent tool credentials, FR-000-22) are refused on every route.
+servers:
+  - url: http://localhost:8000
+    description: Local API (dev and prod-like). The SPA reaches it through the same-origin `/api` proxy.
+security:
+  - sessionCookie: []
+paths:
+  /api/v1/auth/login:
+    post:
+      operationId: login
+      summary: Sign in with a seeded demo account (FR-000-21)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: |
+            Signed in. Sets the `benefit_session` cookie (HttpOnly, SameSite=Strict, Path=/api,
+            and Secure when APP_ENV=prod and WEB_ORIGIN is https). Writes an audit entry (`sign_in`, `success`).
+          headers:
+            Set-Cookie: { schema: { type: string } }
+            X-Request-ID: { $ref: '#/components/headers/X-Request-ID' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SessionInfo' }
+        '401':
+          description: |
+            `auth.invalid_credentials`. The response is identical for an unknown username and a wrong
+            password. Writes an audit entry (`sign_in`, `failure`).
+          headers: { X-Request-ID: { $ref: '#/components/headers/X-Request-ID' } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /api/v1/auth/logout:
+    post:
+      operationId: logout
+      summary: End the session by clearing the cookie
+      responses:
+        '204':
+          description: Cookie cleared.
+          headers: { X-Request-ID: { $ref: '#/components/headers/X-Request-ID' } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+  /api/v1/auth/me:
+    get:
+      operationId: getCurrentSession
+      summary: The signed-in user and when the session expires (used by the SPA's role guards)
+      responses:
+        '200':
+          description: Current session.
+          headers: { X-Request-ID: { $ref: '#/components/headers/X-Request-ID' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SessionInfo' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+  /api/v1/health:
+    get:
+      operationId: getHealth
+      summary: Liveness. The process is up (FR-000-09).
+      security: []
+      responses:
+        '200':
+          description: Alive.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HealthReport' }
+  /api/v1/ready:
+    get:
+      operationId: getReadiness
+      summary: Readiness. Dependencies are reachable and synthetic-marked (FR-000-09, FR-000-14, FR-000-28).
+      security: []
+      responses:
+        '200':
+          description: '`ready`, or `degraded` when only optional checks (tracing) are not ok.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReadinessReport' }
+        '503':
+          description: '`not_ready`: at least one required check is down.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReadinessReport' }
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: benefit_session
+      description: |
+        A PyJWT HS256 token with the claims typ=user, sub, role, hh (applicants only), iat, exp and jti.
+        exp is iat + SESSION_TTL_HOURS (default 8).
+  headers:
+    X-Request-ID:
+      description: The request reference ID. Equal to `error.reference_id` and to the log field `request_id`.
+      schema: { type: string, format: uuid }
+  responses:
+    Unauthenticated:
+      description: '`auth.required` (no session) or `auth.session_expired` (expired session).'
+      headers: { X-Request-ID: { $ref: '#/components/headers/X-Request-ID' } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    Forbidden:
+      description: '`auth.forbidden`. The role or household is not allowed. Writes an audit entry (`access_refused`).'
+      headers: { X-Request-ID: { $ref: '#/components/headers/X-Request-ID' } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    ValidationFailed:
+      description: '`validation_failed`, with `fields` filled in. Input values are never echoed back.'
+      headers: { X-Request-ID: { $ref: '#/components/headers/X-Request-ID' } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    InternalError:
+      description: '`internal_error` with a generic message. Details are only in the log entry with the same reference ID.'
+      headers: { X-Request-ID: { $ref: '#/components/headers/X-Request-ID' } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+  schemas:
+    Role:
+      type: string
+      enum: [applicant, caseworker, supervisor]
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [username, password]
+      properties:
+        username: { type: string, minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9_.-]+$' }
+        password: { type: string, minLength: 1, maxLength: 128, format: password }
+    UserPublic:
+      type: object
+      required: [id, username, display_name, role, household_id]
+      properties:
+        id: { type: string, format: uuid }
+        username: { type: string }
+        display_name: { type: string, description: Synthetic label, never a realistic person name. }
+        role: { $ref: '#/components/schemas/Role' }
+        household_id:
+          type: [string, 'null']
+          format: uuid
+          description: Set only for applicants.
+    SessionInfo:
+      type: object
+      required: [user, expires_at]
+      properties:
+        user: { $ref: '#/components/schemas/UserPublic' }
+        expires_at: { type: string, format: date-time }
+    ErrorCode:
+      type: string
+      enum:
+        - auth.required
+        - auth.session_expired
+        - auth.invalid_credentials
+        - auth.forbidden
+        - not_found
+        - conflict
+        - validation_failed
+        - internal_error
+        - dependency_unavailable
+      description: |
+        HTTP status for each code: auth.required, auth.session_expired and auth.invalid_credentials → 401;
+        auth.forbidden → 403; not_found → 404; conflict → 409; validation_failed → 422;
+        internal_error → 500; dependency_unavailable → 503.
+    FieldError:
+      type: object
+      required: [field, message, type]
+      properties:
+        field: { type: string, examples: [body.username] }
+        message: { type: string }
+        type: { type: string, examples: [missing, string_too_long] }
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, fields, reference_id]
+          additionalProperties: false
+          properties:
+            code: { $ref: '#/components/schemas/ErrorCode' }
+            message: { type: string }
+            fields:
+              type: array
+              items: { $ref: '#/components/schemas/FieldError' }
+            reference_id: { type: string, format: uuid }
+      examples:
+        - error:
+            code: validation_failed
+            message: Some fields are invalid.
+            fields: [{ field: body.username, message: Field required, type: missing }]
+            reference_id: 3f0c2a9e-4b1d-4e55-9a51-7f2f8f5f1c11
+    HealthReport:
+      type: object
+      required: [component, status, version, synthetic_data]
+      properties:
+        component: { type: string, examples: [api, worker] }
+        status: { type: string, const: ok }
+        version: { type: string }
+        synthetic_data: { type: boolean, const: true }
+    CheckStatus:
+      type: string
+      enum: [ok, down, degraded]
+    ReadinessStatus:
+      type: string
+      enum: [ready, degraded, not_ready]
+    ReadinessCheck:
+      type: object
+      required: [name, status, required]
+      properties:
+        name: { type: string, examples: [mongo, temporal, tracing, polling] }
+        status: { $ref: '#/components/schemas/CheckStatus' }
+        required: { type: boolean }
+    ReadinessReport:
+      type: object
+      required: [component, status, checks]
+      properties:
+        component: { type: string }
+        status: { $ref: '#/components/schemas/ReadinessStatus' }
+        checks:
+          type: array
+          items: { $ref: '#/components/schemas/ReadinessCheck' }

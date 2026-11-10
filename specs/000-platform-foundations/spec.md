@@ -170,7 +170,7 @@ doesn't match the agreed contract; confirm each is reported and the PR is blocke
 - **FR-000-16**: Every PR in benefit-be and benefit-fe MUST run static checks (lint, strict type
   checks, dependency vulnerability scan, secrets scan) and all automated test levels, and MUST be
   blocked from merging if any fail.
-- **FR-000-17**: An integration test harness MUST run tests against local PostgreSQL, MongoDB and
+- **FR-000-17**: An integration test harness MUST run tests against local MongoDB and
   Temporal test instances, reset before each run, with the AI model faked.
 - **FR-000-18**: Contract tests MUST check that the API matches the agreed contract document, that
   every agent tool matches its agreed schema, and that the frontend's API client is generated from
@@ -191,7 +191,7 @@ doesn't match the agreed contract; confirm each is reported and the PR is blocke
   access (API and agent tools), every caseworker action, every demo clock action, every on-demand
   redetermination start and every metrics refresh, each with actor, time, target and outcome, and
   no personal data. Case history (FR-001-10) records the case's own events.
-- **FR-000-24**: CI MUST run on hosted runners with the same major versions of the databases and
+- **FR-000-24**: CI MUST run on hosted runners with the same major version of the database and
   workflow server as the local setup, and with the embedding and reranking models replaced by a
   deterministic fake. Local development stays native on the Macs, with no containers.
 - **FR-000-25**: The end-to-end suite MUST live in benefit-fe and run on every pull request in

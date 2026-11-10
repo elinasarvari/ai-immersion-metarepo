@@ -92,14 +92,17 @@ definitions.
   VerificationResult, Notice and NoticeDraft (type from FR-001-17), ReviewTask (reason from
   FR-001-19), CaseworkerAction (action from FR-001-19), RuleSet, Determination,
   DecisionExplanation, ToolCallRecord, AuditLogEntry.
-- **PostgreSQL** (baseline migration): users, households, household members, household
-  snapshots, coverage periods, cases, case events, review tasks, caseworker actions, rule sets, determinations (with
-  explanations), `audit_log` (append-only), `outbox` (notices), `policy_passages` (text, citation,
-  vector and keyword index).
-- **MongoDB** collections: `documents` (upload metadata), `extractions`, `agent_runs` (verification
-  and explanation run records with cost), `notice_drafts` (drafts and revisions), `tool_calls`, `eval_overrides` (caseworker overrides
-  read by the evaluation command).
-- **Reporting store** (008): built from PostgreSQL by dbt into DuckDB; pseudonymous keys only.
+- **MongoDB** (the only operational database; baseline migration `0001`): `users`, `households`,
+  `household_members`, `household_snapshots`, `coverage_periods`, `cases`, `case_events`,
+  `review_tasks`, `caseworker_actions`, `rule_sets`, `determinations` (with explanations),
+  `audit_log` (in its own database, append-only through a restricted database role), `outbox` (notices),
+  `policy_passages` (text, citation, embedding vector and keyword terms), `documents` (upload
+  metadata), `extractions`, `agent_runs` (verification and explanation run records with cost),
+  `notice_drafts` (drafts and revisions), `tool_calls`, `eval_overrides` (caseworker overrides read
+  by the evaluation command) and `_meta` (synthetic-data marker). Every household-scoped
+  collection carries `household_id`, and those tied to a case also carry `case_id`.
+- **Reporting store** (008): an export step copies pseudonymised collections from MongoDB into DuckDB, then dbt builds the
+  models; pseudonymous keys only.
 - **Case workflow**: states (Submitted, Verifying, Awaiting applicant, Determining, Under
   review, Decided); outcomes (Approved; Denied with reason code: income over limit, other rule
   not met, missing information; redeterminations: renewed automatically, renewed after
@@ -111,14 +114,16 @@ definitions.
   a case clock (FR-001-13). Review reasons and the actions each allows are the table in
   FR-001-19; notice types are the table in FR-001-17.
 - **Interfaces between lanes**:
-  - `verify_documents(case_id) -> VerificationResult` (Agents provides; Workflows uses)
+  - `verify_documents(case_id, *, tool_credential) -> VerificationResult` (Agents provides; Workflows uses)
   - `evaluate(household, as_of_date) -> Determination` (Knowledge & data provides; called only
     by worker activities. Platform & UI reads stored determinations.)
   - `search_policy(query) -> list[PolicyPassage]` (Knowledge & data provides; Agents uses)
-  - `explain_determination(determination, audience) -> DecisionExplanation` (Agents provides;
+  - `explain_determination(determination, audience, *, tool_credential) -> DecisionExplanation` (Agents provides;
     called by worker activities after each determination. Platform & UI reads stored explanations.)
-  - `draft_request(case_id, items) -> NoticeDraft` (Agents provides; used for requests
+  - `draft_request(case_id, items, *, tool_credential) -> NoticeDraft` (Agents provides; used for requests
     for information and redetermination forms)
+  - `tool_credential` is the case-scoped system credential the worker mints for one agent step
+    (FR-000-22). Agents pass it to every tool call and never log or return it.
 - **Agent tools** (005): input and output schema for each of the 11 tools.
 - **REST API** (006): endpoint list and OpenAPI document; the UI builds against stub
   responses until each endpoint is real. The OpenAPI file is committed in benefit-be (FR-000-26).
@@ -184,7 +189,7 @@ feature.
 | Unit | One behaviour per test, named after its `FR-` | pytest, Vitest + Testing Library | Every PR |
 | Workflow | State changes, timers, signals, restart and replay | Temporal test environment | Every PR |
 | Contract | API matches its contract; tool schemas; generated frontend client | OpenAPI diff, JSON Schema | Every PR |
-| Integration | API, workers and tools against local databases; access rules | pytest with local PostgreSQL, MongoDB, Temporal | Every PR |
+| Integration | API, workers and tools against local databases; access rules | pytest with local MongoDB, Temporal | Every PR |
 | End-to-end | The six demo journeys through real screens (AI faked) | Playwright | Every PR |
 | Accessibility | WCAG 2.1 AA on every screen | axe with Playwright | Every PR |
 | LLM evaluation | Extraction, mismatches, citations, retrieval, explanations | `make eval` (live model) | On demand, before the demo |
