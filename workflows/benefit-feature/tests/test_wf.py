@@ -99,9 +99,11 @@ class WfCase(unittest.TestCase):
     def repo_file(self, repo, rel, text):
         return self.write(rel, text, base=self.root / "repos" / repo)
 
-    def wf(self, *args):
-        r = subprocess.run([sys.executable, str(WF), *args], capture_output=True, text=True,
-                           env={**os.environ, "WF_ROOT": str(self.root)})
+    def wf(self, *args, path_prefix=None):
+        env = {**os.environ, "WF_ROOT": str(self.root)}
+        if path_prefix:
+            env["PATH"] = f"{path_prefix}{os.pathsep}{env['PATH']}"
+        r = subprocess.run([sys.executable, str(WF), *args], capture_output=True, text=True, env=env)
         try:
             data = json.loads(r.stdout.splitlines()[0]) if r.stdout.strip() else {}
         except ValueError:
@@ -133,6 +135,12 @@ class Gates(WfCase):
             with self.subTest(arg):
                 code, data, _ = self.wf("prepare", arg, "ask", "strict")
                 self.assertEqual((code, data.get("feature_dir")), (0, FD), data)
+
+    def test_prepare_accepts_every_pr_mode(self):
+        for mode in ("draft", "ask", "none"):
+            with self.subTest(mode):
+                self.assertEqual(self.wf("prepare", "010", mode, "strict")[0], 0)
+        self.assertEqual(self.wf("prepare", "010", "ready", "strict")[0], 1)
 
     def test_prepare_rejects_bad_inputs_and_bad_spec(self):
         self.assertEqual(self.wf("prepare", "010", "yolo", "strict")[0], 1)
@@ -173,6 +181,20 @@ class Gates(WfCase):
         self.assertEqual(code, 0, data)
         self.assertEqual(data["lanes"], ["platform-ui-lane", "workflows-lane"])
         self.assertEqual((data["contracts_tasks"], data["qa_tasks"], data["cases"]), (1, 1, 2))
+
+    def test_ids_the_spec_only_mentions_are_not_its_requirements(self):
+        self.write("spec.md", SPEC + "\n## Moved\n| Old | New |\n|---|---|\n| FR-010-03 | FR-011-01 |\n"
+                   "Review reasons are in FR-012-01.\n")
+        code, data, _ = self.wf("tasks-gate", FD)
+        self.assertEqual(code, 0, data)
+
+    def test_a_contracts_task_that_waits_for_lane_work_moves_to_the_qa_step(self):
+        self.write("tasks.md", TASKS + "- [ ] T005 [contracts][benefit-be] Regenerate openapi.json after T002 and T003\n"
+                   "- [ ] T006 [contracts][benefit-be] Write the model tests before T001\n")
+        code, data, _ = self.wf("tasks-gate", FD)
+        self.assertEqual(code, 0, data)
+        self.assertEqual(data["late_contracts"], ["T005"], "T006 only refers to another contracts task")
+        self.assertEqual((data["contracts_tasks"], data["qa_tasks"]), (2, 2))
 
     def test_tasks_gate_catches_each_kind_of_problem(self):
         cases = {
@@ -292,6 +314,16 @@ class Trace(WfCase):
         self.repo_file("benefit-be", "apps/worker/deadline.py", "def test_FR_010_01_extension_adds_ten_days():\n    pass\n")
         self.assertEqual(self.job("trace:strict")["status"], "fail")
 
+    def test_a_unit_test_in_a_folder_that_needs_services_is_flagged(self):
+        """Feature 001's CI failure: a unit test under tests/db/, whose conftest connects to MongoDB."""
+        self.add_passing_tests()
+        self.repo_file("benefit-be", "tests/apps/worker/test_deadline.py", "def test_other():\n    pass\n")
+        self.repo_file("benefit-be", "tests/db/seeds/test_deadline.py",
+                       "def test_FR_010_01_extension_adds_ten_days():\n    assert True\n")
+        res = self.job("trace:strict")
+        self.assertEqual(res["status"], "fail")
+        self.assertTrue(any("need MongoDB" in p for p in res["problems"]), res["problems"])
+
     def test_warn_mode_reports_without_blocking(self):
         self.assertEqual(self.job("trace:warn")["status"], "warn")
 
@@ -301,6 +333,7 @@ class ScriptJobs(WfCase):
         self.repo_file("benefit-be", "apps/worker/deadline.py", "x = 1\n")
         self.repo_file("benefit-be", "packages/domain/deadline.py", "x = 1\n")
         self.repo_file("benefit-be", "tests/integration/test_x.py", "x = 1\n")
+        self.repo_file("benefit-be", "openapi/openapi.json", "{}\n")  # generated contract, contracts step
         self.repo_file("benefit-fe", "src/App.tsx", "x\n")
         self.assertEqual(self.job("ownership")["status"], "pass")
         self.repo_file("benefit-be", "packages/agents/prompt.py", "x = 1\n")  # agents lane isn't in scope
@@ -349,9 +382,41 @@ class VerifyLoop(WfCase):
     def reviews(self):
         return self.wf("review-list", FD)[1]["reviews"]
 
+    def status_with(self, blocking_reviews):
+        """One verify round: green jobs, one review with this many blocking findings."""
+        self.green_jobs()
+        for n in ("compliance", "code-benefit-be", "code-benefit-fe"):
+            self.result(n, 0)
+        self.result("compliance", blocking_reviews)
+        return self.wf("verify-status", FD)[1]
+
+    def test_the_loop_keeps_going_while_it_makes_progress(self):
+        rounds = [self.status_with(n) for n in (5, 3, 2, 1)]
+        self.assertEqual([r["continue"] for r in rounds], [True, True, True, True])
+        self.assertEqual(rounds[-1]["history"], [5, 3, 2, 1])
+        self.assertFalse(self.status_with(0)["continue"], "nothing blocking")
+
+    def test_the_loop_stops_when_two_rounds_make_no_progress(self):
+        rounds = [self.status_with(n) for n in (3, 4, 4)]  # this run's shape: fixes surfaced new findings
+        self.assertEqual([r["continue"] for r in rounds], [True, True, False])
+        self.assertIn("no progress", rounds[-1]["why"])
+        self.assertEqual(self.wf("final-gate", FD)[0], 1)
+
+    def test_the_loop_stops_at_the_round_cap(self):
+        rounds = [self.status_with(n) for n in (9, 8, 7, 6, 5, 4)]
+        self.assertEqual(rounds[-1]["continue"], False)
+        self.assertIn("6 rounds", rounds[-1]["why"])
+
+    def test_later_fixes_use_the_judgement_model(self):
+        models = []
+        for n in (4, 3, 2):
+            self.status_with(n)
+            models.append(self.wf("needs-fix", FD, "sonnet", "opus")[1]["fix_model"])
+        self.assertEqual(models, ["sonnet", "opus", "opus"])
+
     def test_first_round_needs_no_fix(self):
         self.wf("verify-init", FD)
-        self.assertEqual(self.wf("needs-fix", FD)[1], {"fix": False, "blocking": 0})
+        self.assertEqual(self.wf("needs-fix", FD)[1], {"fix": False, "blocking": 0, "round": 1, "fix_model": "sonnet"})
 
     def test_no_reviews_while_a_job_fails(self):
         self.write("review/jobs/ownership.json", json.dumps({"job": "ownership", "status": "fail"}))
@@ -493,11 +558,107 @@ class Monitor(unittest.TestCase):
         self.assertIn("Waiting for you at 'approve_pr'", out)
         self.assertIn("-i pr_verdict=approve", out)
 
+    def test_an_if_stage_counts_as_running_while_its_inner_step_runs(self):
+        ev = lambda e, sid, **k: {"event": e, "step_id": sid, **k}
+        self.run_dir("running", [ev("step_started", "decide"), ev("step_completed", "decide", status="completed"),
+                                 ev("step_started", "decision_maker")], "decision_maker")
+        self.assertRegex(self.watch(), r"▶ .*Decision-maker.*now: decision_maker")
+
+    def test_parallel_inner_steps_show_as_one_running_stage(self):
+        ev = lambda e, sid, **k: {"event": e, "step_id": sid, **k}
+        self.run_dir("running", [ev("step_started", "lanes"), ev("step_completed", "lanes", status="completed"),
+                                 ev("step_started", "lanes:lane:0"), ev("step_started", "lanes:lane:1"),
+                                 ev("step_started", "lanes:lane:2"), ev("step_completed", "lanes:lane:1")], "lanes")
+        self.assertRegex(self.watch(), r"▶ .*Lanes, in parallel.*2 in parallel")
+
+    def test_permission_check_names_what_the_agents_lack(self):
+        check = WF.parent / "check_permissions.py"
+        full = self.root / "full.json"
+        sys.path.insert(0, str(check.parent))
+        import check_permissions
+        full.write_text(json.dumps({"permissions": {"allow": check_permissions.NEEDED}}))
+        self.assertEqual(subprocess.run([sys.executable, str(check), str(full)]).returncode, 0)
+        thin = self.root / "thin.json"
+        thin.write_text(json.dumps({"permissions": {"allow": ["Read", "Bash(git *)"]}}))
+        r = subprocess.run([sys.executable, str(check), str(thin)], capture_output=True, text=True)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("Bash(rm *)", r.stdout)
+
     def test_run_sh_parses_and_shows_usage(self):
         self.assertEqual(subprocess.run(["bash", "-n", str(RUN_SH)]).returncode, 0)
         r = subprocess.run(["bash", str(RUN_SH)], capture_output=True, text=True)
         self.assertEqual(r.returncode, 2)
         self.assertIn("run.sh start", r.stdout)
+
+
+FAKE_GH = """#!/usr/bin/env python3
+import json, os, sys
+a = sys.argv[1:]
+log = os.path.join(os.path.dirname(__file__), "calls.log")
+open(log, "a").write(" ".join(a) + "\\n")
+green = os.path.exists(os.path.join(os.path.dirname(__file__), "GREEN"))
+if a[:2] == ["pr", "checks"] and "--watch" in a:
+    print("all checks done"); sys.exit(0 if green else 1)
+if a[:2] == ["pr", "checks"] and "--json" in a:
+    print(json.dumps([{"name": "unit", "state": "FAILURE",
+                       "link": "https://github.com/o/benefit-be/actions/runs/11/job/22"},
+                      {"name": "static", "state": "SUCCESS", "link": "https://github.com/o/benefit-be/actions/runs/11/job/23"}]))
+    sys.exit(1)
+if a[:2] == ["run", "view"]:
+    print("E   setting MONGO_URL_APP: missing; required"); sys.exit(0)
+if a[:2] == ["pr", "view"]:
+    print("true"); sys.exit(0)
+if a[:2] == ["pr", "ready"]:
+    sys.exit(0)
+sys.exit(0)
+"""
+
+
+class GitHubActions(WfCase):
+    """The CI loop: ci-wait reports instead of failing, marks green drafts ready; ci-gate decides."""
+
+    def fake_gh(self, green):
+        bin_dir = self.root / "bin"
+        bin_dir.mkdir(exist_ok=True)
+        gh = bin_dir / "gh"
+        gh.write_text(FAKE_GH)
+        gh.chmod(0o755)
+        marker = bin_dir / "GREEN"
+        marker.write_text("") if green else (marker.unlink() if marker.exists() else None)
+        self.write("review/prs.json", json.dumps({"benefit-be": "https://github.com/o/benefit-be/pull/2"}))
+        return bin_dir
+
+    def calls(self):
+        return (self.root / "bin" / "calls.log").read_text()
+
+    def test_no_ci_result_yet_needs_no_fix(self):
+        self.assertEqual(self.wf("ci-needs-fix", FD)[1], {"fix": False, "failing": 0})
+
+    def test_a_red_check_is_reported_with_its_log_and_goes_to_the_fix_step(self):
+        bin_dir = self.fake_gh(green=False)
+        code, data, _ = self.wf("ci-wait", FD, "draft", path_prefix=bin_dir)
+        self.assertEqual(code, 0, "ci-wait never fails; ci-gate decides after the fix rounds")
+        self.assertEqual((data["ci"], data["failing"], data["ready"]), ({"benefit-be": "fail"}, 1, []))
+        report = (self.fd / "review" / "ci.md").read_text()
+        self.assertIn("`unit`", report)
+        self.assertIn("MONGO_URL_APP: missing", report)
+        self.assertNotIn("`static`", report, "only failing checks are reported")
+        self.assertNotIn("pr ready", self.calls(), "a red PR is never marked ready")
+        self.assertTrue(self.wf("ci-needs-fix", FD)[1]["fix"])
+        self.assertEqual(self.wf("ci-gate", FD)[0], 1)
+
+    def test_all_green_marks_a_draft_ready_for_review(self):
+        bin_dir = self.fake_gh(green=True)
+        code, data, _ = self.wf("ci-wait", FD, "draft", path_prefix=bin_dir)
+        self.assertEqual((code, data["failing"]), (0, 0))
+        self.assertEqual(data["ready"], ["https://github.com/o/benefit-be/pull/2"])
+        self.assertIn("pr ready https://github.com/o/benefit-be/pull/2", self.calls())
+        self.assertEqual(self.wf("ci-gate", FD)[0], 0)
+
+    def test_ask_mode_leaves_the_pr_as_it_is(self):
+        bin_dir = self.fake_gh(green=True)
+        self.assertEqual(self.wf("ci-wait", FD, "ask", path_prefix=bin_dir)[1]["ready"], [])
+        self.assertNotIn("pr ready", self.calls())
 
 
 if __name__ == "__main__":

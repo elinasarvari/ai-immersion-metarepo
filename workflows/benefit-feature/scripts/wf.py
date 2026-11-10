@@ -11,7 +11,7 @@ Gates (one after each planning stage; the skills also run them as their self-che
 
 Verify loop (every check runs here, so the fix step can repair any failure):
   verify-init <feature_dir>                     clears earlier results before the loop
-  needs-fix   <feature_dir>                     start of a round: did the previous round leave anything blocking?
+  needs-fix   <feature_dir> [coding judgement]  start of a round: anything blocking? which model should fix it?
   jobs        <feature_dir> [strict|warn]       lists this round's jobs (tests, builds, evals, script checks)
   job         <feature_dir> <job>               runs one job, writes review/jobs/<job>.json and .log; never fails
   review-list <feature_dir>                     the reviews to run (none while a job fails); records the trees reviewed
@@ -19,8 +19,12 @@ Verify loop (every check runs here, so the fix step can repair any failure):
   verify-status <feature_dir>                   merges jobs and reviews into review/verify.json and verify.md
   final-gate  <feature_dir>                     fails unless the last round left nothing blocking
 
-Ship:
-  ci-wait     <feature_dir>                     waits for GitHub Actions on the PRs in review/prs.json
+Ship (CI loop: a failing check goes to a fix step, which pushes to the feature branch, then CI runs again):
+  ci-needs-fix <feature_dir>                    start of a CI round: did the last CI run fail?
+  ci-wait     <feature_dir> [pr_mode]           waits for GitHub Actions on the PRs in review/prs.json; writes
+                                                review/ci.md (failing checks with their log tails); never fails.
+                                                With pr_mode draft, marks the PRs ready for review once all green
+  ci-gate     <feature_dir>                     fails unless the last CI run passed
 
 Script jobs (run by `job`, also usable by hand): ownership, tasks, trace:strict, trace:warn.
 Paths are relative to the metarepo root. The lane ownership map mirrors project-rules/backend-architecture.md.
@@ -44,7 +48,7 @@ LANES = {
     },
 }
 # Shared files changed only in the sequential contracts step (BA-8, PR-4), never by a parallel lane.
-CONTRACTS = {"benefit-be": ["packages/domain/", "pyproject.toml", "uv.lock", ".env.example", "README.md",
+CONTRACTS = {"benefit-be": ["packages/domain/", "openapi/", "pyproject.toml", "uv.lock", ".env.example", "README.md",
                             "CLAUDE.md", ".gitignore"]}
 # Cross-lane tests written in the sequential [qa] step after the lanes join.
 QA = {"benefit-be": ["tests/integration/", "tests/contract/", "tests/e2e/"]}
@@ -53,7 +57,7 @@ SHORT = {"workflows": "workflows-lane", "agents": "agents-lane", "data": "data-l
 LEVELS = {"unit", "integration", "workflow", "contract", "e2e", "eval"}
 FR_RE = re.compile(r"\bFR-(\d{3})-(\d{2})\b")
 TASK_RE = re.compile(r"^\s*-\s*\[([ xX])\]\s*(T\d{3,})\b(.*)$")
-RESULT_FILES = {"verify", "snapshot", "reviewed", "prs"}  # review/*.json that aren't review results
+RESULT_FILES = {"verify", "snapshot", "reviewed", "prs", "history", "ci"}  # review/*.json that aren't review results
 
 
 def out(obj, ok=True):
@@ -139,8 +143,15 @@ def scope(d: Path):
     return sc if isinstance(sc, dict) else {}
 
 
+DEFINED_FR_RE = re.compile(r"^\s*-\s*\*\*(FR-\d{3}-\d{2})\*\*", re.M)
+
+
 def spec_frs(d: Path):
-    return sorted({f"FR-{a}-{b}" for a, b in FR_RE.findall(read(d / "spec.md"))})
+    """The requirements this spec defines (its `- **FR-…**` list items). IDs it only mentions, such as
+    requirements moved to another feature or cross-references, belong to that other spec."""
+    s = read(d / "spec.md")
+    defined = sorted(set(DEFINED_FR_RE.findall(s)))
+    return defined or sorted({f"FR-{a}-{b}" for a, b in FR_RE.findall(s)})
 
 
 # ── Gates ─────────────────────────────────────────────────────────────────────────────────────────
@@ -309,12 +320,15 @@ def tasks_gate(d):
     t = read(d / "tasks.md")
     if not t:
         problems.append("tasks.md missing")
-    by_lane, untagged = {}, []
+    by_lane, untagged, text, lane_by_id = {}, [], {}, {}
     for line in t.splitlines():
         m = TASK_RE.match(line)
         if not m:
             continue
+        text[m.group(2)] = m.group(3)
         lanes = [x for x in (lane_of(x) for x in re.findall(r"\[([A-Za-z-]+)\]", m.group(3))) if x]
+        if lanes:
+            lane_by_id[m.group(2)] = lanes[0]
         if lanes:
             by_lane.setdefault(lanes[0], []).append(m.group(2))
         else:
@@ -355,8 +369,21 @@ def tasks_gate(d):
     missing = [f for f in frs if f not in covered]
     if cases and missing:
         problems.append(f"requirements without a test case: {', '.join(missing)}")
-    out({"lanes": sorted(l for l in by_lane if l in LANES), "contracts_tasks": len(by_lane.get("contracts", [])),
-         "qa_tasks": len(by_lane.get("qa", [])), "tasks_by_lane": {k: len(v) for k, v in sorted(by_lane.items())},
+    # A [contracts] task that has to wait for lane work ("after T020") can't run in the contracts step, which
+    # comes before the lanes. The QA step, after the lanes, does it instead, so no fix round is spent on it.
+    late = []
+    for tid in by_lane.get("contracts", []):
+        refs = []
+        for grp in re.findall(r"\bafter\s+(T\d{3,}(?:\s*(?:,|and|&)\s*T\d{3,})*)", text.get(tid, ""), re.I):
+            refs += re.findall(r"T\d{3,}", grp)
+        if any(lane_by_id.get(r) not in (None, "contracts") for r in refs):
+            late.append(tid)
+    if late:
+        warnings.append(f"[contracts] tasks that need lane work first, done in the QA step instead: {', '.join(late)}")
+    out({"lanes": sorted(l for l in by_lane if l in LANES),
+         "contracts_tasks": len(by_lane.get("contracts", [])) - len(late), "late_contracts": late,
+         "qa_tasks": len(by_lane.get("qa", [])) + len(late),
+         "tasks_by_lane": {k: len(v) for k, v in sorted(by_lane.items())},
          "cases": len(cases), "warnings": warnings, "problems": problems}, ok=not problems)
 
 
@@ -437,6 +464,10 @@ def find_test(case, files):
     return sorted(set(found)), sorted(set(skipped) - set(found))
 
 
+# Folders whose conftest starts real services (benefit-be tests/conftest.py level_for: db, integration).
+SERVICE_TEST_DIRS = r"benefit-be:tests/(db|integration)/"
+
+
 def job_trace(d, mode):
     cases = test_cases(d)
     if not cases:
@@ -453,6 +484,11 @@ def job_trace(d, mode):
     for c in cases:
         pool = files.get(c["repo"], []) if c["repo"] else [f for v in files.values() for f in v]
         found, skipped = find_test(c, pool)
+        wrong_level = [w for w in found if c["level"] == "unit" and re.match(SERVICE_TEST_DIRS, w)]
+        if wrong_level:
+            problems.append(f"{c['id']}: unit test `{c['name']}` is in {', '.join(wrong_level)}, a folder whose "
+                            "tests need MongoDB/Temporal (CI's unit job has neither): move it out, or plan it "
+                            "as integration")
         if found:
             proven |= set(c["frs"])
             where = ", ".join(found)
@@ -550,10 +586,34 @@ def verify_init(d):
     out({"cleared": rel(rd)})
 
 
-def needs_fix(d):
+MAX_ROUNDS = 6  # verify rounds at most; the loop stops earlier once it stops making progress
+
+
+def history(d):
+    h = load_json(d / "review" / "history.json", [])
+    return h if isinstance(h, list) else []
+
+
+def needs_fix(d, coding_model="sonnet", judgement_model="opus"):
+    """Start of a round. The first fix uses the coding model; once a fix has already been tried, what is left
+    is the hard part, so later fixes use the judgement model."""
     st = load_json(d / "review" / "verify.json")
     blocking = int(st.get("blocking", 99)) if isinstance(st, dict) else 0  # no result yet = first round
-    out({"fix": blocking > 0, "blocking": blocking})
+    rounds = len(history(d))
+    model = coding_model if rounds <= 1 else judgement_model
+    out({"fix": blocking > 0, "blocking": blocking, "round": rounds + 1, "fix_model": model})
+
+
+def keep_going(h):
+    """(continue?, why). Continue while something blocks, unless the cap is reached or the last two rounds
+    didn't beat the best result before them (stuck: more rounds would only spend tokens)."""
+    if not h or h[-1] == 0:
+        return False, "nothing blocking"
+    if len(h) >= MAX_ROUNDS:
+        return False, f"{MAX_ROUNDS} rounds done"
+    if len(h) >= 3 and min(h[-2:]) >= min(h[:-2]):
+        return False, f"no progress in the last 2 rounds (blocking per round: {h})"
+    return True, f"still {h[-1]} blocking, round {len(h) + 1} next"
 
 
 def failing_jobs(d):
@@ -631,8 +691,12 @@ def verify_status(d):
     if warns:
         lines += ["", "## Warnings (not blocking; say so in the PR)"]
         lines += [f"- `{j['job']}`: {p}" for j in warns for p in j.get("problems", [])]
+    h = history(d) + [blocking]
+    (rd / "history.json").write_text(json.dumps(h) + "\n")
+    go, why = keep_going(h)
+    lines += ["", f"Round {len(h)}: {why}."]
     st = {"blocking": blocking, "jobs_failing": [j.get("job", "?") for j in failing], "reviews": reviews,
-          "warnings": [j["job"] for j in warns]}
+          "warnings": [j["job"] for j in warns], "round": len(h), "history": h, "continue": go, "why": why}
     (rd / "verify.json").write_text(json.dumps(st, indent=2))
     (rd / "verify.md").write_text("\n".join(lines) + "\n")
     out(st)
@@ -645,38 +709,115 @@ def final_gate(d):
     st["blocking"] = int(st.get("blocking", 99))
     if st["blocking"] > 0:
         print(json.dumps(st))
-        print(f"Still {st['blocking']} blocking after the last verify round; see {rel(d)}/review/verify.md. Fix them, "
+        print(f"Still {st['blocking']} blocking ({st.get('why', 'last round')}); see {rel(d)}/review/verify.md. Fix them, "
               "rerun the failing jobs (`wf.py job`) and reviews (review-changes skill), then `wf.py verify-status` "
               "and `specify workflow resume <run-id>`.", file=sys.stderr)
         sys.exit(1)
     out(st)
 
 
-def ci_wait(d):
-    prs = load_json(d / "review" / "prs.json")
+def gh(*args, timeout=120):
+    try:
+        r = subprocess.run(["gh", *args], capture_output=True, text=True, timeout=timeout)
+        return r.returncode, (r.stdout + r.stderr).strip()
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return 1, str(e)
+
+
+def failing_checks(url):
+    """[(check name, link, log tail)] for the failed checks of a PR."""
+    code, text = gh("pr", "checks", url, "--json", "name,state,link")
+    try:
+        checks = json.loads(text) if code in (0, 1, 8) else []
+    except ValueError:
+        checks = []
+    repo = re.search(r"github\.com/([^/]+/[^/]+)/pull/", url)
+    found, seen = [], set()
+    for c in checks:
+        if str(c.get("state", "")).upper() not in ("FAILURE", "ERROR", "CANCELLED", "TIMED_OUT", "STARTUP_FAILURE"):
+            continue
+        m = re.search(r"/runs/(\d+)/job/(\d+)", c.get("link", ""))
+        if not m or (c.get("name"), m.group(1)) in seen:
+            continue
+        seen.add((c.get("name"), m.group(1)))
+        args = ["run", "view", m.group(1), "--job", m.group(2), "--log-failed"]
+        if repo:
+            args += ["-R", repo.group(1)]
+        _, log = gh(*args)
+        found.append((c.get("name", "?"), c.get("link", ""), "\n".join(log.splitlines()[-80:])))
+    return found
+
+
+def ci_wait(d, pr_mode="draft"):
+    """Wait for GitHub Actions on every PR. A red check is reported (review/ci.md), not raised, so the CI fix
+    step can repair it; ci-gate decides after the loop. When everything is green and the PRs were opened as
+    drafts, they are marked ready for review."""
+    rd = d / "review"
+    prs = load_json(rd / "prs.json")
     if not isinstance(prs, dict) or not prs:
         out({"problems": ["review/prs.json missing or invalid (the PR step writes it)"]}, ok=False)
-    results, problems = {}, []
+    results, report, failing = {}, ["# GitHub Actions", ""], 0
     for repo, url in prs.items():
-        r = subprocess.run(["gh", "pr", "checks", url, "--watch", "--interval", "30"], capture_output=True,
-                           text=True, timeout=5400)
-        text = (r.stdout + r.stderr).strip()
+        code, text = gh("pr", "checks", url, "--watch", "--interval", "30", timeout=5400)
         if "no checks reported" in text:
             results[repo] = "no checks configured"
-        elif r.returncode == 0:
+        elif code == 0:
             results[repo] = "pass"
         else:
             results[repo] = "fail"
-            problems.append(f"{repo}: GitHub Actions failed on {url}")
-    out({"ci": results, "problems": problems}, ok=not problems)
+            fails = failing_checks(url)
+            failing += max(1, len(fails))
+            report += [f"## {repo}: failed ({url})", ""]
+            for name, link, log in fails:
+                report += [f"### `{name}` ({link})", "", "```", log, "```", ""]
+            if not fails:
+                report += ["(couldn't read the failing jobs; open the PR's Checks tab)", ""]
+        if results[repo] != "fail":
+            report.append(f"- {repo}: {results[repo]} ({url})")
+    ready = []
+    if failing == 0 and pr_mode == "draft":
+        for repo, url in prs.items():
+            code, text = gh("pr", "view", url, "--json", "isDraft", "-q", ".isDraft")
+            if text.strip() == "true" and gh("pr", "ready", url)[0] == 0:
+                ready.append(url)
+        if ready:
+            report += ["", "All green: marked ready for review: " + ", ".join(ready)]
+    st = {"ci": results, "failing": failing, "ready": ready}
+    (rd / "ci.json").write_text(json.dumps(st, indent=2))
+    (rd / "ci.md").write_text("\n".join(report) + "\n")
+    out(st)
+
+
+def ci_needs_fix(d):
+    st = load_json(d / "review" / "ci.json")
+    failing = int(st.get("failing", 0)) if isinstance(st, dict) else 0  # no CI result yet = first round
+    out({"fix": failing > 0, "failing": failing})
+
+
+def ci_gate(d):
+    st = load_json(d / "review" / "ci.json")
+    if not isinstance(st, dict):
+        out({"problems": ["review/ci.json missing: CI didn't run"]}, ok=False)
+    failing = int(st.get("failing", 0))
+    if failing:
+        print(json.dumps(st))
+        print(f"GitHub Actions still failing after the CI fix rounds; see {rel(d)}/review/ci.md. Fix it on the "
+              "feature branch and push; then `run.sh resume`.", file=sys.stderr)
+        sys.exit(1)
+    out(st)
 
 
 def main(argv):
     cmd, pos = (argv[1], argv[2:]) if len(argv) > 1 else ("", [])
     one = {"plan-gate": plan_gate, "decisions-gate": decisions_gate, "tasks-gate": tasks_gate, "verify-init": verify_init, "needs-fix": needs_fix,
-           "review-list": review_list, "verify-status": verify_status, "final-gate": final_gate, "ci-wait": ci_wait}
+           "review-list": review_list, "verify-status": verify_status, "final-gate": final_gate, "ci-wait": ci_wait,
+           "ci-needs-fix": ci_needs_fix, "ci-gate": ci_gate}
     if cmd in one and len(pos) == 1:
         return one[cmd](fdir(pos[0]))
+    if cmd == "ci-wait" and len(pos) == 2:
+        return ci_wait(fdir(pos[0]), pos[1])
+    if cmd == "needs-fix" and len(pos) == 3:
+        return needs_fix(fdir(pos[0]), pos[1], pos[2])
     if cmd == "prepare" and len(pos) in (3, 4):
         return prepare(*pos)
     if cmd == "jobs" and len(pos) in (1, 2):

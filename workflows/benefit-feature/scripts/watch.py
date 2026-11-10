@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Live progress view of a benefit-feature run.
 
-  python3 workflows/benefit-feature/scripts/watch.py [run-id] [--once] [--every N]
+  python3 workflows/benefit-feature/scripts/watch.py [run-id] [--once] [--every N] [--notify]
 
 Shows every stage in order (done, running, failed, waiting for you, skipped, not started) with how long it
 took, the agent sessions running right now, what each agent has produced so far, and, when the run stops,
 why and the exact command to continue. Defaults to the latest run; refreshes every 5 seconds until the run
-finishes. Reads only the engine's run files and the feature folder; changes nothing.
+finishes. With --notify, it also shows a macOS notification when the run waits for you, fails or finishes.
+Reads only the engine's run files and the feature folder; changes nothing.
 """
 import json, os, re, subprocess, sys, time
 from datetime import datetime, timezone
@@ -34,12 +35,13 @@ STAGES = [
     ("lanes", "Lanes, in parallel", "agent", ["lane"]),
     ("qa", "QA tests (cross-lane)", "agent", ["implement_qa"]),
     ("verify_init", "Clear earlier results", "script", []),
-    ("verify_loop", "Verify loop (≤3 rounds)", "agent",
+    ("verify_loop", "Verify loop (while it makes progress)", "agent",
      ["needs_fix", "maybe_fix", "fix", "job_list", "run_jobs", "run_job", "review_list", "reviews", "review",
       "verify_status"]),
     ("final_gate", "final-gate", "script", []),
     ("pr_approval", "Approve the push (pr_mode=ask)", "you", ["approve_pr"]),
-    ("ship", "PRs, then GitHub Actions", "agent", ["create_pr", "ci"]),
+    ("ship", "PRs, GitHub Actions (fix until green)", "agent",
+     ["create_pr", "ci_loop", "ci_needs_fix", "maybe_ci_fix", "ci_fix", "ci", "ci_gate"]),
 ]
 # What a failure at each step usually means (mirrors skills/feature-workflow/SKILL.md).
 HINTS = {
@@ -50,8 +52,9 @@ HINTS = {
     "plan_recheck": "the architect's plan update is incomplete",
     "decisions_gate": "the decision-maker found no compliant option, or didn't record a decision fully",
     "tasks_gate": "tasks.md or test-plan.md is incomplete; fix what it names",
-    "final_gate": "still blocking after 3 rounds; see review/verify.md",
+    "final_gate": "still blocking when the verify loop stopped (no progress, or 6 rounds); see review/verify.md",
     "ci": "GitHub Actions failed on a PR",
+    "ci_gate": "GitHub Actions still red after 3 CI fix rounds; see review/ci.md",
 }
 TOKEN = re.compile(r"[:./\[\]#]+")
 C = {"g": "32", "r": "31", "y": "33", "c": "36", "d": "2", "b": "1"}
@@ -107,7 +110,7 @@ def stage_of(step_id):
 def stage_rows(state, evs, now):
     """One row per stage: (id, label, who, status, seconds, note)."""
     run_status = state.get("status", "")
-    info = {sid: {"start": None, "end": None, "status": None, "kids": 0, "last_kid_start": None}
+    info = {sid: {"start": None, "end": None, "status": None, "kids": 0, "last_kid_start": None, "live": set()}
             for sid, *_ in STAGES}
     for e in evs:
         sid = stage_of(e.get("step_id", ""))
@@ -115,10 +118,21 @@ def stage_rows(state, evs, now):
             continue
         top = e.get("step_id") == sid
         i, t, ev = info[sid], parse_ts(e.get("timestamp")), e.get("event")
-        if not top:
+        if not top:  # an inner step: an `if` or loop step logs "completed" before its inner steps even start
             i["kids"] += 1
+            kid = e.get("step_id")
             if ev == "step_started":
-                i["last_kid_start"] = e.get("step_id")
+                i["live"].add(kid)
+                i.update(last_kid_start=kid, end=None, status="running")
+                i["start"] = i["start"] or t
+            elif ev == "step_completed":
+                i["live"].discard(kid)
+                if not i["live"]:
+                    i.update(end=t, status=e.get("status", "completed"))
+            elif ev == "step_failed":
+                i["live"].discard(kid)
+                i.update(end=t, status="failed")
+            continue
         if ev == "step_started" and top:
             i.update(start=t, end=None, status="running")
         elif ev == "step_completed" and top:
@@ -135,8 +149,11 @@ def stage_rows(state, evs, now):
             st = "stopped"
         elif st == "completed" and kids and i["kids"] == 0:
             st, note = "skipped", "not needed"
+        elif st == "running" and len(i["live"]) > 1:
+            note = f"{len(i['live'])} in parallel"
         elif st == "running" and i["last_kid_start"]:
-            note = "now: " + i["last_kid_start"].split(":")[-1]
+            name = [x for x in TOKEN.split(i["last_kid_start"]) if x and not x.isdigit()]
+            note = "now: " + (name[-1] if name else i["last_kid_start"])
         secs = None
         if i["start"]:
             secs = ((i["end"] or now) - i["start"]).total_seconds()
@@ -202,6 +219,10 @@ def artifacts(fd):
                                                   if verify.get("jobs_failing") else "")) if verify else ""),
         ("review/trace.md", has("review/trace.md"), ""),
         ("review/prs.json", bool(prs), "  ".join(prs.values())),
+        ("review/ci.md", has("review/ci.md"),
+         (lambda c: (f"{c.get('failing')} failing" if c.get("failing") else "all green")
+          + (", marked ready" if c.get("ready") else ""))(load(fd / "review" / "ci.json", {}) or {})
+         if has("review/ci.json") else ""),
     ]
     return rows
 
@@ -270,8 +291,15 @@ def render(run_dir, color=False):
     return "\n".join(L)
 
 
+def notify(title, text):
+    if sys.platform == "darwin":
+        script = f'display notification "{text}" with title "{title}" sound name "Glass"'
+        subprocess.run(["osascript", "-e", script], capture_output=True)
+
+
 def main(argv):
     once = "--once" in argv
+    want_notify = "--notify" in argv
     every = 5
     if "--every" in argv:
         every = max(1, int(argv[argv.index("--every") + 1]))
@@ -282,7 +310,15 @@ def main(argv):
         print("no workflow run found; start one with: workflows/benefit-feature/run.sh start <feature>")
         return 1
     color = sys.stdout.isatty()
+    last = None
     while True:
+        state = load(run_dir / "state.json", {}) or {}
+        status = state.get("status")
+        if want_notify and last is not None and status != last and status in ("paused", "failed", "completed"):
+            what = {"paused": f"waiting for you at {state.get('current_step_id')}",
+                    "failed": f"stopped at {state.get('current_step_id')}", "completed": "finished"}[status]
+            notify(f"benefit-feature {run_dir.name}", what)
+        last = status
         text = render(run_dir, color)
         if once:
             print(text)

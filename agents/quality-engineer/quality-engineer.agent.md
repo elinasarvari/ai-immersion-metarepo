@@ -40,7 +40,7 @@ Make sure every requirement is proven by the right tests at the right level, and
 - A requirement that can't be tested as written is a finding ("FR-… is not testable because …"), never a silently skipped case.
 
 ## 5. Editing rules
-**May write**, in `specs/<NNN-feature>/` only: `test-plan.md`, and additions to `tasks.md` (new test and QA tasks, and test-case references on existing tasks).
+**May write**, in `specs/<NNN-feature>/` only: `test-plan.md`, and additions to `tasks.md` (new test and QA tasks, tasks that cover a gap in the plan or an ADR, and test-case references on existing tasks).
 
 **Must not:** delete or rewrite other tasks; edit `spec.md`, `plan.md`, ADRs, `repos/`, `project-rules/`, `agents/`, `skills/` or `workflows/`; run commands that change anything.
 

@@ -4,8 +4,10 @@ One command takes an approved spec to draft pull requests in `benefit-be` and `b
 
 ```bash
 workflows/benefit-feature/run.sh start 003 ask    # or /feature-workflow in chat
-workflows/benefit-feature/run.sh watch            # live progress, in a second terminal
+workflows/benefit-feature/run.sh watch 003        # live progress, in a second terminal
 ```
+
+Each feature runs in its own git worktree (section 7), so several features can run side by side while you keep working in your checkout.
 
 A designed version of this page is published as an artifact: [Benefits Feature Pipeline](https://claude.ai/artifact/M1L7pdUf9uMiZK6A2LhJ94) (private; share it from the page's Share menu). This file is the source of truth; update it when the workflow changes.
 
@@ -65,9 +67,9 @@ flowchart TB
 
     qa["QA tests<br/>contract · integration · e2e · eval"]:::ai
 
-    subgraph verify["Verify loop · up to 3 rounds"]
+    subgraph verify["Verify loop · ≤6 rounds"]
         direction TB
-        fix["Fix (from round 2)<br/>everything verify.md lists"]:::ai
+        fix["Fix (from round 2)<br/>everything verify.md lists<br/>coding model first, then judgement"]:::ai
         jobs["Jobs, in parallel<br/>make check · build · eval<br/>ownership · tasks · trace"]:::script
         reviews["Reviews, in parallel, only on green<br/>code benefit-be · code benefit-fe · compliance<br/>only those with no result, blocking, or changed"]:::ai
         status["verify-status"]:::script
@@ -80,15 +82,27 @@ flowchart TB
 
     final["final-gate<br/>nothing blocking"]:::script
     q3{{"pr_mode=ask?<br/>you approve the push"}}:::you
-    pr["Draft PRs<br/>create-pr · one per repo · linked"]:::ai
-    ci["GitHub Actions<br/>ci-wait · each repo's own CI"]:::script
+    pr["Draft PRs<br/>create-pr · feature branch, never main<br/>one per repo · linked"]:::ai
+
+    subgraph gha["GitHub Actions · ≤3 rounds"]
+        direction TB
+        ciwait["ci-wait<br/>each repo's own CI · failing logs to review/ci.md"]:::script
+        cifix["CI fix<br/>reads the failing logs · fixes · make check<br/>commits and pushes to the feature branch"]:::ai
+        ciwait -. "red" .-> cifix
+        cifix -- "push: CI runs again" --> ciwait
+    end
+
+    ready["Ready for review<br/>gh pr ready when all green"]:::script
+    cigate["ci-gate<br/>still red after 3 rounds: stop"]:::script
 
     spec --> arch --> g1 --> dm --> g3 --> tasks --> qe --> g2 --> contracts --> lanes --> qa --> verify
     g1 -- "nothing open" --> tasks
     g3 -. "chose differently" .-> upd -.-> tasks
     spec -.-> q1
     dm -.-> q2
-    verify -- "clean" --> final --> pr --> ci
+    verify -- "clean" --> final --> pr --> gha
+    gha -- "all green" --> ready
+    gha -. "still red" .-> cigate
     final -.-> q3
 
     classDef ai fill:#E2F0F1,stroke:#1D6B74,color:#17212B
@@ -131,7 +145,7 @@ flowchart LR
 | 4 | Lanes (AI ×4) | Each lane implements its own tasks, tests first, in its own folders, and gets its own unit tests green in the same session. | code per lane, `lanes/<lane>/done.json` | verify loop |
 | 5 | QA tests (AI) | Tests that span lanes or repos: contract, integration, end-to-end, eval. | tests | verify loop |
 | 6 | Verify (script + AI) | Fix (from round 2), then in parallel: `make check`, builds, evals, `ownership` (files in their lane), `tasks` (none left open) and `trace` (every planned test defined by its exact name and not skipped). If all green, the reviews that need it, in parallel. | `review/verify.md`, `review/trace.md` | `verify-status`, `final-gate` |
-| 7 | Ship (AI + script) | Draft PRs, one per repo and linked (backend first if the API changed); then waits for each repo's GitHub Actions. | PR URLs | `ci-wait` |
+| 7 | Ship (AI + script) | Draft PRs from the feature branch (never `main`), one per repo and linked, backend first if the API changed. Then each repo's GitHub Actions: a red check's log goes to a CI fix step, which fixes it, runs `make check`, commits and pushes to the same branch, and CI runs again (up to 3 rounds). When all checks are green, the draft PRs are marked ready for review. | PR URLs, `review/ci.md` | `ci-wait`, `ci-gate` |
 
 ## 4. Who does what
 
@@ -159,7 +173,7 @@ The decision-maker is separate from the architect on purpose: the agent that fra
 | Your decisions | Only with `decision_mode=ask`: an ADR is a product, policy or cost call, or needs a rule or constitution change | Answer it, or accept the ADR's fallback | `-i decision_verdict=approve` |
 | Before pushing | Only with `pr_mode=ask` | Read `review/verify.md` (including its Warnings), `review/trace.md` and the diff | `-i pr_verdict=approve` |
 
-With the defaults (`decision_mode=auto`, `pr_mode=draft`), your review happens on the draft PRs in GitHub, where branch protection already requires an approval: the code, and each decision the decision-maker made. Use `pr_mode=none` for a rehearsal that stops before pushing. Each gate has its own answer, so approving one can never approve another.
+With the defaults (`decision_mode=auto`, `pr_mode=draft`), your review happens on the PRs in GitHub: they open as drafts and are marked ready for review once GitHub Actions is green, where branch protection already requires an approval: the code, and each decision the decision-maker made. Use `pr_mode=none` for a rehearsal that stops before pushing. Each gate has its own answer, so approving one can never approve another.
 
 ## 6. How it stays correct, and cheap
 
@@ -169,12 +183,17 @@ With the defaults (`decision_mode=auto`, `pr_mode=draft`), your review happens o
 - `trace` counts a planned test only where it is defined (a Python `def`, a `test(`/`it(` title, an eval case id), in the repo the test plan names, and not skipped. A name in a comment, a skipped test or a renamed test doesn't count.
 - Parallel lanes share one working tree, so `ownership` fails any file a lane doesn't own.
 - Never a silent pass: a missing or unreadable result counts as blocking, and a job that couldn't run (no `make` target) is a warning in `verify.md` and the PR.
-- Each repo's own GitHub Actions must pass on the PR.
+- Each repo's own GitHub Actions must pass on the PR. CI differs from a laptop (no `.env`, services only in the integration job), so a red check goes to a CI fix step that pushes to the feature branch until it's green (up to 3 rounds). Only then is a draft marked ready for review, so nobody reviews code CI hasn't passed. `trace` also flags a planned unit test placed in a folder whose tests need MongoDB or Temporal (`tests/db/`, `tests/integration/`), the mistake behind feature 001's first red CI.
+- Tasks are checked twice before any code: the quality engineer checks they cover the plan (every ADR's "Work this creates", every module in the Project Structure, every requirement) and adds what's missing; `tasks-gate` checks their tags and coverage, and moves a `[contracts]` task that waits for lane work ("after T020") to the QA step, which runs after the lanes.
+- The verify loop keeps going while the blocking count falls, up to 6 rounds, and stops early after 2 rounds without progress (`review/history.json`); the first fix uses `coding_model`, later fixes `judgement_model`, and every fix adds the test that would have caught its finding.
+- Before handing over, each lane reviews its own diff against the reviewer's checklist and the ADRs' "How we verify it", and the quality engineer plans the failure paths reviewers block on (retries running out, every API error body, recorded refusals), so fewer findings reach the reviews at all.
+- After the code, the `tasks` job in every verify round blocks while any task is open; the tests, `trace` and the reviews prove the ticked ones were really done.
 - The checks are tested themselves: `python3 -m unittest discover -s workflows/benefit-feature/tests` runs the tests for every `wf.py` command plus Spec Kit's validator on `workflow.yml`.
 
 **Token economy**
 - Four agent sessions plan the whole feature (architect; tasks; quality engineer; contracts), plus the decision-maker only when an ADR is open, and the architect again only if it chose another option.
 - Each lane is one session: it fixes its own unit tests with its context still loaded, instead of in extra fix sessions.
+- Two models: `judgement_model` (default `opus`) for the architect, decision-maker, quality engineer and reviewers; `coding_model` (default `sonnet`, much faster) for tasks, contracts, lanes, QA tests, fixes and PRs, which follow a written plan. Override either with `-i coding_model=opus`, for example.
 - Reviews run only on green jobs; later rounds rerun only the reviews with no result, still blocking, or whose repo changed.
 - Re-reviews read only `wf.py delta`, the change since they last looked.
 - Each agent reads only the rule files mapped to the paths it touches, and the diff.
@@ -182,24 +201,46 @@ With the defaults (`decision_mode=auto`, `pr_mode=draft`), your review happens o
 
 ## 7. Running it
 
-Always go through `run.sh`. It checks the machine, prepares the repos, and gives every agent step its permissions before handing over to the engine.
+Always go through `run.sh`. It checks the machine, gives the feature its own worktree, and gives every agent step its permissions before handing over to the engine.
 
 ```bash
 R=workflows/benefit-feature/run.sh
 $R check                       # preflight only: tools, gh login, permissions file, repos (changes nothing)
-$R start 003 ask               # start; pr_mode draft (default) | ask | none (rehearsal)
-$R watch                       # live view of the latest run (second terminal); Ctrl+C stops watching only
-$R status                      # the engine's own summary of the latest run
-$R resume                      # continue the latest run after fixing what stopped it
+$R start 003                   # start; pr_mode draft (default: draft PRs, ready once CI is green) | ask | none
+$R watch 003                   # live view of 003's latest run (second terminal), with a macOS notification
+                               # when it waits for you, fails or finishes; Ctrl+C stops watching only
+$R status 003                  # the engine's own summary (a run id or NNN; nothing = the latest of any run)
+$R resume 003                  # continue 003's latest run after fixing what stopped it
 $R resume <run-id> -i pr_verdict=approve      # answer a gate, only after you decided
+$R worktrees                   # each feature worktree: branches, changed files, latest run
+$R cleanup 003                 # after the PRs merge: remove 003's worktrees (asks; keeps the branches)
+$R prepare 003                 # only create or refresh the worktree, e.g. to work in it by hand
+$R start --in-place 003        # the old way, in this checkout: to try uncommitted workflow changes
 ```
 
+**Worktrees.** Each feature gets `<metarepo>.worktrees/<NNN-feature>/` next to the metarepo (set `WF_WORKTREES` to move it):
+
+```
+ai-immersion-metarepo/                     your checkout: any branch, keeps working while runs go
+  repos/benefit-be, repos/benefit-fe       main clones: stay free (sync-repos), share objects and refs
+ai-immersion-metarepo.worktrees/003-name/  git worktree of the metarepo, on feature/003-name
+  specs/003-name/                          the run writes plan, ADRs, tasks, review/ here
+  .specify/workflows/runs/<id>/            this feature's run state
+  repos/benefit-be, repos/benefit-fe       git worktrees of the main clones, on feature/003-name
+```
+
+Inside it every path is the same as in the checkout (`repos/<name>`, `specs/…`, `wf.py`'s root), so agents, rules and checks need no change. It sits next to the checkout rather than inside it so agents don't also load the checkout's `CLAUDE.md`. Within one run the lanes still share that run's working tree, and `ownership` keeps them in their folders. Points to know:
+- The run uses the **committed** agents, rules and workflow at your checkout's `HEAD` when the worktree is created. `start` warns about uncommitted changes to them; commit them, or use `--in-place` to try them.
+- The spec is copied in with its uncommitted changes when the worktree is created. After that, the worktree's copy is the one that counts: commit the spec artefacts there on `feature/NNN-name` (the metarepo branch), then `cleanup` once the PRs merge. `cleanup` refuses while anything is uncommitted and never deletes a branch.
+- Each clone worktree gets its own `.venv` and `node_modules` (`uv sync`, `pnpm install`, quick from their caches) and a copy of the main clone's `.env`. All worktrees share the main clone's local `mongod` (`MONGO_DIR`), so integration tests of two runs at the same time share one database.
+
 **What `start` does before the engine runs:**
-- checks that `specify`, `claude`, `git`, `gh` (logged in, unless `pr_mode=none`), `uv`, `pnpm` and `make` are installed, and that `.claude/settings.json` is valid
-- puts each clone on an up-to-date `main`: it switches a clean clone that has nothing unpushed, fast-forwards it to `origin/main`, and stops with the reason for anything else
+- checks that `specify`, `claude`, `git`, `gh` (logged in, unless `pr_mode=none`), `uv`, `pnpm` and `make` are installed, and that `.claude/settings.json` is valid and allows every command the agents need (`scripts/check_permissions.py`)
+- fetches the main clones, then creates the feature's worktree, or reuses it on a restart. A new clone worktree starts its branch from `origin/main` (or from an existing local or remote `feature/NNN-name`). If a main clone still has that branch checked out from an in-place run, it is moved to `main` when clean, or `start` stops with the reason
+- with `--in-place`: puts each clone of the checkout on an up-to-date `main` instead (switches a clean clone that has nothing unpushed, fast-forwards it to `origin/main`, stops with the reason for anything else)
 - passes `.claude/settings.json` to every `claude -p` step with `--settings` (through `SPECKIT_INTEGRATION_CLAUDE_EXTRA_ARGS`)
 
-AI steps run unattended, so they can't ask for permission. Claude Code applies a project's `.claude/settings.json` on its own only after someone trusts the folder interactively; passing it with `--settings` works without that, on any machine. Starting the engine directly, without `run.sh`, skips all three checks, and an agent step then typically ends with "Prompt exited with code 1" and writes nothing.
+AI steps run unattended, so they can't ask for permission. Claude Code applies a project's `.claude/settings.json` on its own only after someone trusts the folder interactively; passing it with `--settings` works without that, on any machine. Starting the engine directly, without `run.sh`, skips all of this, and an agent step then typically ends with "Prompt exited with code 1" and writes nothing.
 
 **`watch`** shows each stage (✓ done, ▶ running, ✗ failed, ⏸ waiting for you, – not needed, · not started) with its duration, the agent sessions running now, what each agent has produced (`plan.md`, ADRs, tasks done, test cases, verify results, PR links) and, when the run stops, the failed step, its last output, the usual cause and the exact command to continue. It only reads files.
 
@@ -212,7 +253,7 @@ ai-immersion-metarepo/
 ├── docs/workflow-architecture.md      this page
 ├── workflows/
 │   ├── feature.md                     the stages, and the manual path
-│   ├── benefit-feature/run.sh         start, resume, watch, check (use this)
+│   ├── benefit-feature/run.sh         start, resume, watch, worktrees, cleanup, check (use this)
 │   ├── benefit-feature/workflow.yml   the pipeline
 │   ├── benefit-feature/scripts/watch.py  live progress view
 │   ├── benefit-feature/scripts/wf.py  every check
@@ -228,5 +269,5 @@ ai-immersion-metarepo/
 ├── project-rules/                     rule sets with IDs; README maps paths → rules
 ├── .specify/memory/constitution.md    principles I–X; overrides everything
 ├── specs/<NNN-feature>/               spec, plan, ADRs, tasks, test plan, review/
-└── repos/benefit-be, repos/benefit-fe the code, on feature/<NNN-feature>
+└── repos/benefit-be, repos/benefit-fe the main clones; each run works in ../ai-immersion-metarepo.worktrees/<NNN-feature>/
 ```

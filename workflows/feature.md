@@ -11,7 +11,7 @@ How a spec becomes merged code in `benefit-be` and `benefit-fe`. [benefit-featur
 | 3 | Contracts | `/speckit-implement` on `[contracts]` tasks, alone | `packages/domain`, OpenAPI, dependencies | verify loop |
 | 4 | Lanes, in parallel | `/speckit-implement` per lane: tests first, then its unit tests green | code in each lane's folders, `lanes/<lane>/done.json` | verify loop |
 | 5 | QA tests | `/speckit-implement` on `[qa]` tasks | contract, integration, e2e and eval tests | verify loop |
-| 6 | Verify, ≤3 rounds | fix (from round 2) → jobs in parallel: `make check`, builds, evals, `ownership`, `tasks`, `trace` → if green, the reviews that need it, in parallel | `review/verify.md`, `review/trace.md` | `verify-status`, then `final-gate` |
+| 6 | Verify, while it makes progress (≤6 rounds) | fix (from round 2; later fixes on the judgement model) → jobs in parallel: `make check`, builds, evals, `ownership`, `tasks`, `trace` → if green, the reviews that need it, in parallel | `review/verify.md`, `review/trace.md` | `verify-status`, then `final-gate` |
 | 7 | Ship | `create-pr` skill | draft PRs, then GitHub Actions | `ci-wait` |
 | 8 | After merge | `sync-repos` skill | clones on the latest `main` | — |
 
@@ -24,5 +24,6 @@ How a spec becomes merged code in `benefit-be` and `benefit-fe`. [benefit-featur
 - **Gates for people:** a person is asked only for open spec questions, an ADR with no compliant option, and before pushing when `pr_mode=ask`.
 - **Where code goes:** only inside `repos/<repo>`, on `feature/<NNN-feature>` from `origin/main`, in the repos `scope.json` names. Feature 009 may also write the metarepo's `scripts/factory/` and `templates/`.
 - **Manual path:** run each stage's skill or command in order. After stages 1, 1b and 2: `wf.py plan-gate`, `decisions-gate`, `tasks-gate`. For 1b by hand, ask the user, or run the decision-maker agent if they want it decided for them. After stage 5: `wf.py job specs/<NNN> <job>` for each of `wf.py jobs specs/<NNN>`, then the **review-changes** skill, then `wf.py verify-status specs/<NNN>`.
-- **Running it:** `workflows/benefit-feature/run.sh start <NNN> [draft|ask|none]`, then `run.sh watch` in a second terminal; `run.sh resume` after fixing what stopped it; `run.sh check` for preflight only. Always use `run.sh`: it prepares the repos and gives the agent steps their permissions.
+- **Models:** judgement steps (architect, decision-maker, quality engineer, reviews) use `judgement_model` (default `opus`); steps that follow a written plan (tasks, contracts, lanes, QA, fixes, PRs) use `coding_model` (default `sonnet`).
+- **Running it:** `workflows/benefit-feature/run.sh start <NNN> [draft|ask|none]`, then `run.sh watch <NNN>` in a second terminal; `run.sh resume <NNN>` after fixing what stopped it; `run.sh check` for preflight only; `run.sh cleanup <NNN>` after the PRs merge. Always use `run.sh`: it gives the feature its own git worktree (`../ai-immersion-metarepo.worktrees/<NNN-feature>/`, see docs/workflow-architecture.md section 7) and gives the agent steps their permissions.
 - **Testing the workflow itself:** `python3 -m unittest discover -s workflows/benefit-feature/tests` runs the tests of every check plus Spec Kit's validator on `workflow.yml`. Run it after any change to either.

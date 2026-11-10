@@ -12,6 +12,7 @@ Central store for shared AI-assisted development assets (see README.md for folde
   If the clone already exists, the script fast-forward pulls it instead.
 - To check or update the clones (after a fresh checkout, after PRs merge, or before starting work), use the **sync-repos** skill: `skills/sync-repos/sync-repos.sh [--check]`. It only fast-forwards clean clones on `main`, and leaves feature branches and local changes alone.
 - Never clone outside `repos/`, never embed credentials in URLs, and never delete a clone without asking.
+- Feature runs use git worktrees, not extra clones: `run.sh start` makes `../ai-immersion-metarepo.worktrees/<NNN-feature>/`, a worktree of the metarepo on `feature/<NNN-feature>` whose `repos/<name>` are worktrees of the main clones on the same branch. Inside it all paths are as here. The main clones stay free. Remove one only with `run.sh cleanup <NNN>`, after asking.
 - When working inside a cloned repo, follow that repo's own `CLAUDE.md` / rules plus the rule sets that `project-rules/README.md` maps to the paths you touch. Commits for that project are made inside `repos/<name>` and pushed to its own `origin`.
 - The project has two repos: `benefit-be` (API, Temporal worker, agents, rules, RAG, MCP servers, DB, evals, analytics) and `benefit-fe` (React UI).
 
@@ -31,10 +32,10 @@ Central store for shared AI-assisted development assets (see README.md for folde
   2. tasks, then the quality engineer's test plan and QA tasks
   3. contracts
   4. lanes in parallel (one `speckit.implement` session each, which gets its own unit tests green), then QA tests
-  5. verify loop, up to 3 rounds: fix (from round 2), then tests, builds, evals and the script checks (ownership, open tasks, traceability) in parallel, then, only if green, the code and compliance reviews that need rerunning, in parallel
+  5. verify loop, while it makes progress (at most 6 rounds; it stops after 2 rounds without progress): fix (from round 2; later fixes use the judgement model), then tests, builds, evals and the script checks (ownership, open tasks, traceability) in parallel, then, only if green, the code and compliance reviews that need rerunning, in parallel
   6. final gate, draft PRs, then GitHub Actions
 
-  `benefit-feature/scripts/wf.py` holds every check: one gate after each planning stage, and every check on the code inside the verify loop, so the fix step can repair it. Its tests are in `benefit-feature/tests/` (`python3 -m unittest discover -s workflows/benefit-feature/tests`); run them after changing the workflow or `wf.py`. The workflow asks a person only for open spec questions, an ADR the decision-maker finds no compliant option for (or every open ADR with `decision_mode=ask`), or before pushing with `pr_mode=ask`. Start, resume or check a run with the **feature-workflow** skill, which uses `workflows/benefit-feature/run.sh` (`start`, `resume`, `watch`, `status`, `check`); never start the engine directly, because `run.sh` prepares the repos and passes the agents' permissions (`.claude/settings.json`) to every `claude -p` step. Never answer a gate (`spec_verdict`, `decision_verdict`, `pr_verdict`) unless the user explicitly decided what it shows.
+  `benefit-feature/scripts/wf.py` holds every check: one gate after each planning stage, and every check on the code inside the verify loop, so the fix step can repair it. Its tests are in `benefit-feature/tests/` (`python3 -m unittest discover -s workflows/benefit-feature/tests`); run them after changing the workflow or `wf.py`. The workflow asks a person only for open spec questions, an ADR the decision-maker finds no compliant option for (or every open ADR with `decision_mode=ask`), or before pushing with `pr_mode=ask`. Start, resume or check a run with the **feature-workflow** skill, which uses `workflows/benefit-feature/run.sh` (`start`, `resume`, `watch`, `status`, `worktrees`, `cleanup`, `check`); never start the engine directly, because `run.sh` creates the feature's worktree and passes the agents' permissions (`.claude/settings.json`) to every `claude -p` step. Never answer a gate (`spec_verdict`, `decision_verdict`, `pr_verdict`) unless the user explicitly decided what it shows.
 - **Docs:** `docs/workflow-architecture.md` explains the workflow with Mermaid diagrams. Update it in the same change whenever the workflow, agents or gates change.
 - **Token economy:** follow `agents/README.md`. Read only the mapped rule files and the diff, write results to files, reply briefly, and on re-reviews read only what changed.
 
@@ -89,7 +90,7 @@ git create-pr <repo-name> --branch feature/<NNN-feature> --message "<conventiona
 
 - It runs inside `repos/<name>` and pushes to that clone's own `origin`, then opens a PR against `main`: with `gh` if it is logged in, otherwise through GitHub's API with the token git already uses. With `--no-pr` it only pushes and prints the compare link.
 - Branch name = Spec Kit feature folder name with a type prefix (`feature/003-user-login`). Use the same branch in every repo the feature touches, with one PR per repo, and link the PRs to each other.
-- Confirm the repo, branch, files and PR title with the user before pushing, unless the push is part of a `benefit-feature` run the user started with `pr_mode=draft`; that start is their approval. Never push to `main`, force-push or skip hooks.
+- Confirm the repo, branch, files and PR title with the user before pushing, unless the push is part of a `benefit-feature` run the user started with `pr_mode=draft` (the default); that start is their approval, including the CI fix step's pushes to the same feature branch. Never push to `main`, force-push or skip hooks.
 - The metarepo commits only its own files (`specs/`, feature 009's `scripts/factory/`, `templates/`, rules and skills), never the clones. After the PRs merge, fast-forward the clones with `sync-repos.sh`.
 
 ## Skills

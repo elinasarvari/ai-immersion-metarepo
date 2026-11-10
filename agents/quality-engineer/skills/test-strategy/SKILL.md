@@ -27,12 +27,24 @@ You are the **quality-engineer agent**. Read `agents/quality-engineer/quality-en
 - Not tested, and why: <FR and reason> (should be empty)
 ```
 - **Levels:** `unit`, `integration`, `workflow`, `contract`, `e2e`, `eval`.
+- **Failure paths, not just the happy path.** Plan a case for each of these the plan creates; reviewers block on them when they are missing:
+  - every Temporal activity whose retries run out: what the workflow does, and that the case isn't left open or locked (TW-10);
+  - every API error response in `contracts/` (each 4xx and 5xx, including races and another household's data), asserting the documented error body;
+  - every Accepted ADR's "How we verify it";
+  - every refusal or rejection the spec or an ADR requires to be recorded (audit, constitution IV).
+- **Each case must prove what it says.** Its data must put the system in the state the case names (for example a *decided* case for "action on a decided case"); say that state in the Data column.
 - **Lane / repo:** the lane that owns the code under test, or `qa` for cases that span lanes or repos, then the repo (`data-lane / benefit-be`). The trace looks for the test only in that repo.
 - **Test name:** exact and unique. Python: the function name, `test_FR_<NNN>_<nn>_…`. TypeScript: the start of the `test('FR-<NNN>-<nn>: …')` title. Eval: the eval case id.
 
 ## 3. Add tasks to `specs/<NNN-feature>/tasks.md`
 - **Lane tasks:** for each implementation task, make sure its test-first task exists, tagged the same `[lane][repo]`, and names its `TC-` IDs. Add the task where it's missing.
 - **`[qa]` tasks:** contract, cross-lane integration, end-to-end journey and eval tasks, tagged `[qa][benefit-be]` or `[qa][benefit-fe]`. They run after all lanes finish.
+- **Check the tasks cover the plan** (before any code exists, this is the cheapest place to catch a gap):
+  - each Accepted ADR's "Work this creates" and each module in `plan.md`'s Project Structure has a task;
+  - each `FR-…` the spec defines is named by at least one implementation task;
+  - no `[contracts]` task depends on a lane task. Work that needs the lanes first (regenerating `openapi.json`, `make check`, walking the quickstart) belongs in `[qa]`.
+
+  Add a missing task, tagged with its lane and repo. Report a wrongly tagged `[contracts]` task in your reply and add the `[qa]` task that does that work after the lanes; don't retag or rewrite it.
 - Use the next free task numbers. Don't reorder or rewrite existing tasks.
 
 ## 4. Self-check, then report

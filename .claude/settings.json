@@ -20,7 +20,22 @@
       "Bash(cat *)",
       "Bash(find *)",
       "Bash(grep *)",
-      "Bash(mkdir *)"
+      "Bash(mkdir *)",
+      "Bash(cd *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(wc *)",
+      "Bash(diff *)",
+      "Bash(sort *)",
+      "Bash(echo *)",
+      "Bash(test *)",
+      "Bash(sed *)",
+      "Bash(mv *)",
+      "Bash(cp *)",
+      "Bash(touch *)",
+      "Bash(rm *)",
+      "Bash(node *)",
+      "Bash(npx *)"
     ],
     "deny": [
       "Bash(git push --force*)",

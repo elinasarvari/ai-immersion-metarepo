@@ -17,8 +17,8 @@ skills/sync-repos/sync-repos.sh benefit-be         # limit to specific repos
 
 ## What it does
 
-1. **Validates `repos/`:** every entry (other than `.gitkeep`) must be a real git repo. Anything else is flagged as broken.
-2. **Fetches** `origin` for each clone.
+1. **Validates `repos/`:** every entry (other than `.gitkeep`) must be a real git repo, or, inside a feature worktree (`workflows/benefit-feature/run.sh`), a git worktree of the main clone. Anything else is flagged as broken.
+2. **Fetches** `origin` for each clone and, unless `--check`, prunes worktrees whose folder is gone.
 3. **Fast-forwards** each clone to `origin/<default branch>`, but only when it is clean and on that branch (or detached at a commit already in it).
 4. **Leaves alone**, and reports, any clone with a feature branch checked out, uncommitted changes or unpushed commits. It never resets, stashes or forces.
 

@@ -2,7 +2,7 @@ schema_version: "1.0"
 workflow:
   id: "benefit-feature"
   name: "Benefits Case feature"
-  version: "0.5.0"
+  version: "0.8.0"
   author: "ai-immersion-metarepo"
   description: >-
     From an existing spec to draft PRs, each AI step a separate agent: architect plan → decision-maker settles
@@ -25,11 +25,15 @@ inputs:
   pr_mode:
     type: string
     default: "draft"
-    prompt: "draft = open draft PRs when everything passes; ask = approve before pushing; none = stop before pushing"
+    prompt: "draft = when everything passes, push and open draft PRs, marked ready for review once GitHub Actions is green; ask = approve before pushing (PRs open ready for review); none = stop before pushing"
   trace_mode:
     type: string
     default: "strict"
     prompt: "strict = fail if a planned test is missing; warn = report only"
+  # Models per step: judgement (plan, decisions, test design, reviews) vs following a written plan (tasks,
+  # code, fixes, PRs). Any value `claude --model` accepts: an alias (opus, sonnet) or a full model ID.
+  judgement_model: {type: string, default: "opus"}
+  coding_model: {type: string, default: "sonnet"}
   decision_mode:
     type: string
     default: "auto"
@@ -74,6 +78,7 @@ steps:
   - id: architect
     type: prompt
     integration: "{{ inputs.integration }}"
+    model: "{{ inputs.judgement_model }}"
     timeout: 2400
     prompt: >-
       You are the architect agent (agents/architect/architect.agent.md). Use its architecture-plan skill for
@@ -92,6 +97,7 @@ steps:
       - id: decision_maker
         type: prompt
         integration: "{{ inputs.integration }}"
+        model: "{{ inputs.judgement_model }}"
         timeout: 1800
         prompt: >-
           You are the decision-maker agent (agents/decision-maker.agent.md). Decide the open ADRs in
@@ -110,6 +116,7 @@ steps:
           - id: architect_update
             type: prompt
             integration: "{{ inputs.integration }}"
+            model: "{{ inputs.judgement_model }}"
             timeout: 1200
             prompt: >-
               You are the architect agent (agents/architect/architect.agent.md). The decision-maker accepted options
@@ -141,22 +148,27 @@ steps:
   - id: tasks
     type: prompt
     integration: "{{ inputs.integration }}"
+    model: "{{ inputs.coding_model }}"
     timeout: 1800
     prompt: >-
       For {{ steps.feature.output.data.feature_dir }}: follow the speckit-tasks skill to write tasks.md from the plan
-      and the Accepted ADRs. Tag every task with one lane and its repo: [contracts], [workflows], [agents], [data] or
-      [platform-ui], then [benefit-be] or [benefit-fe]. Shared changes (packages/domain, OpenAPI, dependencies,
-      lockfiles, Makefile/Procfile) are [contracts]; every other task touches only its lane's folders. Mention the FR
-      IDs each task serves. Reply in ≤5 lines.
+      and the Accepted ADRs (each ADR's "Work this creates" becomes tasks). Tag every task with one lane and its repo:
+      [contracts], [workflows], [agents], [data] or [platform-ui], then [benefit-be] or [benefit-fe]. [contracts] is
+      only the shared changes the lanes build on (packages/domain, OpenAPI paths and schemas, dependencies, lockfiles,
+      Makefile/Procfile), done first and alone, so a [contracts] task never depends on a lane task. Work that has to
+      run after the lanes (regenerating openapi.json, running make check, walking the quickstart, cross-lane tests) is
+      [qa]. Every other task touches only its lane's folders. Mention the FR IDs each task serves; every FR in the
+      spec needs at least one task. Reply in ≤5 lines.
 
   - id: quality_engineer
     type: prompt
     integration: "{{ inputs.integration }}"
+    model: "{{ inputs.judgement_model }}"
     timeout: 1800
     prompt: >-
       You are the quality-engineer agent (agents/quality-engineer/quality-engineer.agent.md). Use its test-strategy
-      skill for {{ steps.feature.output.data.feature_dir }}: write test-plan.md and add the test-first and [qa] tasks
-      to tasks.md. Reply in ≤10 lines.
+      skill for {{ steps.feature.output.data.feature_dir }}: write test-plan.md, add the test-first and [qa] tasks
+      to tasks.md, and check the tasks cover the plan (its step 3). Reply in ≤10 lines.
 
   - id: tasks_gate
     type: shell
@@ -176,12 +188,14 @@ steps:
       - id: implement_contracts
         command: speckit.implement
         integration: "{{ inputs.integration }}"
+        model: "{{ inputs.coding_model }}"
         timeout: 2400
         input:
           args: >-
             Implement ONLY the [contracts] tasks in {{ steps.feature.output.data.feature_dir }}/tasks.md on branch
-            {{ steps.feature.output.data.branch }}, tests first, following plan.md and the Accepted ADRs. Mark them [X].
-            Commit nothing. Reply in ≤5 lines.
+            {{ steps.feature.output.data.branch }}, tests first, following plan.md and the Accepted ADRs. Skip these,
+            which need the lanes' code first (the QA step does them): {{ steps.tasks_gate.output.data.late_contracts }}.
+            Mark the ones you did [X]. Commit nothing. Reply in ≤5 lines.
 
   # Lanes share one working tree per repo: each edits only its own folders and writes only under lanes/<lane>/.
   - id: lanes
@@ -192,6 +206,7 @@ steps:
       id: lane
       command: speckit.implement
       integration: "{{ inputs.integration }}"
+      model: "{{ inputs.coding_model }}"
       timeout: 3600
       input:
         args: >-
@@ -203,22 +218,27 @@ steps:
           change elsewhere, write it to {{ steps.feature.output.data.feature_dir }}/lanes/{{ item }}/blocked.md and go on.
           Before finishing, run only this lane's unit tests (tests/<this lane's folders>, or vitest for benefit-fe) and
           fix the code until they pass (change a test only if it contradicts test-plan.md); the full checks run later.
+          Then review your own diff the way the reviewers will: the "Look for" list in agents/backend-reviewer.agent.md
+          (or agents/frontend-reviewer.agent.md for benefit-fe), and every Accepted ADR's "How we verify it" that your
+          lane touches. Fix what you find, adding the test that proves each fix.
           Finally write {{ steps.feature.output.data.feature_dir }}/lanes/{{ item }}/done.json as {"tasks": ["T001", ...]}.
           Commit and push nothing. Reply in ≤5 lines.
 
   - id: qa
     type: if
-    condition: "{{ steps.tasks_gate.output.data.qa_tasks > 0 }}"
+    condition: "{{ steps.tasks_gate.output.data.qa_tasks > 0 }}"  # includes late [contracts] tasks
     then:
       - id: implement_qa
         command: speckit.implement
         integration: "{{ inputs.integration }}"
+        model: "{{ inputs.coding_model }}"
         timeout: 2400
         input:
           args: >-
             Implement ONLY the [qa] tasks in {{ steps.feature.output.data.feature_dir }}/tasks.md: the contract,
-            integration, end-to-end and eval tests in test-plan.md, named exactly as planned. Mark them [X]. Commit
-            nothing. Reply in ≤5 lines.
+            integration, end-to-end and eval tests in test-plan.md, named exactly as planned. Also do these [contracts]
+            tasks, which had to wait for the lanes: {{ steps.tasks_gate.output.data.late_contracts }}. Mark them [X].
+            Commit nothing. Reply in ≤5 lines.
 
   # ── 5. Verify loop. Each round: fix what the last round found → every check in parallel → reviews (only on
   #       green, only those with no result, still blocking, or whose repo changed) → status. A round always
@@ -228,14 +248,16 @@ steps:
     run: "python3 workflows/benefit-feature/scripts/wf.py verify-init {{ steps.feature.output.data.feature_dir }}"
     output_format: json
 
+  # Keeps going while the blocking count falls (up to 6 rounds; wf.py MAX_ROUNDS) and stops early once two
+  # rounds in a row make no progress. Later fixes switch to the judgement model.
   - id: verify_loop
     type: do-while
-    max_iterations: 3
-    condition: "{{ steps.verify_status.output.data.blocking > 0 }}"
+    max_iterations: 6
+    condition: "{{ steps.verify_status.output.data.continue }}"
     steps:
       - id: needs_fix
         type: shell
-        run: "python3 workflows/benefit-feature/scripts/wf.py needs-fix {{ steps.feature.output.data.feature_dir }}"
+        run: "python3 workflows/benefit-feature/scripts/wf.py needs-fix {{ steps.feature.output.data.feature_dir }} {{ inputs.coding_model }} {{ inputs.judgement_model }}"
         output_format: json
 
       - id: maybe_fix
@@ -245,13 +267,15 @@ steps:
           - id: fix
             type: prompt
             integration: "{{ inputs.integration }}"
+            model: "{{ steps.needs_fix.output.data.fix_model }}"
             timeout: 2400
             prompt: >-
               Fix everything {{ steps.feature.output.data.review_dir }}/verify.md lists as blocking: failing jobs (read
               their logs), open tasks (do them, including the work in lanes/*/blocked.md, then mark them [X] in tasks.md),
               missing or skipped planned tests (review/trace.md), files outside their lane, and every critical or major
-              finding in the review files it points to. Follow the lane rule files and Accepted ADRs; keep each change
-              in its owner's folders. Commit nothing. Reply in ≤5 lines.
+              finding in the review files it points to. For each finding, add or correct the test that would have caught
+              it, so it can't come back. Follow the lane rule files and Accepted ADRs; keep each change in its owner's
+              folders. Run make check in each repo you changed before finishing. Commit nothing. Reply in ≤5 lines.
 
       - id: job_list
         type: shell
@@ -283,6 +307,7 @@ steps:
           id: review
           type: prompt
           integration: "{{ inputs.integration }}"
+          model: "{{ inputs.judgement_model }}"
           timeout: 1800
           prompt: >-
             Review "{{ item }}" for {{ steps.feature.output.data.feature_dir }}: "compliance" → you are the
@@ -322,19 +347,58 @@ steps:
       - id: create_pr
         type: prompt
         integration: "{{ inputs.integration }}"
+        model: "{{ inputs.coding_model }}"
         timeout: 900
         prompt: >-
           Use the create-pr skill for {{ steps.feature.output.data.feature_dir }}, branch {{ steps.feature.output.data.branch }},
           for every repo with changes. Starting this run with pr_mode={{ inputs.pr_mode }} is the user's approval to push;
-          don't ask again. pr_mode "draft" → draft PRs (--draft); "ask" → ready for review. Fill the PR template with the
+          don't ask again. pr_mode "draft" → draft PRs (--draft; the workflow marks them ready once GitHub Actions is
+          green); "ask" → PRs ready for review (no --draft). Fill the PR template with the
           FR IDs covered, the results in review/verify.md (including its Warnings section) and review/trace.md, and a
           "Decided automatically - please review" section listing each entry in decisions/auto-decisions.json (ADR,
           option chosen, the architect's recommendation, revisit-if) and any amendment suggested. If the
           API contract changed, open the benefit-be PR first and link the two. Write
           {{ steps.feature.output.data.review_dir }}/prs.json as {"<repo>": "<PR URL>"}. Reply with the URLs.
 
-      - id: ci
+      # GitHub Actions loop: wait for CI; if a check fails, a fix step reads its log, fixes, pushes to the
+      # feature branch (never main) and CI runs again, up to 3 times. Green drafts are marked ready for review.
+      - id: ci_loop
+        type: do-while
+        max_iterations: 3
+        condition: "{{ steps.ci.output.data.failing > 0 }}"
+        steps:
+          - id: ci_needs_fix
+            type: shell
+            run: "python3 workflows/benefit-feature/scripts/wf.py ci-needs-fix {{ steps.feature.output.data.feature_dir }}"
+            output_format: json
+
+          - id: maybe_ci_fix
+            type: if
+            condition: "{{ steps.ci_needs_fix.output.data.fix }}"
+            then:
+              - id: ci_fix
+                type: prompt
+                integration: "{{ inputs.integration }}"
+                model: "{{ inputs.judgement_model }}"
+                timeout: 2400
+                prompt: >-
+                  GitHub Actions failed on the PRs in {{ steps.feature.output.data.review_dir }}/prs.json; the failing
+                  checks and their log tails are in {{ steps.feature.output.data.review_dir }}/ci.md. Work in each repo
+                  under repos/ on branch {{ steps.feature.output.data.branch }}. Find the cause (CI differs from local:
+                  no .env, and services such as MongoDB only in the integration job), reproduce it locally where you can,
+                  and fix it the way the lane rules and Accepted ADRs require, adding the test that would have caught
+                  it. Run make check in each repo you changed. Then commit with a conventional message ending with the
+                  line "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>", and push with
+                  git push origin {{ steps.feature.output.data.branch }}. Never push to main, force-push or skip hooks.
+                  Reply in ≤5 lines.
+
+          - id: ci
+            type: shell
+            run: "python3 workflows/benefit-feature/scripts/wf.py ci-wait {{ steps.feature.output.data.feature_dir }} {{ inputs.pr_mode }}"
+            output_format: json
+            timeout: 5600
+
+      - id: ci_gate
         type: shell
-        run: "python3 workflows/benefit-feature/scripts/wf.py ci-wait {{ steps.feature.output.data.feature_dir }}"
+        run: "python3 workflows/benefit-feature/scripts/wf.py ci-gate {{ steps.feature.output.data.feature_dir }}"
         output_format: json
-        timeout: 5600

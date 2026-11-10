@@ -42,7 +42,7 @@ case "$body_file" in ""|/*) ;; *) body_file="$PWD/${GIT_PREFIX:-}$body_file" ;; 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 root="$(cd "$script_dir/../.." && pwd -P)"
 dir="$root/repos/$name"
-[ -d "$dir/.git" ] || die "repos/$name is not a git clone (clone it with skills/clone-repo/clone-repo.sh <url>)"
+[ -e "$dir/.git" ] || die "repos/$name is not a git clone (clone it with skills/clone-repo/clone-repo.sh <url>)"
 cd "$dir"
 remote_url="$(git remote get-url origin 2>/dev/null)" || die "repos/$name has no 'origin' remote"
 echo "Repository: repos/$name -> $remote_url"
