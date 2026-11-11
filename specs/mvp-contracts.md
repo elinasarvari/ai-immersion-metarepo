@@ -7,6 +7,11 @@ not halfway through the build.
 
 Names below that already exist on `main` are marked *(exists)*. Everything else is new.
 
+**Status (2026-11-11):** C-01 to C-10 are built on branch `feature/mvp-contracts` in both repos,
+not pushed yet. Where the build differs from the first draft, this document now says what was
+built. 007b is dropped, so the redetermination form and its 30-day timer are not in the
+contract. The changes from the draft are listed in section 8.
+
 ## 1. Who owns which shared file
 
 Three of the four MVP specs are in the Workflows lane. All three would otherwise edit the same
@@ -14,7 +19,7 @@ files, so the rules are:
 
 | File | Owner | Others |
 |---|---|---|
-| `benefit-be/apps/worker/workflows/case.py` | 011 seat | 002 and 007 put their logic in their own modules (below) and call it from the hook the contracts PR adds. They never edit `case.py`. |
+| `benefit-be/apps/worker/workflows/case.py` | 011 seat | 002 and 007 put their logic in their own modules (below). 011 calls them from `case.py` as each lands. 002 and 007 never edit `case.py`. |
 | `benefit-be/packages/domain/**` | contracts PR only | A change found mid-build goes in a small PR that every seat reviews |
 | `benefit-be/apps/api/main.py` (router registration) | contracts PR | Each feature has its own router file |
 | `benefit-be/openapi/openapi.json` (committed OpenAPI) | contracts PR adds every MVP endpoint; each feature fills in its own | Regenerate in the feature PR and rebase if another PR changed it |
@@ -26,11 +31,13 @@ Workflow modules for each feature:
 
 | Feature | Module | Called from `case.py` |
 |---|---|---|
-| 002 | `apps/worker/activities/verification.py` *(exists, stub)* and `apps/worker/workflows/verification_branch.py` | after `verify_documents`: findings → Verification review; missing items → 011's request for information |
+| 002 | `apps/worker/activities/verification.py` *(exists, stub)*, `apps/worker/workflows/verification_branch.py` (`next_step`, built), `apps/worker/repositories/reference_records.py` (stub) | after `verify_documents`: findings → Verification review; missing items → 011's request for information |
 | 011 | `apps/worker/workflows/applicant_wait.py`, `apps/worker/activities/notices.py`, `apps/worker/activities/explanations.py` | owned by 011 |
-| 007 | `apps/worker/workflows/redetermination.py`, `apps/worker/activities/renewal.py` | at start when `case_type` is `redetermination` |
+| 007a | `apps/worker/workflows/redetermination.py`, `apps/worker/activities/renewal.py` | at start when `case_type` is `redetermination` |
 
-New branches in `case.py` use `workflow.patched` (TW-7).
+The contracts PR adds no hooks to `case.py`. A hook with no behaviour behind it would only be
+dead code. 011 adds each call when the behaviour exists, and new branches use
+`workflow.patched` (TW-7).
 
 ## 2. Domain changes (`packages/domain/`)
 
@@ -40,12 +47,12 @@ New branches in `case.py` use `workflow.patched` (TW-7).
 
 ```
 approval, automatic_renewal, renewal_after_response,      # delivered directly
-denial, coverage_ended, request_for_information,           # wait for caseworker approval
-redetermination_form
+denial, coverage_ended, request_for_information            # wait for caseworker approval
 ```
 
-- `NOTICE_NEEDS_APPROVAL: dict[NoticeType, bool]` is a data table next to the enum. The API and
-  the worker read the same table.
+- No `redetermination_form`: 007b is dropped.
+- `NOTICE_NEEDS_APPROVAL` in `packages/domain/notice.py` says which types wait. The API and the
+  worker read the same table.
 - `NoticeStatus`: `pending_approval`, `delivered`.
 - `Notice`: `notice_id`, `case_id`, `household_id`, `notice_type`, `status`, `text`,
   `items: list[RequestedItem]` (requests and forms only), `due_case_date: date | None`,
@@ -55,15 +62,16 @@ redetermination_form
 
 ### Verification result (002, FR-002-23)
 
-`VerificationOutcome` *(exists)* becomes `VerificationResult`. It keeps `complete` and
-`needs_review`, so `case.py` keeps working, and adds the rest:
+`VerificationOutcome` *(exists)* becomes `VerificationResult`, in
+`packages/domain/verification.py` (with `VerificationRequest`). It keeps `complete` and
+`needs_review`, and every new field has a default, so recorded workflow histories still replay:
 
 ```
 VerificationResult:
-  case_id: UUID
-  identity_verified: bool
-  findings: list[Finding]          # needs_review == bool(open findings)
-  missing_items: list[MissingItem] # complete == not missing_items
+  case_id: UUID | None
+  identity_verified: bool | None       # None: the check did not look (the 001 stub)
+  findings: list[Finding]              # needs_review == bool(open findings)
+  missing_items: list[MissingDocument] # complete == not missing_items
   complete: bool
   needs_review: bool
 
@@ -78,14 +86,18 @@ Finding:
   conversion: str | None           # e.g. "weekly 300.00 × 52 ÷ 12 = 1300.00"
   dismissed: Dismissal | None      # reason, actor, time
 
-MissingItem:
+MissingDocument:                   # named apart from 003's MissingItem
   member_id: UUID
   job_id: UUID
   kind: no_stub | stub_too_old
 ```
 
-`VerificationRequest` *(exists)* adds `as_of_date: date`: the received date for an
-application, or the redetermination start date. FR-002-15 measures stub age from it.
+`VerificationRequest` *(exists)* adds `as_of_date: date | None`: the received date for an
+application, or the redetermination start date. FR-002-15 measures stub age from it. It is
+optional only so that old histories decode; `case.py` always sends it.
+
+The routing below is built as `next_step(result, *, request_already_sent)` in
+`apps/worker/workflows/verification_branch.py`.
 
 **How the result routes the case (002 + 011):**
 
@@ -117,11 +129,14 @@ ReferenceAnswer:
   identity: match | no_match | no_record
   jobs: list[ReferenceJob]   # employer, monthly_gross
 
-lookup_reference(scope, member_id, given_name, family_name, date_of_birth) -> ReferenceAnswer
+ReferenceRecords.lookup(scope, ReferenceLookup) -> ReferenceAnswer
+ReferenceLookup: household_id, member_id, given_name, family_name, date_of_birth
 ```
 
-The lookup is a worker repository over the household-scoped `reference_records` collection
-(seed task S-01). Matching is exact, on case-folded name and date of birth.
+The lookup is a worker repository (`apps/worker/repositories/reference_records.py`) over the
+household-scoped `reference_records` collection (seed task S-01). The contracts PR has the
+protocol and `StubReferenceRecords` (always `match`, no jobs). Matching is exact, on case-folded
+name and date of birth.
 
 ### Explanations (004a, FR-004-10, FR-004-19)
 
@@ -129,8 +144,11 @@ The lookup is a worker repository over the household-scoped `reference_records` 
 Citation:            rule_id, section, title, manual_version
 DecisionExplanation: determination_id, case_id, household_id, audience (applicant | caseworker),
                      result, text, citations: list[Citation], built_at, synthetic
-explain_determination(determination, audience) -> DecisionExplanation
+explain_determination(record: DeterminationRecord, audience) -> DecisionExplanation
 ```
+
+It takes the stored `DeterminationRecord`, not the bare determination: the explanation needs its
+IDs, and `built_at` is the record's time, so the function stays pure (FR-004-19).
 
 - A pure function in `packages/rules/explanations.py`, owned by Knowledge & data. It reads
   `CITATIONS` in `packages/rules/citations.py`.
@@ -145,22 +163,24 @@ explain_determination(determination, audience) -> DecisionExplanation
 | Name | Kind | Payload / value | Owner |
 |---|---|---|---|
 | `caseworker_action` *(exists)* | signal | `CaseworkerActionSignal` | 010 |
-| `applicant_response` | signal | `response_id`, `notice_id` (the request or form answered), `snapshot_id \| None`, `document_ids`, `submitted_at_real` | 011 (007 reuses it) |
-| `advance_clock` | signal | `action_id`, `requested_by`, `requested_at_real`. The workflow ignores it unless the case clock is in the demo profile. | 011 (replaces the stand-in in `review_ports.py`) |
+| `applicant_response` | signal | `ApplicantResponseSignal`: `response_id`, `notice_id` (the request answered), `snapshot_id \| None`, `document_ids`, `submitted_at_real` | 011 |
+| `advance_clock` | signal | `AdvanceClockSignal`: `action_id`, `requested_by`, `requested_at_real`. The workflow ignores it unless the case clock is in the demo profile. | 011 (replaces the stand-in in `review_ports.py`) |
 | `status` *(exists)* | query | adds `pending_timer: {name, due_case_time} \| None` | 011 |
 | `response_deadline` | timer | 15 days, `RESPONSE_WINDOW_DAYS` | 011 |
-| `redetermination_response_deadline` | timer | 30 days, `REDETERMINATION_RESPONSE_DAYS`, using 011's wait helper | 007 |
 | `review_reminder`, `review_escalation` *(exist)* | timer | 2 and 4 days | 010 |
 | `coverage_end` *(exists as `coverage_end_passes`)* | timer | Chicago midnight after the coverage end; escalates an open redetermination review and sets the coverage period to `continued_pending_review` | 010, used by 007 |
 
-The API writes data first (documents, pay stub details, the new snapshot) and then sends a
+Payloads and `TimerName` are in `packages/domain/waits.py`. The signals are not registered
+on `CaseWorkflow` yet (011 adds them with their handlers; the workflow contract test lists
+registered signals). The API writes data first (documents, pay stub details, the new snapshot) and then sends a
 signal that only refers to it.
 
 ### Redeterminations (007, FR-007-07, FR-007-10)
 
 - `CaseStart` *(exists)* adds `coverage_period_id: UUID | None`, required when `case_type` is
   `redetermination`.
-- A redetermination's `case_id` is `uuid5(coverage_period_id, "redetermination")`, so
+- A redetermination's `case_id` is `redetermination_case_id(household_id,
+  coverage_period_id)` (a uuid5 of both, as TW-6 asks), so
   `workflow_id_for(case_id)` *(exists)* gives one workflow ID per coverage period. A second
   start gets Temporal's "already started", and the API answers with a link to the running case.
   This keeps FR-007-07 now that FR-007-15 (the schedule) is deferred.
@@ -172,41 +192,50 @@ signal that only refers to it.
 
 | Method and path | Who | Feature |
 |---|---|---|
-| `POST /cases/{case_id}/documents` (multipart: file and pay stub details) | applicant (own case) | 002 |
+| `POST /cases/{case_id}/documents` (JSON: pay stub details, type and size) → `document_id` | applicant (own case) | 002 |
+| `PUT /cases/{case_id}/documents/{document_id}/content` (raw PDF, PNG or JPEG bytes, up to 10 MB) | applicant (own case) | 002 |
 | `GET /cases/{case_id}/verification` | caseworker, supervisor | 002 |
 | `POST /cases/{case_id}/review-tasks/{task_id}/actions` *(exists)* | caseworker | 002 uses `correct_value` and `dismiss_finding` |
-| `GET /cases/{case_id}/determinations` *(exists)* | caseworker, supervisor | 004a adds `explanations` to each item |
+| `GET /cases/{case_id}/explanations` | caseworker, supervisor | 004a |
 | `GET /me/history` | applicant | 004a |
 | `GET /me/notices`, `GET /me/notices/{notice_id}` | applicant (delivered only) | 011 |
-| `GET /me/requests` | applicant (open requests and renewal forms) | 011 (007b adds forms) |
-| `POST /me/requests/{notice_id}/response` (multipart) | applicant | 011 (007b reuses it) |
+| `GET /me/requests` | applicant (open requests for information) | 011 |
+| `POST /me/requests/{notice_id}/response` (JSON: uploaded `document_ids`, confirmed items) | applicant | 011 |
 | `POST /cases/{case_id}/advance-clock` | supervisor, demo profile only | 011 |
 | `GET /households/{household_id}` | caseworker, supervisor | 007 |
 | `POST /households/{household_id}/redeterminations` → `201` new or `200` with the running case | caseworker, supervisor | 007 |
 | `GET /metrics?month=YYYY-MM` | caseworker, supervisor | 008 |
 
-Notices and forms that need approval are approved with the existing review-task actions route:
-a `notice_approval` task (FR-010-01, as revised) with the action `approve_notice`.
+Bodies and responses are in `apps/api/schemas/mvp.py`. Every stub answers `501` with error code
+`not_implemented` (new) for its allowed role, and `403` for others.
+
+Notices that need approval are approved with the existing review-task actions route: a
+`notice_approval` task with the existing action `approve`.
 
 ## 4. Review reasons for the MVP (010)
 
 FR-010-01 as revised on 2026-11-11 (see 010's spec):
 
-- **Notice approval**: raised when a request for information or redetermination form is ready.
-  One action, `approve_notice` (added to `ActionType`) → delivered. "Edit and approve" is
-  deferred.
+- **Notice approval**: raised when a request for information is ready. Action `approve`
+  *(exists)* → delivered. "Edit and approve" is not offered. 010's table stays as it is;
+  `CaseWorkflow` uses its own interim table (`CASE_WORKFLOW_ACTIONS`), and 011 adds
+  `notice_approval: (approve,)` to it when it raises these tasks.
 - **Verification review**: the causes are the four 002 finding causes, plus the retry limit
-  being reached (FR-010-03).
+  being reached (FR-010-03). `ReviewCause` gains `income_mismatch` and `conflicting_stubs`;
+  `different_person` and `identity_mismatch` already exist.
 - **Explanation review**: not raised in the MVP. The enum value stays.
 
 ## 5. Database (`db/migrations/versions/0006_mvp.py`, Knowledge & data)
 
 New collections, each household-scoped with `household_id` (and `case_id` where it belongs to a
-case): `pay_stub_details`, `findings` (or embedded in `verification_results`, whichever 002's
-plan prefers, as long as it is decided in the contracts PR), `verification_results`,
-`reference_records`, `notices`, `applicant_responses`, `decision_explanations`. Indexes:
-`notices (household_id, status, created_at)`, `reference_records (household_id, member_id)`.
-The existing `outbox` keeps its role of delivering notices.
+case): `pay_stub_details`, `verification_results` (findings are embedded),
+`reference_records` (household only), `notices`, `applicant_responses`,
+`decision_explanations`. They start with minimal validators; each feature tightens its own.
+Indexes: `pay_stub_details (document_id)` unique, `verification_results (case_id)` unique,
+`notices (household_id, status, created_at)`, `applicant_responses (case_id, notice_id)`,
+`decision_explanations (determination_id, audience)` unique,
+`reference_records (household_id, member_id)` unique. All are in the scope registry
+(`packages/platform/scope.py`). The existing `outbox` keeps its role of delivering notices.
 
 ## 6. Frontend (benefit-fe)
 
@@ -216,42 +245,55 @@ Placeholder routes in the contracts PR, filled in by each feature:
 |---|---|
 | `applicant/apply` *(exists)*: pay stub upload and details in `JobFields` | 002 |
 | `applicant/notices`, `applicant/notices/:noticeId` | 011 |
-| `applicant/requests/:noticeId` (respond to a request or renewal form) | 011, 007b |
+| `applicant/requests/:noticeId` (respond to a request) | 011 |
 | `applicant/history` | 004a |
-| `caseworker/households/:householdId` | 007 |
+| `caseworker/households/:householdId` | 007a |
 | `caseworker/metrics` | 008 |
 
-New case page sections, in this order, each in its own file: `documents` (002), `notices`
-(011), `explanation` (004a, inside or after `determination`), `demo-clock` (011, supervisors in
-the demo profile only).
+Each placeholder route renders `PlaceholderPage`. The case page sections are registered in this
+order: `status`, `review-task`, `documents` (002), `determination`, `explanation` (004a),
+`notices` (011), `demo-clock` (011, supervisors in the demo profile only), `history`. Each new
+one is a hidden `PendingSection` until its feature swaps in its own component file.
 
 ## 7. Contracts PR tasks
 
 Each is done together in the first session and merged before the split.
 
-- [ ] C-01 `[contracts]` benefit-be: notice enum and approval table, `Notice`, `RequestedItem`,
+- [x] C-01 `[contracts]` benefit-be: notice enum and approval table, `Notice`, `RequestedItem`,
       `NoticeStatus` (section 2)
-- [ ] C-02 `[contracts]` benefit-be: `VerificationResult`, `Finding`, `MissingItem`,
-      `PayStubDetails`, `VerificationRequest.as_of_date`. Update the `verify_documents` stub to
+- [x] C-02 `[contracts]` benefit-be: `VerificationResult`, `Finding`, `MissingItem`,
+      `PayStubDetails`, `VerificationRequest.as_of_date`. (`MissingItem` is built as `MissingDocument`.) Update the `verify_documents` stub to
       return an empty result.
-- [ ] C-03 `[contracts]` benefit-be: `ReferenceAnswer` and a stub `lookup_reference` that always
+- [x] C-03 `[contracts]` benefit-be: `ReferenceAnswer` and a stub `lookup_reference` that always
       answers `match` with no jobs
-- [ ] C-04 `[contracts]` benefit-be: `Citation`, `DecisionExplanation` and a stub
+- [x] C-04 `[contracts]` benefit-be: `Citation`, `DecisionExplanation` and a stub
       `explain_determination` that returns the rule trace
-- [ ] C-05 `[contracts]` benefit-be: `applicant_response` and `advance_clock` signal payloads,
-      `pending_timer` on `status`, timer name constants, and the two new window settings in
+- [x] C-05 `[contracts]` benefit-be: `applicant_response` and `advance_clock` signal payloads,
+      `pending_timer` on `status`, timer name constants, and `RESPONSE_WINDOW_DAYS` in
       `packages/platform/settings.py` and `.env.example`
-- [ ] C-06 `[contracts]` benefit-be: `CaseStart.coverage_period_id`, redetermination `case_id`
-      rule, `ActionType.approve_notice`, revised review reason table
-- [ ] C-07 `[contracts]` benefit-be: `case.py` hooks (patched) calling 002's verification branch,
-      011's wait and notice steps, and 007's redetermination path, each a stub that does what
-      main does today. Workflow replay test still green.
-- [ ] C-08 `[contracts]` benefit-be: every endpoint in section 3 registered, returning `501`,
+- [x] C-06 `[contracts]` benefit-be: `CaseStart.coverage_period_id`, redetermination `case_id`
+      rule, review causes (the existing `approve` action is used for notices)
+- [x] C-07 `[contracts]` benefit-be: `case.py` sends `as_of_date` and reads `VerificationResult`;
+      `next_step` routing built and tested. No other hooks (section 1). Replay tests green.
+- [x] C-08 `[contracts]` benefit-be: every endpoint in section 3 registered, returning `501`,
       and the OpenAPI file regenerated and committed
-- [ ] C-09 `[data]` benefit-be: migration `0006_mvp` (section 5)
-- [ ] C-10 `[contracts]` benefit-fe: regenerated API client, placeholder routes and case page
+- [x] C-09 `[data]` benefit-be: migration `0006_mvp` (section 5)
+- [x] C-10 `[contracts]` benefit-fe: regenerated API client, placeholder routes and case page
       sections (section 6)
 - [ ] C-11 `[contracts]` metarepo: tick this list and link the two PRs from `specs/README.md`
+
+## 8. Changes from the first draft
+
+| Draft | Built | Why |
+|---|---|---|
+| `approve_notice` action | existing `approve` | 010 already has it for notice approval |
+| `MissingItem` | `MissingDocument` | 003's `MissingItem` is already an OpenAPI schema; two would clash |
+| `explain_determination(determination, audience)` | `(record, audience)` | needs IDs and a fixed `built_at` to stay pure |
+| Multipart upload | JSON details, then raw bytes to `.../content` | no multipart dependency (`python-multipart`) is installed; this adds none |
+| `explanations` on `GET .../determinations` | `GET /cases/{case_id}/explanations` | leaves 003's endpoint and contract unchanged |
+| Stub hooks in `case.py` for 002, 011, 007 | none; 011 wires them | hooks with no behaviour would be dead code |
+| Redetermination form, 30-day timer | dropped | 007b is dropped |
+| Redetermination ID from the coverage period | from household and coverage period | TW-6 |
 
 Done when: both PRs are merged, `make test` and the frontend checks pass on `main`, and each
 seat can run its first failing test against the stubs.
