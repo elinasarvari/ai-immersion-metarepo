@@ -233,9 +233,9 @@ New collections, each household-scoped with `household_id` (and `case_id` where 
 case): `pay_stub_details`, `verification_results` (findings are embedded),
 `reference_records` (household only), `notices`, `applicant_responses`,
 `decision_explanations`. They start with minimal validators; each feature tightens its own.
-Indexes: `pay_stub_details (document_id)` unique, `verification_results (case_id)` unique,
-`notices (household_id, status, created_at)`, `applicant_responses (case_id, notice_id)`,
-`decision_explanations (determination_id, audience)` unique,
+Indexes: `pay_stub_details (document_id)` unique and `(case_id)`, `verification_results (case_id)`
+unique, `notices (household_id, status, created_at)` and `(case_id, created_at)`, `applicant_responses (case_id, notice_id)`,
+`decision_explanations (determination_id, audience)` unique and `(case_id)`,
 `reference_records (household_id, member_id)` unique. All are in the scope registry
 (`packages/platform/scope.py`). The existing `outbox` keeps its role of delivering notices.
 
