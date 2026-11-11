@@ -56,12 +56,13 @@ people:
 
 | Seat | Phase 1 | Phase 2 |
 |---|---|---|
-| A, Workflows | 011 (owns `case.py`) | join 007b onto 011's wait and notices |
-| B, Workflows | 007a against the contract stubs | 007b once 011 lands |
-| C, Knowledge & data, plus 002's workflow module | seed tasks S-01 to S-04, then 002 | 004a, then S-05 and S-06; 008 only if time allows |
+| A, Workflows | 011 (owns `case.py`) | wire 002's real result into the request for information; 002's upload in the response form |
+| B, Workflows | 007a against the contract stubs, plus seed task S-04 (household E) | 004a |
+| C, Knowledge & data, plus 002's workflow module | seed tasks S-01 to S-03, then 002 | finish 002, S-06; then S-05 and 008 if time allows |
 
-Each seat builds its own screens in `benefit-fe`, in the files the contracts PR assigns. 004b
-and 008 are deferred unless a seat finishes early.
+007b (the renewal form and the applicant's renewal response) is dropped from the MVP. Each seat
+builds its own screens in `benefit-fe`, in the files the contracts PR assigns. 004b and 008 are
+deferred unless a seat finishes early.
 
 006 (Caseworker console and applicant portal) was retired on 2026-11-10. Its screens moved into
 the features whose operations they use, and the rules every screen follows moved to 000

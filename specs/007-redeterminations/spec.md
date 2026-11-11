@@ -225,8 +225,8 @@ redetermination continues and renews.
 - The synthetic data set (003) includes households due for redetermination with reference
   income that agrees and disagrees with held income. **These are not on `main` yet:** seed tasks
   S-01, S-02 and S-04 in [mvp-seed-data-tasks.md](../mvp-seed-data-tasks.md) add the reference
-  records, the expected renewal paths, and the two demo households: household E renews
-  automatically (US1), and `applicant4` / household D needs one pay stub (US2, US5).
+  records, the expected renewal paths, and demo household E, which renews automatically (US1).
+  007b (US2, US5) is dropped from the MVP, so its demo household is not seeded.
 - The 30-day wait is the `redetermination_response_deadline` timer, built with 011's wait
   helper. The applicant's answer arrives on 011's `applicant_response` signal
   ([mvp-contracts.md](../mvp-contracts.md) section 2).

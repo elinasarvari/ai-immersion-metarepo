@@ -17,7 +17,6 @@ The tasks below add it.
 | Spec needs | On `main` | Gap |
 |---|---|---|
 | FR-002-22, FR-007-13: identity record and per-job reference income, with some disagreements | `seeded_verifications` sets `identity_verified=True` for everyone; "mismatch" only means declared versus pay stub income | No reference records, no identity disagreements, no reference income that differs from held income, no job the household didn't declare |
-| 007 US5, SC-007-04: a demo applicant whose renewal needs one document | Households A, B and C (applicant1–3) have no history and no coverage (`history.py`) | No demo login with active coverage due for renewal |
 | 007 US1, SC-007-04: a household that renews automatically, in the demo | `redeterminations_due` test set exists, but its path comes only from the rules engine | No named household for the demo, and the path ignores the reference lookup |
 | FR-008-04: automatic renewal rate expected values | History seeds new applications only | No redetermination cases or outcomes, no expected automatic renewal rate |
 | FR-008-03: procedural denial rate | Seed calculates missing-information denials ÷ **all decided cases** | Spec divides by **denials and coverage endings** |
@@ -43,16 +42,11 @@ The tasks below add it.
 - [ ] **S-03** `[data]` Migration `0006_mvp` creates the MVP collections and indexes
       ([mvp-contracts.md](mvp-contracts.md) section 5). `db/seeds/reset.py` clears and reloads
       `reference_records`.
-- [ ] **S-04** `[data]` Demo renewal households, with two new demo logins in `users.py`:
-      - `applicant4`, household D, "renewal-needs-document": active coverage ending within the
-        demo window, still eligible on held data, one job's reference income differs by about
-        20%. The renewal form lists exactly that job (SC-007-02). The applicant uploads one pay
-        stub and the household renews (007 US5).
-      - household E, "renewal-automatic" (no login needed): active coverage ending within the
-        demo window, eligible, reference data agrees. A caseworker starts its redetermination
-        and it renews automatically (007 US1).
-
-      Both are excluded from the random history plans, so their numbers stay fixed. Update
+- [ ] **S-04** `[data]` Demo renewal household E, "renewal-automatic" (no login needed):
+      active coverage ending within the demo window, eligible, reference data agrees. A
+      caseworker starts its redetermination and it renews automatically (007 US1). It is
+      excluded from the random history plans, so its numbers stay fixed. (007b is dropped, so
+      the second demo household and its `applicant4` login are not needed.) Update
       `redetermination_items` so `expected_path` also follows the FR-007-13 lookup, not just
       the rules engine.
 - [ ] **S-05** `[data]` Seeded redetermination history and metrics. Add about 30 past
