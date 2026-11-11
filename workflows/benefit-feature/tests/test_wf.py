@@ -1065,8 +1065,19 @@ if a[:2] == ["pr", "checks"] and "--json" in a:
                        "link": "https://github.com/o/benefit-be/actions/runs/11/job/22"},
                       {"name": "static", "state": "SUCCESS", "link": "https://github.com/o/benefit-be/actions/runs/11/job/23"}]))
     sys.exit(1)
+here = os.path.dirname(__file__)
+network = os.path.exists(os.path.join(here, "NETWORK"))  # the failing job failed on the network
+if a[:2] == ["run", "rerun"]:
+    open(os.path.join(here, "GREEN"), "w").close(); sys.exit(0)  # the rerun passes
+if a[:2] == ["run", "view"] and "--json" in a:
+    field = a[a.index("--json") + 1]
+    print({"attempt": "1", "status": "in_progress" if green else "completed"}[field]); sys.exit(0)
 if a[:2] == ["run", "view"]:
-    print("E   setting MONGO_URL_APP: missing; required"); sys.exit(0)
+    if network and "--log" in a:
+        print("e2e\tInstall\t2026-11-11T15:33:15Z   Temporary failure resolving 'azure.archive.ubuntu.com'")
+    else:
+        print("E   setting MONGO_URL_APP: missing; required")
+    sys.exit(0)
 if a[:2] == ["pr", "view"]:
     print("true"); sys.exit(0)
 if a[:2] == ["pr", "ready"]:
@@ -1078,14 +1089,15 @@ sys.exit(0)
 class GitHubActions(WfCase):
     """The CI loop: ci-wait reports instead of failing, marks green drafts ready; ci-gate decides."""
 
-    def fake_gh(self, green):
+    def fake_gh(self, green, network=False):
         bin_dir = self.root / "bin"
         bin_dir.mkdir(exist_ok=True)
         gh = bin_dir / "gh"
         gh.write_text(FAKE_GH)
         gh.chmod(0o755)
-        marker = bin_dir / "GREEN"
-        marker.write_text("") if green else (marker.unlink() if marker.exists() else None)
+        for name, on in (("GREEN", green), ("NETWORK", network)):
+            marker = bin_dir / name
+            marker.write_text("") if on else (marker.unlink() if marker.exists() else None)
         self.write("review/prs.json", json.dumps({"benefit-be": "https://github.com/o/benefit-be/pull/2"}))
         return bin_dir
 
@@ -1107,6 +1119,37 @@ class GitHubActions(WfCase):
         self.assertNotIn("pr ready", self.calls(), "a red PR is never marked ready")
         self.assertTrue(self.wf("ci-needs-fix", FD)[1]["fix"])
         self.assertEqual(self.wf("ci-gate", FD)[0], 1)
+
+    def test_a_network_failure_is_rerun_instead_of_going_to_the_fix_step(self):
+        bin_dir = self.fake_gh(green=False, network=True)
+        with mock.patch.dict(os.environ, {"WF_RERUN_WAIT": "1"}):
+            code, data, _ = self.wf("ci-wait", FD, path_prefix=bin_dir)
+        self.assertEqual((code, data["ci"], data["failing"]), (0, {"benefit-be": "pass"}, 0))
+        self.assertEqual([r["run"] for r in data["reran"]], ["11"])
+        self.assertIn("Temporary failure resolving", data["reran"][0]["why"])
+        self.assertIn("run rerun 11 -R o/benefit-be --failed", self.calls())
+        self.assertFalse(self.wf("ci-needs-fix", FD)[1]["fix"], "no fixer for code that isn't broken")
+        self.assertIn("Reran after a network failure", (self.fd / "review" / "ci.md").read_text())
+
+    def test_a_real_failure_is_never_rerun(self):
+        bin_dir = self.fake_gh(green=False, network=False)
+        code, data, _ = self.wf("ci-wait", FD, path_prefix=bin_dir)
+        self.assertEqual((data["failing"], data["reran"]), (1, []))
+        self.assertNotIn("run rerun", self.calls())
+
+    def test_network_errors_are_told_apart_from_our_own_stack_being_down(self):
+        sys.path.insert(0, str(WF.parent))
+        import wf  # noqa: E402
+        for line in ("  Temporary failure resolving 'azure.archive.ubuntu.com'",
+                     "npm ERR! network request to https://registry.npmjs.org/x failed, reason: getaddrinfo EAI_AGAIN",
+                     "curl: (28) Failed to connect to fastdl.mongodb.org port 443 after 20001 ms: Timeout",
+                     "fatal: unable to access 'https://github.com/o/r/': error: RPC failed; HTTP 503"):
+            self.assertTrue(wf.network_error(line), line)
+        for line in ("curl: (7) Failed to connect to localhost port 8000 after 0 ms: Couldn't connect to server",
+                     "Error: connect ECONNREFUSED 127.0.0.1:8000",
+                     "Error: expect(locator).toBeVisible() failed",
+                     "FAILED tests/integration/test_case_journey.py::test_submit - AssertionError"):
+            self.assertEqual(wf.network_error(line), "", line)
 
     def test_all_green_marks_a_draft_ready_for_review(self):
         bin_dir = self.fake_gh(green=True)
