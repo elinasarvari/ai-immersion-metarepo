@@ -26,19 +26,28 @@ republish to the same URL.
 |---|---|---|---|---|
 | [000 Platform foundations](000-platform-foundations/spec.md) | Platform & UI | benefit-be, benefit-fe | none | Yes |
 | [001 Case lifecycle](001-case-lifecycle/spec.md) | Workflows | benefit-be, benefit-fe | 000, 002*, 003*, 010*, 011* | Yes (states, signals, case clock) |
-| [002 Document verification](002-document-verification/spec.md) | Agents | benefit-be, benefit-fe | 000, 001, 003, 004, 005 | Interface only |
+| [002 Pay stub upload and income check](002-document-verification/spec.md) | Workflows | benefit-be, benefit-fe | 000, 001, 003, 010 | Interface only |
 | [003 Eligibility rules and synthetic data](003-eligibility-rules/spec.md) | Knowledge & data | benefit-be, benefit-fe | 000 (001 for its case page section) | Yes (rules interface) |
-| [004 Policy search and decision explanations](004-policy-search/spec.md) | Knowledge & data, Agents | benefit-be, benefit-fe | 000, 001, 002, 003* | Interface only |
-| [005 Agent tool access](005-agent-tool-access/spec.md) | Platform & UI | benefit-be | 000, 003, 004 | Yes (tool schemas) |
-| [007 Redeterminations](007-redeterminations/spec.md) | Workflows | benefit-be, benefit-fe | 001, 002, 003, 005, 010, 011 | No |
-| [008 Program metrics](008-program-metrics/spec.md) | Knowledge & data, Platform & UI | benefit-be, benefit-fe | 000, 001, 003, 007, 010 | No |
+| [004 Decision explanations (policy search deferred)](004-policy-search/spec.md) | Knowledge & data | benefit-be, benefit-fe | 001, 003 | Interface only |
+| [007 Redeterminations](007-redeterminations/spec.md) | Workflows | benefit-be, benefit-fe | 001, 003, 010, 011, 002 | No |
+| [008 Program metrics](008-program-metrics/spec.md) | Platform & UI | benefit-be, benefit-fe | 000, 001, 003, 010 | No |
 | [010 Review queue and caseworker actions](010-review-queue/spec.md) | Workflows | benefit-be, benefit-fe | 001, 002*, 004*, 007* | Yes (review reasons and actions) |
-| [011 Applicant waits, notices and demo clock](011-applicant-waits-notices/spec.md) | Workflows | benefit-be, benefit-fe | 000, 001, 010, 002*, 003*, 004* | Yes (notice types, timers, advance-clock signal) |
+| [011 Applicant waits, notices and demo clock](011-applicant-waits-notices/spec.md) | Workflows | benefit-be, benefit-fe | 000, 001, 010, 002*, 004* | Yes (notice types, timers, advance-clock signal) |
 
 \* Built against stubs until the real implementation lands.
 
 001 was split on 2026-11-10: 010 and 011 took over the review actions, waits, notices and demo
 clock. Moved requirement IDs are listed in 001 under "Moved requirements".
+
+**MVP scope (2026-11-11): no AI.** 002, 004, 007, 008 and 011 were cut down to a 3-hour MVP
+with every AI component removed; each spec lists what was removed or deferred, and
+[mvp-spec-review.md](mvp-spec-review.md) has the reasoning, the build order and who can work
+in parallel. 005 (Agent tool access) was retired: its one surviving piece, the identity and
+income lookup, is FR-002-22. The only strict build order is 011 before 007. Sections below
+that still mention AI (the Agents lane, agent interfaces and tools in the contracts outline,
+evaluation commands, the rotation table) describe the full build and are not part of the MVP.
+The AI requirements in 000 (FR-000-12, FR-000-22, FR-000-28) and the AI review reasons in 010
+(FR-010-01: AI causes of "Verification review", "Explanation review") are not exercised.
 
 006 (Caseworker console and applicant portal) was retired on 2026-11-10. Its screens moved into
 the features whose operations they use, and the rules every screen follows moved to 000

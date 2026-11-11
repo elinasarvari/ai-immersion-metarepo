@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-10
 
-**Status**: Draft
+**Status**: Draft (MVP scope, 2026-11-11: all AI removed)
 
 **Input**: User description: "Split of 001 case lifecycle: applicant waits, notices and demo clock. Waiting for the applicant with a response deadline, configurable waiting periods with a compressed demo time scale, the notice catalogue, and decision explanations."
 
@@ -13,17 +13,25 @@
 - **Lane**: Workflows
 - **Provides**: the "Awaiting applicant" wait and its response deadline; configurable waiting
   periods and the demo time scale; the supervisor "advance clock" action; the catalogue of
-  notices sent to applicants; requesting and storing decision explanations; the screens for
-  notices, responses and the demo clock. Used by 007 and 008.
-- **Depends on**: 001 (cases, states, case history, the case clock, the case page); 010 (review reasons and
-  actions); 000 (configuration profiles, supervisor role); 002 (AI-drafted notices), 003 (the
-  rule-by-rule trace, FR-003-05) and 004 (explanations), each stubbed until ready.
+  notices sent to applicants, all from fixed templates; storing decision explanations; the
+  screens for notices, responses and the demo clock. Used by 007.
+- **Depends on**: 001 (cases, states, case history, the case clock, the case page), 010 (review
+  reasons and actions) and 000 (configuration profiles, supervisor role), all on `main`, so
+  this feature can start immediately. It also uses 002 (missing items for the request for
+  information, pay stub upload) and 004 (explanations); until they land it uses a stubbed
+  verification result and the rule-by-rule trace (FR-003-05).
+- **Agree first**: the notice type names (FR-011-06), the timer names and the applicant-response
+  signal, because 007 builds on them. This feature owns changes to the case workflow; 002 and
+  007 add their steps as separate activities.
 - **Split from**: 001 Case lifecycle (2026-11-10). Old IDs map to new ones: FR-001-05 →
   FR-011-01, FR-001-06 → FR-011-02, FR-001-13 (waiting periods and demo time scale) →
   FR-011-04, FR-001-15 → FR-011-05, FR-001-17 → FR-011-06, FR-001-14 → FR-011-07. The case clock
   itself stays in FR-001-13.
 - **Out of scope**: notice delivery outside the applicant portal, notices in languages other
   than English, the redetermination form's own 30-day window (007).
+
+Story and requirement IDs are not reused. Removed and deferred parts are listed at the end of
+the requirements.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -52,15 +60,14 @@ clock, and confirm the deadline fires immediately.
 ### User Story 2 - Applicant receives the right notice (Priority: P1)
 
 Every decision, and every request the applicant must answer, reaches the applicant's portal as
-one of a fixed set of notices, with caseworker approval where the notice is adverse or
-AI-drafted. Each determination also gets plain-language explanations.
+one of a fixed set of template notices, with caseworker approval where the notice is adverse or
+asks the applicant for something. Each determination also gets plain-language explanations.
 
 **Why this priority**: Notices are the only thing applicants receive; a wrong or unapproved
 notice is the most visible failure.
 
-**Independent Test**: Decide one case as Approved and one as Denied with stubbed explanations,
-and confirm the notice type, its content source, whether it waited for approval, and that
-explanations are stored with each determination.
+**Independent Test**: Decide one case as Approved and one as Denied, and confirm the notice type,
+whether it waited for approval, and that explanations are stored with each determination.
 
 **Acceptance Scenarios**:
 
@@ -70,10 +77,11 @@ explanations are stored with each determination.
 2. **Given** a denial approved by a caseworker, **When** the approval is recorded, **Then** a
    denial notice built from the fixed template and the applicant explanation is delivered; the
    caseworker approved the outcome and the notice in one action.
-3. **Given** an AI-drafted request for information, **When** it is ready, **Then** it is sent only
-   after a caseworker approves it (FR-010-01, "Notice approval").
+3. **Given** a case with missing information, **When** the request for information is produced,
+   **Then** it names each missing item and is sent only after a caseworker approves it
+   (FR-010-01, "Notice approval").
 4. **Given** any determination, **When** it is stored, **Then** the applicant and caseworker
-   explanations are requested and stored with it.
+   explanations are built and stored with it.
 
 ---
 
@@ -92,28 +100,28 @@ and confirm a caseworker review task appears.
 1. **Given** an approved request for information, **When** it is sent, **Then** the case moves to
    "Awaiting applicant" with a response deadline 15 days later.
 2. **Given** a case awaiting the applicant, **When** the applicant responds, **Then** the case
-   resumes verification with the new information.
+   runs the income check again with the new information.
 3. **Given** a case awaiting the applicant, **When** the deadline passes without a response,
    **Then** a "Missed response deadline" review task is created and the case is not denied
    automatically.
 
 ### User Story 4 - Caseworker approves notices (Priority: P1)
 
-A caseworker reviews each drafted or adverse notice on the case page, edits it if needed, and
+A caseworker reviews each adverse notice and each request to the applicant on the case page and
 approves it before it reaches the applicant.
 
-**Why this priority**: No AI-drafted or adverse notice reaches an applicant without approval.
+**Why this priority**: No adverse notice or request reaches an applicant without approval.
 
-**Independent Test**: In the browser, approve one draft unchanged and edit another, then sign in
-as the applicant and confirm only the approved versions appear.
+**Independent Test**: In the browser, approve a request for information, then sign in as the
+applicant and confirm it appears; confirm an unapproved one does not.
 
 **Acceptance Scenarios**:
 
-1. **Given** a drafted notice, **When** the caseworker approves it unchanged, **Then** it is
+1. **Given** a notice awaiting approval, **When** the caseworker approves it, **Then** it is
    delivered to the applicant's portal.
-2. **Given** a drafted notice, **When** the caseworker edits and approves it, **Then** the edited
-   version is delivered and both versions are kept in the case history.
-3. **Given** a favourable template notice (approval or automatic renewal), **When** it is created,
+2. **Given** a notice awaiting approval, **When** no caseworker has approved it, **Then** the
+   applicant cannot see it.
+3. **Given** a favourable template notice (approval or renewal), **When** it is created,
    **Then** it is delivered without approval.
 
 ---
@@ -161,14 +169,12 @@ sign in as a caseworker and confirm there's no button.
 
 - The applicant responds after the deadline but before a caseworker acts: the response is
   attached and the review task shows it.
-- The AI provider is down when explanations are requested: the decision is not delayed; the
-  explanations are generated when the provider is back.
-- The applicant explanation is still unavailable after the retry limit for a denial: the notice
-  uses the rule-by-rule trace (FR-003-05) and the review task says so.
 - The demo profile is on: every wait follows the compressed time scale, and case history shows
   both simulated and real times (FR-001-13).
 - A supervisor advances the clock on a case with no pending timer: the request is refused and
   recorded.
+- A case already had its one automatic request for information: further missing information
+  goes to a caseworker review instead of a second request.
 
 ## Requirements *(mandatory)*
 
@@ -179,8 +185,8 @@ sign in as a caseworker and confirm there's no button.
 - **FR-011-02**: When the response deadline passes, the system MUST create a "Missed response
   deadline" review task (FR-010-01) and MUST NOT deny the case automatically.
 - **FR-011-03**: When the applicant responds while the case is awaiting them, the case MUST
-  resume verification with the new information. A response that arrives after the deadline
-  MUST be attached to the open review task.
+  run the income check again with the new information. A response that arrives after the
+  deadline MUST be attached to the open review task.
 - **FR-011-04**: Every waiting period (response windows, review reminders and escalation,
   decision deadline tracking) MUST be configurable, and a demo profile MUST run them on a
   compressed time scale (one day as one minute) without code changes. In the demo profile the
@@ -188,28 +194,27 @@ sign in as a caseworker and confirm there's no button.
   jumps forward when a timer is fired early (FR-011-05).
 - **FR-011-05**: In the demo profile only, a supervisor MUST be able to fire a case's next pending
   timer immediately; the action MUST be recorded and MUST be refused outside the demo profile.
-- **FR-011-06**: Notices MUST be one of these types, and nothing else is sent to applicants:
+- **FR-011-06**: Notices MUST be one of these types, and nothing else is sent to applicants.
+  Every notice is built from a fixed template. (Revised: no AI drafts.)
 
-  | Notice | Built from | Caseworker approval |
+  | Notice | Template filled with | Caseworker approval |
   |---|---|---|
-  | Approval | Fixed template | No |
-  | Automatic renewal (007) | Fixed template | No |
-  | Renewal after response (007) | Fixed template | No |
-  | Denial | Fixed template + applicant explanation | Yes |
-  | Coverage ended (007) | Fixed template + applicant explanation | Yes |
-  | Request for information | AI draft (002) | Yes |
-  | Redetermination form (007) | AI draft (002) | Yes |
+  | Approval | Decision and coverage period | No |
+  | Automatic renewal (007) | New coverage period | No |
+  | Renewal after response (007) | New coverage period | No |
+  | Denial | Decision and applicant explanation | Yes |
+  | Coverage ended (007) | Decision and applicant explanation | Yes |
+  | Request for information | Missing items (FR-011-12) and due date | Yes |
+  | Redetermination form (007) | Items to confirm (FR-007-03) and due date | Yes |
 
   Approving an adverse outcome and approving its notice are one caseworker action.
-- **FR-011-07**: After every determination, the system MUST request the applicant and
-  caseworker explanations (004) and store them with the determination; if the request fails,
-  it MUST retry later without delaying the decision. An adverse notice waits for the applicant
-  explanation; if it is still unavailable after the retry limit, the notice uses the
-  rule-by-rule trace (FR-003-05) as its explanation and the review task says so.
-- **FR-011-08**: AI-drafted and adverse notices MUST be delivered only after a caseworker approves
-  them from the case page. The caseworker may edit before approving, and both the edited and the
-  original versions are kept. Favourable template notices are delivered directly. (Was
-  FR-006-06.)
+- **FR-011-07**: When a determination is stored, the system MUST build the applicant and
+  caseworker explanations (FR-004-10) and store them with it. Until 004 is in place, the
+  rule-by-rule trace (FR-003-05) is used as the explanation. (Revised: built in the same step;
+  no retries.)
+- **FR-011-08**: Adverse notices, requests for information and redetermination forms MUST be
+  delivered only after a caseworker approves them from the case page. Favourable template
+  notices are delivered directly. (Was FR-006-06; revised, editing deferred.)
 - **FR-011-09**: Applicants MUST see a list of the notices delivered to them, with type and date,
   and be able to open each one. (Was FR-006-15.)
 - **FR-011-10**: When an applicant signs in, the portal MUST show each open request for information
@@ -218,13 +223,24 @@ sign in as a caseworker and confirm there's no button.
 - **FR-011-11**: In the demo profile only, supervisors MUST be able to advance a case's clock
   (FR-011-05) from the case page; the button is not shown to other roles or outside the demo
   profile. (Was FR-006-13.)
+- **FR-011-12**: When the verification result lists missing information (FR-002-15), the system
+  MUST produce a request for information from the fixed template, naming each missing item,
+  and hold it for caseworker approval. At most one is produced automatically per case.
+  (Replaces FR-002-05 and the drafting in FR-002-12.)
+
+### Removed and deferred
+
+| ID | What it was | Now |
+|---|---|---|
+| FR-011-06 (AI draft rows) | Request for information and redetermination form drafted by AI | Removed; fixed templates |
+| FR-011-07 (retry and fallback), SC-011-04 | Requesting AI explanations, retrying later, falling back to the trace | Removed; explanations are built in the same step |
+| FR-011-08 (edit before approving), US4 scenario 2 | Editing a notice and keeping both versions | Deferred; 010's "Edit and approve" action is not offered for notices |
 
 ### Key Entities
 
-- **Notice**: type (FR-011-06), content, approval status, original and edited versions,
-  delivered time.
-- **Timer**: a pending wait on a case (response deadline, review reminder, review escalation,
-  redetermination start), with its due time on the case clock.
+- **Notice**: type (FR-011-06), content, approval status, delivered time.
+- **Timer**: a pending wait on a case (response deadline, review reminder, review escalation),
+  with its due time on the case clock.
 - **Demo action**: a supervisor's advance-clock action, recorded in case history with both
   case-clock and real times.
 
@@ -237,8 +253,7 @@ sign in as a caseworker and confirm there's no button.
 - **SC-011-02**: 100% of missed response deadlines in testing produce a review task; zero
   automatic denials.
 - **SC-011-03**: 100% of notices sent in testing are one of the 7 types in FR-011-06, and 100% of
-  adverse and AI-drafted notices were approved by a caseworker before delivery.
-- **SC-011-04**: Zero decisions in testing are delayed by a failed explanation request.
+  adverse notices and requests to the applicant were approved by a caseworker before delivery.
 
 ## Assumptions
 

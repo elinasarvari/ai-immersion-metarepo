@@ -4,18 +4,23 @@
 
 **Created**: 2026-11-09
 
-**Status**: Draft
+**Status**: Draft (MVP scope, 2026-11-11)
 
 **Input**: User description: "Program metrics reporting from case history"
 
 ## Lane & Dependencies
 
-- **Lane**: Knowledge & data (reporting store); Platform & UI (metrics page)
-- **Provides**: a reporting store built from case history and a program metrics page.
-- **Depends on**: 001 (case history), 010 (review tasks), 003 (data set and expected metric values),
-  000 (app shell), 007 (redetermination outcomes).
+- **Lane**: Platform & UI (one read-only endpoint and the metrics page)
+- **Provides**: a program metrics page.
+- **Depends on**: 001 (case history), 010 (review outcomes), 003 (data set, including seeded
+  past decisions and redetermination outcomes, and the expected metric values), 000 (app
+  shell). All are on `main`, so this feature can start immediately. It reads 007's
+  redetermination outcomes once they exist, and is built and tested against the seeded ones.
 - **Out of scope**: federal reporting file formats, real-time dashboards, exports, metrics for
-  individual caseworkers.
+  individual caseworkers, any metric about AI.
+
+Story and requirement IDs are not reused. Removed and deferred ones are listed at the end of
+the requirements.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -24,103 +29,76 @@
 A supervisor opens the program metrics page and sees how the program is performing this month
 and over time.
 
-**Why this priority**: These are the numbers agencies manage and report by, and they show the AI
-is helping.
+**Why this priority**: These are the numbers agencies manage and report by.
 
-**Independent Test**: Load the seed data, refresh the reporting store and confirm every metric
-matches its expected value.
+**Independent Test**: Load the seed data, open the page and confirm every metric matches its
+expected value.
 
 **Acceptance Scenarios**:
 
-1. **Given** refreshed data, **When** the supervisor opens the page, **Then** they see average time
-   to decision, share decided within the deadline, automatic renewal rate, procedural denial
-   rate, AI override rate and open reviews by age.
+1. **Given** the seed data, **When** the supervisor opens the page, **Then** they see average time
+   to decision, share decided within the deadline, automatic renewal rate and procedural denial
+   rate.
 2. **Given** the page, **When** the supervisor picks a month, **Then** every metric updates for
    that month.
+3. **Given** a newly decided case, **When** the page is reloaded, **Then** the metrics include it.
 
 ---
 
 ### User Story 2 - Trustworthy numbers (Priority: P1)
 
-The team can show every metric is correct and that rebuilding the reporting store gives the
-same answers.
+The team can show every metric is correct.
 
 **Why this priority**: Wrong metrics are worse than none.
 
-**Independent Test**: Refresh twice and compare; compare each metric with its hand-calculated
-expected value.
+**Independent Test**: Compare each metric with its hand-calculated expected value; request the
+metrics twice and compare.
 
 **Acceptance Scenarios**:
 
-1. **Given** the same source data, **When** the reporting store is refreshed twice, **Then** the
-   results are identical.
-2. **Given** the seed data, **When** metrics are computed, **Then** each matches its expected value.
-
----
-
-### User Story 3 - No personal data in reporting (Priority: P1)
-
-The reporting store holds no names, contact details or document contents.
-
-**Why this priority**: Reporting should not add privacy risk.
-
-**Independent Test**: Scan the reporting store's fields and sample values for personal data.
-
-**Acceptance Scenarios**:
-
-1. **Given** the refreshed reporting store, **When** it is scanned, **Then** no personal fields are
-   found and households appear only under pseudonymous keys.
-
----
-
-### User Story 4 - Refresh on schedule or on demand (Priority: P2)
-
-The reporting store refreshes on a schedule, and a team member can refresh it on demand for the
-demo.
-
-**Why this priority**: Fresh numbers during the demo.
-
-**Independent Test**: Trigger an on-demand refresh after creating a new case and confirm the
-metrics change.
-
-**Acceptance Scenarios**:
-
-1. **Given** a new decided case, **When** an on-demand refresh completes, **Then** the metrics
-   include it.
+1. **Given** the seed data, **When** metrics are computed, **Then** each matches its expected value.
+2. **Given** unchanged data, **When** the metrics are requested twice, **Then** the results are
+   identical.
 
 ### Edge Cases
 
 - A month with no decisions: metrics show "no data", not zero.
-- A refresh fails midway: the previous complete results stay visible.
 - A metric's denominator is zero: shown as "not applicable".
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
-- **FR-008-01**: The system MUST refresh the reporting store from case data on a schedule (every
-  hour; every 5 minutes in the demo profile) and on demand, from a "refresh" action on the metrics
-  page for supervisors and from a command; two refreshes of the same source data MUST give
-  identical results.
-- **FR-008-02**: The reporting store MUST hold pseudonymous household keys only, with no names,
-  contact details or document content. Keys MUST be the same on every refresh and MUST NOT be
-  reversible without a secret held in configuration.
 - **FR-008-03**: The program metrics page MUST show average time to decision, share decided
-  within the deadline, automatic renewal rate, procedural denial rate, AI override rate and
-  open reviews by age, each filterable by month.
+  within the deadline, automatic renewal rate and procedural denial rate, each filterable by
+  month. (Revised: four metrics.)
 - **FR-008-04**: Each metric MUST match an expected value worked out by hand on the seed data.
-- **FR-008-05**: A failed refresh MUST leave the previous complete results in place.
 - **FR-008-06**: Metrics with no data or a zero denominator MUST say so instead of showing zero.
 - **FR-008-07**: Only supervisors and caseworkers MAY view the program metrics page.
 - **FR-008-08**: Metrics MUST use case-clock dates (FR-001-13). A metric for a month counts
   cases decided in that month (for the automatic renewal rate: redeterminations that ended in
-  that month). "Open reviews by age" shows the current open tasks and ignores the month filter.
+  that month).
+- **FR-008-09**: Metrics MUST be computed from the case data each time the page asks for them.
+  No copy of the data is kept, and the response MUST contain only the metric values: no names,
+  household identifiers or case identifiers.
+
+### Deferred
+
+| ID | What it was |
+|---|---|
+| FR-008-01, FR-008-05, US4 | A separate reporting store refreshed on a schedule and on demand, and keeping the last good results when a refresh fails |
+| FR-008-02, US3 | Pseudonymous household keys in the reporting store (no store, so nothing to pseudonymise; FR-008-09 covers the page) |
+| Open reviews by age | The sixth metric |
+
+### Removed
+
+| ID | What it was |
+|---|---|
+| AI override rate | A metric about AI output; there is none in the MVP |
 
 ### Key Entities
 
 - **Metric**: name, definition, period, value.
-- **Reporting store**: facts (case events, determinations, review tasks) and descriptive
-  dimensions (household key, program, date, coverage period).
 
 Metric definitions:
 
@@ -132,21 +110,19 @@ Metric definitions:
   ended in the period.
 - **Procedural denial rate**: denials and coverage endings with reason code "missing
   information" (FR-001-16, FR-007-12) ÷ all denials and coverage endings.
-- **AI override rate**: AI findings and extracted values that a caseworker corrected or
-  dismissed (FR-010-01) ÷ AI findings and values presented on review tasks that were actioned.
-- **Open reviews by age**: open review tasks by days open (0–1, 2–3, 4 or more).
 
 ## Success Criteria *(mandatory)*
 
 ### Measurable Outcomes
 
 - **SC-008-01**: 100% of metrics match their expected values on the seed data.
-- **SC-008-02**: Two consecutive refreshes produce identical results.
-- **SC-008-03**: Zero personal fields found in the reporting store.
-- **SC-008-04**: An on-demand refresh completes in under 1 minute on the seed data.
+- **SC-008-02**: Two consecutive requests on unchanged data give identical results.
+- **SC-008-03**: Zero personal fields or identifiers in the metrics response.
+- **SC-008-04**: The page loads its metrics in under 5 seconds on the seed data. (Was: refresh
+  in under 1 minute.)
 
 ## Assumptions
 
 - Metrics cover the single program in scope (Illinois Medicaid, adults 19–64).
-- If time runs short, the fallback is four metrics: average time to decision, decided within
-  deadline, automatic renewal rate and AI override rate.
+- The seed data is small enough to compute metrics on request. The reporting store in
+  `analytics/` is not used by the MVP.
