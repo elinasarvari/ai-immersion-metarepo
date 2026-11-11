@@ -2,14 +2,14 @@ schema_version: "1.0"
 workflow:
   id: "benefit-feature"
   name: "Benefits Case feature"
-  version: "0.8.0"
+  version: "0.9.0"
   author: "ai-immersion-metarepo"
   description: >-
-    From an existing spec to draft PRs, each AI step a separate agent: architect plan → decision-maker settles
-    open ADRs → tasks → quality engineer's test plan and QA tasks → contracts → lanes in parallel →
-    QA tests → verify loop (fix → tests, builds and script checks in parallel → reviews in parallel, only on
-    green and only where something changed) → draft PRs → GitHub Actions. People are asked only when
-    automation can't decide.
+    From an existing spec to draft PRs, each AI step a separate agent: spec clarifier answers open spec
+    questions → architect plan → decision-maker settles open ADRs → tasks → quality engineer's test plan and QA
+    tasks → contracts → merge main if it moved → lanes and the QA tests in parallel → verify loop (fixers, one per
+    repo where they can → tests, builds and script checks in the background while the reviews run, only where
+    something changed) → draft PRs → GitHub Actions. People are asked only when automation can't decide.
 
 requires:
   speckit_version: ">=1.0.0"
@@ -37,7 +37,11 @@ inputs:
   decision_mode:
     type: string
     default: "auto"
-    prompt: "auto = the decision-maker agent decides open ADRs (review them in the PR); ask = you decide at a gate"
+    prompt: "auto = agents answer open spec questions (spec clarifier) and decide open ADRs (decision-maker); review them in the PR. ask = you decide both at gates"
+  review_mode:
+    type: string
+    default: "parallel"
+    prompt: "parallel = reviews run while the tests do, so one fix handles both (faster, more review tokens on red rounds); on_green = reviews only once the tests pass"
   # Gate answers for runs without a terminal. One per gate; set only on resume, after a person decided.
   spec_verdict: {type: string, default: ""}
   decision_verdict: {type: string, default: ""}
@@ -46,9 +50,11 @@ inputs:
 # Run:     specify workflow run workflows/benefit-feature/workflow.yml -i feature=003
 # Checks:  one `wf.py` gate after each planning stage; every check on the code runs inside the verify loop, so
 #          the fix step can repair it. A failed gate stops the run: fix, then `specify workflow resume <id>`.
-# AI steps: each one is a separate agent session (agents/). 6 fixed (architect, tasks, quality engineer, contracts,
-#           QA, PR) + the decision-maker if an ADR is open (+ an architect update if it chose differently) + 1 per lane
-#           + per verify round: the reviews that need rerunning and one fix.
+# AI steps: each one is a separate agent session (agents/). 5 fixed (architect, tasks, quality engineer, contracts,
+#           PR) + the spec clarifier if the spec has open questions + the decision-maker if an ADR is open (+ an
+#           architect update if it chose differently) + the integrator if main moved + 1 per lane + the qa item
+#           (+ the QA step if it left work) + per verify round: the reviews that need rerunning and one fixer per
+#           repo (or one for everything).
 
 steps:
   # ── 1. Pick up the spec ───────────────────────────────────────────────────────────────────────────
@@ -62,13 +68,36 @@ steps:
     run: "python3 workflows/benefit-feature/scripts/wf.py prepare {{ inputs.feature }} {{ inputs.pr_mode }} {{ inputs.trace_mode }} {{ inputs.decision_mode }}"
     output_format: json
 
+  # Open [NEEDS CLARIFICATION] questions: the spec clarifier answers them (decision_mode=auto), each recorded for
+  # review in the PR; a person is asked only for what it couldn't answer safely, or for all of them with ask.
   - id: spec_questions
     type: if
-    condition: "{{ steps.feature.output.data.open > 0 }}"
+    condition: "{{ steps.feature.output.data.open > 0 and inputs.decision_mode == 'auto' }}"
+    then:
+      - id: spec_clarifier
+        type: prompt
+        integration: "{{ inputs.integration }}"
+        model: "{{ inputs.judgement_model }}"
+        timeout: 1200
+        prompt: >-
+          You are the spec-clarifier agent (agents/spec-clarifier.agent.md). Answer the open [NEEDS CLARIFICATION]
+          questions in {{ steps.feature.output.data.spec_file }} and record them as it says. Reply in ≤10 lines.
+
+  - id: spec_check
+    type: shell
+    run: "python3 workflows/benefit-feature/scripts/wf.py clarify-gate {{ steps.feature.output.data.feature_dir }}"
+    output_format: json
+
+  - id: spec_gate
+    type: if
+    condition: "{{ steps.spec_check.output.data.open > 0 }}"
     then:
       - id: approve_spec
         type: gate
-        message: "The spec has open [NEEDS CLARIFICATION] questions. Answer them in spec.md, then approve; reject stops the run."
+        message: >-
+          The spec still has open [NEEDS CLARIFICATION] questions (the ones the spec clarifier left open are in
+          clarifications.json with why; with decision_mode=ask, all of them). Answer them in spec.md, then approve;
+          reject stops the run.
         show_file: "{{ steps.feature.output.data.spec_file }}"
         options: [approve, reject]
         on_reject: abort
@@ -191,6 +220,31 @@ steps:
     run: "workflows/benefit-feature/scripts/start-branches.sh {{ steps.feature.output.data.feature_dir }}"
     timeout: 120
 
+  # An earlier run's branch (update mode) may be behind main: merge it now, so the lanes build on what is there
+  # instead of the verify loop finding the clash late. A new branch starts from origin/main, so this is skipped.
+  - id: start_behind
+    type: shell
+    run: "python3 workflows/benefit-feature/scripts/wf.py behind {{ steps.feature.output.data.feature_dir }}"
+    output_format: json
+
+  - id: start_integrate
+    type: if
+    condition: "{{ (steps.start_behind.output.data.repos | length) > 0 }}"
+    then:
+      - id: start_integrator
+        type: prompt
+        integration: "{{ inputs.integration }}"
+        model: "{{ inputs.judgement_model }}"
+        timeout: 2400
+        prompt: >-
+          You are the integrator agent (agents/integrator.agent.md). Merge origin/main into branch
+          {{ steps.feature.output.data.branch }} for feature {{ steps.feature.output.data.feature_dir }} in these
+          repos: {{ steps.start_behind.output.data.repos }}, before the lanes build on it. Follow its steps: commit
+          the feature's work, merge, resolve every textual and semantic clash (main wins unless that breaks one of
+          this feature's FRs), update the plan artefacts and tasks.md where the merge changes them, record the
+          resolutions in one ADR, run the checks, commit the merge. Never push. Write
+          {{ steps.feature.output.data.review_dir }}/integrate.md. Reply in ≤5 lines.
+
   - id: contracts
     type: if
     condition: "{{ steps.tasks_gate.output.data.contracts_tasks > 0 }}"
@@ -208,10 +262,11 @@ steps:
             Mark the ones you did [X]. Commit nothing. Reply in ≤5 lines.
 
   # Lanes share one working tree per repo: each edits only its own folders and writes only under lanes/<lane>/.
+  # The qa item writes the planned cross-lane tests at the same time, in the QA test folders only.
   - id: lanes
     type: fan-out
-    items: "{{ steps.tasks_gate.output.data.lanes }}"
-    max_concurrency: 4
+    items: "{{ steps.tasks_gate.output.data.build_items }}"
+    max_concurrency: 5
     step:
       id: lane
       command: speckit.implement
@@ -220,6 +275,16 @@ steps:
       timeout: 3600
       input:
         args: >-
+          IF THIS ITEM IS "qa": the lanes are writing the code these tests exercise right now. Do the [qa] tasks
+          that are tests: write the contract, integration, end-to-end and eval tests in test-plan.md, named exactly as
+          planned, against the contracts (packages/domain, OpenAPI), plan.md, data-model.md and the Accepted ADRs.
+          Write only in the QA test folders (benefit-be tests/integration/, tests/contract/, tests/e2e/;
+          benefit-fe e2e/); never edit source code, a lane's tests or tasks.md. Don't run them yet (the code isn't
+          there): the QA step and the verify loop do. Write each [qa] task that needs the lanes' code first
+          (regenerating openapi.json, an eval that needs the agent, anything that runs the code) to
+          {{ steps.feature.output.data.feature_dir }}/lanes/qa/blocked.md, and leave it out of done.json. Then write
+          {{ steps.feature.output.data.feature_dir }}/lanes/qa/done.json as {"tasks": ["T0xx", ...]} with the tasks
+          you did, and stop: the rest of this prompt is for the lanes. EVERY OTHER ITEM is a lane:
           Implement ONLY the tasks tagged [{{ item }}] (or its short name) in {{ steps.feature.output.data.feature_dir }}/tasks.md,
           on branch {{ steps.feature.output.data.branch }}, following plan.md, the Accepted ADRs in decisions/, the test
           cases in test-plan.md, and only the rule files project-rules/README.md maps to this lane. Write each test first,
@@ -234,9 +299,15 @@ steps:
           Finally write {{ steps.feature.output.data.feature_dir }}/lanes/{{ item }}/done.json as {"tasks": ["T001", ...]}.
           Commit and push nothing. Reply in ≤5 lines.
 
+  # Only what the qa item couldn't do beside the lanes (it needed their code), and the late [contracts] tasks.
+  - id: qa_remaining
+    type: shell
+    run: "python3 workflows/benefit-feature/scripts/wf.py qa-remaining {{ steps.feature.output.data.feature_dir }}"
+    output_format: json
+
   - id: qa
     type: if
-    condition: "{{ steps.tasks_gate.output.data.qa_tasks > 0 }}"  # includes late [contracts] tasks
+    condition: "{{ steps.qa_remaining.output.data.count > 0 }}"
     then:
       - id: implement_qa
         command: speckit.implement
@@ -245,14 +316,18 @@ steps:
         timeout: 2400
         input:
           args: >-
-            Implement ONLY the [qa] tasks in {{ steps.feature.output.data.feature_dir }}/tasks.md: the contract,
-            integration, end-to-end and eval tests in test-plan.md, named exactly as planned. Also do these [contracts]
-            tasks, which had to wait for the lanes: {{ steps.tasks_gate.output.data.late_contracts }}. Mark them [X].
-            Commit nothing. Reply in ≤5 lines.
+            The lanes are done. In {{ steps.feature.output.data.feature_dir }}/tasks.md, do these [qa] tasks, which
+            needed the lanes' code (see lanes/qa/blocked.md): {{ steps.qa_remaining.output.data.open_qa }}, and these
+            [contracts] tasks, which had to wait for the lanes: {{ steps.qa_remaining.output.data.late_contracts }}.
+            Then run the QA tests the qa item wrote against the lanes' code and fix their wiring (imports, fixtures,
+            names of what the lanes built) where it doesn't match; never weaken an assertion, and where the code
+            misses a planned behaviour, leave the test failing for the verify loop. Mark the tasks [X]. Commit
+            nothing. Reply in ≤5 lines.
 
-  # ── 5. Verify loop. Each round: fix what the last round found → every check in parallel → reviews (only on
-  #       green, only those with no result, still blocking, or whose repo changed) → status. A round always
-  #       ends on a verification, so no fix ships unchecked.
+  # ── 5. Verify loop. Each round: fix what the last round found (one fixer per repo when every blocker belongs to
+  #       one repo, in parallel) → merge main if it moved → the jobs start in the background → the reviews that need
+  #       rerunning run meanwhile (review_mode=parallel; on_green waits for green jobs) → status. A round always ends
+  #       on a verification, so no fix ships unchecked.
   - id: verify_init
     type: shell
     run: "python3 workflows/benefit-feature/scripts/wf.py verify-init {{ steps.feature.output.data.feature_dir }}"
@@ -272,33 +347,49 @@ steps:
 
       - id: maybe_fix
         type: if
-        condition: "{{ steps.needs_fix.output.data.blocking > 0 }}"
+        condition: "{{ steps.needs_fix.output.data.fix }}"
         then:
-          - id: fix
-            type: prompt
-            integration: "{{ inputs.integration }}"
-            model: "{{ steps.needs_fix.output.data.fix_model }}"
-            timeout: 2400
-            prompt: >-
-              Fix everything {{ steps.feature.output.data.review_dir }}/verify.md lists as blocking: failing jobs (read
-              their logs), open tasks (do them, including the work in lanes/*/blocked.md, then mark them [X] in tasks.md),
-              missing or skipped planned tests (review/trace.md), files outside their lane, and every critical or major
-              finding in the review files it points to. UNDERSTAND BEFORE YOU FIX: for each failing or missing test, find
-              what it is for - its test case in {{ steps.feature.output.data.feature_dir }}/test-plan.md (by TC ID or test
-              name, which starts with the FR ID), the requirement or acceptance scenario in spec.md it proves, and any
-              Accepted ADR it checks; for a test from an earlier feature, that feature's spec. State the behaviour it
-              protects and why the code fails it, then change the code so it meets that requirement. Never make a test pass
-              by weakening it: don't change its expected values, pins, thresholds or test name, and don't skip, xfail,
-              delete or loosen it. Change a test only where it contradicts the spec, the plan or an Accepted ADR, and then
-              cite the FR or ADR. A check that scans git history (gitleaks) covers this branch only: a finding in a
-              commit that isn't on this branch belongs to another feature, so narrow the check's scope (gitleaks
-              --log-opts=HEAD) rather than touching that file. If a failure comes from the machine, not the code (a missing tool, a different tool
-              version than the pinned one, a service or login that isn't there), don't change code, pins or tests for it:
-              record it as an environment problem. Write {{ steps.feature.output.data.review_dir }}/fixes.md, one entry
-              per failure: test or check, the FR/TC/ADR it proves, why it failed, what you changed (or "environment:"
-              and what the machine needs). For each review finding, add or correct the test that would have caught it, so
-              it can't come back. Follow the lane rule files and Accepted ADRs; keep each change in its owner's folders.
-              Run make check in each repo you changed before finishing. Commit nothing. Reply in ≤5 lines.
+          # Items: "benefit-be" and/or "benefit-fe" (each fixer in its own clone, side by side), or "all" when a
+          # blocker spans both repos (e2e, trace, tasks, ownership, a finding outside both).
+          - id: fixes
+            type: fan-out
+            items: "{{ steps.needs_fix.output.data.fix_items }}"
+            max_concurrency: 2
+            step:
+              id: fix
+              type: prompt
+              integration: "{{ inputs.integration }}"
+              model: "{{ steps.needs_fix.output.data.fix_model }}"
+              timeout: 2400
+              prompt: >-
+                Fix what {{ steps.feature.output.data.review_dir }}/verify.md lists as blocking, for scope "{{ item }}".
+                SCOPE: "all" → everything blocking. A repo name (benefit-be or benefit-fe) → only that repo's
+                blockers: its failing jobs (<repo>:check, :build, :eval), every critical or major finding in
+                review/code-<repo>.md, and the compliance findings whose file is in <repo>; edit only repos/<repo>
+                and never tasks.md, because another fixer is working on the other repo at the same time. Blocking
+                items: failing jobs (read their logs), open tasks (do them, including the work in lanes/*/blocked.md,
+                then mark them [X] in tasks.md), missing or skipped planned tests (review/trace.md), files outside
+                their lane, and every critical or major finding in the review files it points to. UNDERSTAND BEFORE
+                YOU FIX: for each failing or missing test, find what it is for - its test case in
+                {{ steps.feature.output.data.feature_dir }}/test-plan.md (by TC ID or test name, which starts with the
+                FR ID), the requirement or acceptance scenario in spec.md it proves, and any Accepted ADR it checks;
+                for a test from an earlier feature, that feature's spec. State the behaviour it protects and why the
+                code fails it, then change the code so it meets that requirement. Never make a test pass by weakening
+                it: don't change its expected values, pins, thresholds or test name, and don't skip, xfail, delete or
+                loosen it. Change a test only where it contradicts the spec, the plan or an Accepted ADR, and then
+                cite the FR or ADR. A check that scans git history (gitleaks) covers this branch only: a finding in a
+                commit that isn't on this branch belongs to another feature, so narrow the check's scope (gitleaks
+                --log-opts=HEAD) rather than touching that file. If a failure comes from the machine, not the code (a
+                missing tool, a different tool version than the pinned one, a service or login that isn't there),
+                don't change code, pins or tests for it: record it as an environment problem. Write
+                {{ steps.feature.output.data.review_dir }}/fixes-{{ item }}.md, one entry per failure: test or check,
+                the FR/TC/ADR it proves, why it failed, what you changed (or "environment:" and what the machine
+                needs). For each review finding, add or correct the test that would have caught it, so it can't come
+                back. Follow the lane rule files and Accepted ADRs; keep each change in its owner's folders. Before
+                finishing, rerun the tests that failed and the tests of the code you changed, plus the lint and type
+                checks of each repo you changed (benefit-be: make lint typecheck; benefit-fe: pnpm lint && pnpm
+                typecheck), until they pass. Don't run the full suites (make check, make verify): the verify jobs run
+                them right after you. Commit nothing. Reply in ≤5 lines.
 
       # Main moved (another feature merged) since the branch was cut or last merged: the integrator agent merges
       # it in and resolves the clashes before this round's checks, which then test the merged code.
@@ -324,28 +415,19 @@ steps:
               plan artefacts, record the resolutions in one ADR, run the checks, commit the merge. Never push.
               Write {{ steps.feature.output.data.review_dir }}/integrate.md. Reply in ≤5 lines.
 
-      - id: job_list
+      # Tests, builds, evals, e2e and the script checks start in the background (longest first) and return at once;
+      # nothing edits the code until jobs_wait, so the reviews below see the same code the jobs test.
+      - id: jobs_start
         type: shell
-        run: "python3 workflows/benefit-feature/scripts/wf.py jobs {{ steps.feature.output.data.feature_dir }} {{ inputs.trace_mode }}"
+        run: "python3 workflows/benefit-feature/scripts/wf.py jobs-start {{ steps.feature.output.data.feature_dir }} {{ inputs.trace_mode }}"
         output_format: json
-
-      - id: run_jobs
-        type: fan-out
-        items: "{{ steps.job_list.output.data.jobs }}"
-        max_concurrency: 4
-        step:
-          id: run_job
-          type: shell
-          run: "python3 workflows/benefit-feature/scripts/wf.py job {{ steps.feature.output.data.feature_dir }} {{ item }}"
-          output_format: json
-          timeout: 3700
 
       - id: review_list
         type: shell
-        run: "python3 workflows/benefit-feature/scripts/wf.py review-list {{ steps.feature.output.data.feature_dir }}"
+        run: "python3 workflows/benefit-feature/scripts/wf.py review-list {{ steps.feature.output.data.feature_dir }} {{ inputs.review_mode }}"
         output_format: json
+        timeout: 3800
 
-      # Empty while a job fails, so a red round spends no review tokens.
       - id: reviews
         type: fan-out
         items: "{{ steps.review_list.output.data.reviews }}"
@@ -361,12 +443,20 @@ steps:
             compliance-reviewer agent (agents/compliance-reviewer/compliance-reviewer.agent.md), using its
             compliance-review skill; "code-benefit-be" → you are the backend-reviewer agent
             (agents/backend-reviewer.agent.md); "code-benefit-fe" → you are the frontend-reviewer agent
-            (agents/frontend-reviewer.agent.md). Write only that review's .md and .json in review/. Don't fix
-            anything. Reply in ≤5 lines.
+            (agents/frontend-reviewer.agent.md). The verify jobs are running in these repos now: read the change
+            only with wf.py changes / wf.py delta as your instructions say (never plain git diff, which depends on
+            the index the jobs stage), and don't run tests or the stack. Write only that review's .md and .json in
+            review/. Don't fix anything. Reply in ≤5 lines.
+
+      - id: jobs_wait
+        type: shell
+        run: "python3 workflows/benefit-feature/scripts/wf.py jobs-wait {{ steps.feature.output.data.feature_dir }}"
+        output_format: json
+        timeout: 3800
 
       - id: verify_status
         type: shell
-        run: "python3 workflows/benefit-feature/scripts/wf.py verify-status {{ steps.feature.output.data.feature_dir }}"
+        run: "python3 workflows/benefit-feature/scripts/wf.py verify-status {{ steps.feature.output.data.feature_dir }} {{ inputs.review_mode }}"
         output_format: json
 
   - id: final_gate
@@ -403,7 +493,8 @@ steps:
           green); "ask" → PRs ready for review (no --draft). Fill the PR template with the
           FR IDs covered, the results in review/verify.md (including its Warnings section) and review/trace.md, and a
           "Decided automatically - please review" section listing each entry in decisions/auto-decisions.json (ADR,
-          option chosen, the architect's recommendation, revisit-if) and any amendment suggested. If the
+          option chosen, the architect's recommendation, revisit-if) and any amendment suggested, and each spec
+          question in {{ steps.feature.output.data.feature_dir }}/clarifications.json that the spec clarifier answered (question, answer, revisit-if). If the
           API contract changed, open the benefit-be PR first and link the two. Write
           {{ steps.feature.output.data.review_dir }}/prs.json as {"<repo>": "<PR URL>"}. Reply with the URLs.
 

@@ -1,6 +1,6 @@
 ---
 name: feature-workflow
-description: Build an existing Benefits Case spec end to end with the Spec Kit workflow engine, each AI step a separate agent - architect plan, decision-maker for open ADRs, tasks and QA tasks, contracts, lanes in parallel, QA tests, verify loop (fix, the integrator if main moved, then parallel tests, builds, e2e and script checks, then parallel code and compliance reviews), draft PRs and GitHub Actions - asking a person only when automation can't decide. Use when the user asks to build, implement, deliver or ship a spec or feature, or to start, resume or check a feature run.
+description: Build an existing Benefits Case spec end to end with the Spec Kit workflow engine, each AI step a separate agent - spec clarifier for open spec questions, architect plan, decision-maker for open ADRs, tasks and QA tasks, contracts, lanes and QA tests in parallel, verify loop (fixers per repo, the integrator if main moved, then tests, builds, e2e and script checks in the background while the code and compliance reviews run), draft PRs and GitHub Actions - asking a person only when automation can't decide. Use when the user asks to build, implement, deliver or ship a spec or feature, or to start, resume or check a feature run.
 ---
 
 # Feature workflow
@@ -23,13 +23,13 @@ Always use `run.sh`, never `specify workflow run` directly: it runs the prefligh
 
 `run.sh worktrees` lists them. After the PRs merge, offer `run.sh cleanup <NNN>`. It deletes folders, so ask first, then pass `--yes`. It refuses while anything is uncommitted and keeps the branches.
 
-Note the `run_id`. Never pass a `*_verdict` input when starting. `decision_mode=auto` (the default) lets the decision-maker agent settle open ADRs; tell the user the draft PRs list each one for review. Use `ask` only if they want to decide themselves.
+Note the `run_id`. Never pass a `*_verdict` input when starting. `decision_mode=auto` (the default) lets the spec-clarifier agent answer open spec questions and the decision-maker agent settle open ADRs; tell the user the draft PRs list each answer and decision for review. Use `ask` only if they want to decide themselves.
 
 ## Pauses (only when a person is needed)
 
 | Gate | When | Show | Resume with |
 |---|---|---|---|
-| `approve_spec` | spec has `[NEEDS CLARIFICATION]` | `spec.md` | `spec_verdict` |
+| `approve_spec` | the spec clarifier left a question only a person can answer (why: `clarifications.json`), or `decision_mode=ask` and the spec has `[NEEDS CLARIFICATION]` | `spec.md` | `spec_verdict` |
 | `approve_decisions` | only with `decision_mode=ask`: an ADR is `Needs decision` or needs an amendment | `decisions/README.md` | `decision_verdict` |
 | `approve_pr` | `pr_mode=ask` | `review/verify.md`, `review/trace.md`, the diff | `pr_verdict` |
 
@@ -43,6 +43,7 @@ Help the user answer (edit the worktree's `spec.md`, or record the ADR answer pe
 |---|---|
 | `sync`, `branches` | a repo isn't cloned, or a clone worktree isn't clean or isn't on the feature branch |
 | `feature`, `plan_gate`, `plan_recheck`, `tasks_gate` | a bad input, or the previous AI step's output is incomplete; fix the file it names |
+| `spec_check` | the spec clarifier left an answer incomplete in `clarifications.json` (no answer, kind or revisit-if) or the spec no longer passes `prepare`'s checks. Fix the record or the spec, then resume |
 | `decisions_gate` | the decision-maker found no compliant option for an ADR (see `decisions/README.md`), or didn't record a decision fully. Help the user decide it (`architecture-decision` step 9), then resume |
 | `final_gate` | still blocking when the verify loop stopped, after 2 rounds without progress or 6 rounds (a failing job, an open task, a missing or skipped planned test, a file outside its lane, or a review finding); see `review/verify.md` |
 | `ci_gate` | GitHub Actions still red after 3 CI fix rounds; see `review/ci.md` |

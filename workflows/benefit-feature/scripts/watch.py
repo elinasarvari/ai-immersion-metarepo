@@ -21,7 +21,9 @@ RUNS = ROOT / ".specify" / "workflows" / "runs"
 STAGES = [
     ("sync", "Sync the repos", "script", []),
     ("feature", "Prepare: inputs and spec check", "script", []),
-    ("spec_questions", "Open spec questions", "you", ["approve_spec"]),
+    ("spec_questions", "Spec clarifier answers open questions", "agent", ["spec_clarifier"]),
+    ("spec_check", "clarify-gate", "script", []),
+    ("spec_gate", "Open spec questions left for you", "you", ["approve_spec"]),
     ("architect", "Architect: plan, ADRs, scope", "agent", []),
     ("plan_gate", "plan-gate", "script", []),
     ("decide", "Decision-maker settles open ADRs", "agent",
@@ -31,13 +33,16 @@ STAGES = [
     ("quality_engineer", "Quality engineer: test plan, QA tasks", "agent", []),
     ("tasks_gate", "tasks-gate", "script", []),
     ("branches", "Feature branches", "script", []),
+    ("start_behind", "Is the branch behind main?", "script", []),
+    ("start_integrate", "Integrator merges main before the lanes", "agent", ["start_integrator"]),
     ("contracts", "Contracts (shared changes, alone)", "agent", ["implement_contracts"]),
-    ("lanes", "Lanes, in parallel", "agent", ["lane"]),
-    ("qa", "QA tests (cross-lane)", "agent", ["implement_qa"]),
+    ("lanes", "Lanes and QA tests, in parallel", "agent", ["lane"]),
+    ("qa_remaining", "QA work left for after the lanes", "script", []),
+    ("qa", "QA: what needed the lanes' code", "agent", ["implement_qa"]),
     ("verify_init", "Clear earlier results", "script", []),
     ("verify_loop", "Verify loop (while it makes progress)", "agent",
-     ["needs_fix", "maybe_fix", "fix", "job_list", "run_jobs", "run_job", "review_list", "reviews", "review",
-      "verify_status"]),
+     ["needs_fix", "maybe_fix", "fixes", "fix", "behind", "maybe_integrate", "integrate", "jobs_start",
+      "review_list", "reviews", "review", "jobs_wait", "verify_status"]),
     ("final_gate", "final-gate", "script", []),
     ("pr_approval", "Approve the push (pr_mode=ask)", "you", ["approve_pr"]),
     ("ship", "PRs, GitHub Actions (fix until green)", "agent",
@@ -50,6 +55,7 @@ HINTS = {
     "feature": "a bad input or spec problem; see the problems above",
     "plan_gate": "the architect's output is incomplete; fix the file it names",
     "plan_recheck": "the architect's plan update is incomplete",
+    "spec_check": "the spec clarifier's answers are incomplete or the spec is broken; see clarifications.json",
     "decisions_gate": "the decision-maker found no compliant option, or didn't record a decision fully",
     "tasks_gate": "tasks.md or test-plan.md is incomplete; fix what it names",
     "final_gate": "still blocking when the verify loop stopped (no progress, or 6 rounds); see review/verify.md",
@@ -160,7 +166,8 @@ def stage_rows(state, evs, now):
         # Gates that this run's settings switch off: say so up front instead of showing a pending "YOU".
         inputs = state.get("inputs") or {}
         off = {"pr_approval": inputs.get("pr_mode", "draft") != "ask" and f"pr_mode={inputs.get('pr_mode', 'draft')}: no approval",
-               "decision_questions": inputs.get("decision_mode", "auto") != "ask" and "decision_mode=auto: the decision-maker decides"}
+               "decision_questions": inputs.get("decision_mode", "auto") != "ask" and "decision_mode=auto: the decision-maker decides",
+               "spec_questions": inputs.get("decision_mode", "auto") == "ask" and "decision_mode=ask: you answer at the spec gate"}
         if off.get(sid) and st in (None, "completed"):
             st, note = "skipped", off[sid]
         rows.append((sid, label, who, st or "pending", secs, note))

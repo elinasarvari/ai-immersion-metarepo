@@ -5,19 +5,26 @@ Exit codes: 0 = pass, 1 = the check failed (the workflow run stops there), 2 = u
 
 Gates (one after each planning stage; the skills also run them as their self-check):
   prepare     <feature> <pr_mode> <trace_mode> [decision_mode]  validates the inputs, selects the spec, checks spec.md
+  clarify-gate <feature_dir>                    after the spec clarifier: answers recorded; how many questions are still open
   plan-gate   <feature_dir>                     plan.md, ADRs (decisions/) and scope.json (incl. the feature map's target repos); lists the open ADRs
   decisions-gate <feature_dir>                  after the decision-maker: none open, each recorded; does the plan need updating?
-  tasks-gate  <feature_dir>                     every task tagged with a lane; test-plan.md covers every FR
+  tasks-gate  <feature_dir>                     every task tagged with a lane; test-plan.md covers every FR; the build items
+  qa-remaining <feature_dir>                    after the parallel build: the [qa] and late [contracts] tasks left for the QA step
 
 Verify loop (every check runs here, so the fix step can repair any failure):
   verify-init <feature_dir>                     clears earlier results before the loop
-  needs-fix   <feature_dir> [coding judgement]  start of a round: anything blocking? which model should fix it?
+  needs-fix   <feature_dir> [coding judgement]  start of a round: what blocks, which fixers (one per repo, or `all`), which model
   behind      <feature_dir>                     the repos whose feature branch is behind origin/main (the integrator merges them)
   jobs        <feature_dir> [strict|warn]       lists this round's jobs (tests, builds, evals, script checks)
+  jobs-start  <feature_dir> [strict|warn]       starts this round's jobs in the background (the reviews run meanwhile)
+  jobs-wait   <feature_dir>                     waits for them; a job that didn't finish counts as failed
   job         <feature_dir> <job>               runs one job, writes review/jobs/<job>.json and .log; never fails
-  review-list <feature_dir>                     the reviews to run (none while a job fails); records the trees reviewed
+  review-list <feature_dir> [parallel|on_green] the reviews to run; records the trees reviewed. on_green: waits for the
+                                                jobs, and none while a job fails
+  changes     <feature_dir> <repo>              the branch's whole change in <repo> against origin/main, uncommitted and
+                                                new files included, independent of the git index (what a full review reads)
   delta       <feature_dir> <repo>              diff of <repo> since its last review (what a re-review reads)
-  verify-status <feature_dir>                   merges jobs and reviews into review/verify.json and verify.md
+  verify-status <feature_dir> [parallel|on_green]  merges jobs and reviews into review/verify.json and verify.md
   final-gate  <feature_dir>                     fails unless the last round left nothing blocking
 
 Ship (CI loop: a failing check goes to a fix step, which pushes to the feature branch, then CI runs again):
@@ -31,7 +38,9 @@ Script jobs (run by `job`, also usable by hand): ownership, tasks, trace:strict,
   ports                                         the stack ports something already listens on (never fails)
 Paths are relative to the metarepo root. The lane ownership map mirrors project-rules/backend-architecture.md.
 """
-import json, os, re, socket, subprocess, sys, tempfile
+import fcntl, json, os, re, shutil, signal, socket, subprocess, sys, tempfile, time
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from pathlib import Path
 
 ROOT = Path(os.environ.get("WF_ROOT") or Path(__file__).parents[3]).resolve()
@@ -52,7 +61,7 @@ LANES = {
 # Shared files changed only in the sequential contracts step (BA-8, PR-4), never by a parallel lane.
 CONTRACTS = {"benefit-be": ["packages/domain/", "openapi/", "pyproject.toml", "uv.lock", ".env.example", "README.md",
                             "CLAUDE.md", ".gitignore"]}
-# Cross-lane tests written in the sequential [qa] step after the lanes join.
+# Cross-lane tests, written by the qa item of the parallel build (beside the lanes) and finished in the QA step.
 QA = {"benefit-be": ["tests/integration/", "tests/contract/", "tests/e2e/"]}
 SHORT = {"workflows": "workflows-lane", "agents": "agents-lane", "data": "data-lane",
          "platform-ui": "platform-ui-lane", "platform": "platform-ui-lane"}
@@ -410,11 +419,68 @@ def tasks_gate(d):
             late.append(tid)
     if late:
         warnings.append(f"[contracts] tasks that need lane work first, done in the QA step instead: {', '.join(late)}")
-    out({"lanes": sorted(l for l in by_lane if l in LANES),
+    lanes = sorted(l for l in by_lane if l in LANES)
+    # The parallel build: every lane, plus the qa item, which writes the planned cross-lane tests beside them.
+    build_items = lanes + (["qa"] if by_lane.get("qa") else [])
+    out({"lanes": lanes, "build_items": build_items,
          "contracts_tasks": len(by_lane.get("contracts", [])) - len(late), "late_contracts": late,
          "qa_tasks": len(by_lane.get("qa", [])) + len(late),
          "tasks_by_lane": {k: len(v) for k, v in sorted(by_lane.items())},
          "cases": len(cases), "warnings": warnings, "problems": problems}, ok=not problems)
+
+
+def clarify_gate(d):
+    """After the spec clarifier (or with none): every automatic answer recorded fully, the spec still valid, and
+    how many [NEEDS CLARIFICATION] questions are left for a person. Fails only on a broken record or spec."""
+    spec = check_spec(d)
+    problems = list(spec["problems"])
+    log_path = d / "clarifications.json"
+    log = load_json(log_path) if log_path.exists() else []
+    answered, left = [], []
+    if not isinstance(log, list):
+        problems.append("clarifications.json is not a list")
+        log = []
+    for e in log:
+        if not isinstance(e, dict) or not e.get("question"):
+            problems.append(f"clarifications.json: entry without a question: {e}")
+        elif e.get("left_open"):
+            left.append(e["question"])
+        else:
+            problems += [f"clarifications.json: '{e['question'][:60]}' has no {k}"
+                         for k in ("answer", "kind", "revisit_if") if not e.get(k)]
+            answered.append(e["question"])
+    if answered and "(automated)" not in read(d / "spec.md"):
+        problems.append("spec.md has no automated Clarifications session listing the answers")
+    out({"open": spec["open"], "open_items": spec["open_items"], "answered": len(answered), "left_open": left,
+         "problems": problems}, ok=not problems)
+
+
+def qa_remaining(d):
+    """After the parallel build: the [qa] tasks the qa item left (they needed the lanes' code) and the late
+    [contracts] tasks. The QA step runs only if there are any."""
+    done = set()
+    for f in (d / "lanes").glob("*/done.json"):
+        done |= set((load_json(f, {}) or {}).get("tasks", []))
+    open_qa, late = [], []
+    t = read(d / "tasks.md")
+    by_id = {}
+    for line in t.splitlines():
+        m = TASK_RE.match(line)
+        if m:
+            lanes = [x for x in (lane_of(x) for x in re.findall(r"\[([A-Za-z-]+)\]", m.group(3))) if x]
+            by_id[m.group(2)] = (m.group(1), lanes[0] if lanes else None, m.group(3))
+    for tid, (mark, lane, _) in by_id.items():
+        if lane == "qa" and mark == " " and tid not in done:
+            open_qa.append(tid)
+    for tid, (mark, lane, text) in by_id.items():
+        if lane != "contracts" or mark != " " or tid in done:
+            continue
+        refs = []
+        for grp in re.findall(r"\bafter\s+(T\d{3,}(?:\s*(?:,|and|&)\s*T\d{3,})*)", text, re.I):
+            refs += re.findall(r"T\d{3,}", grp)
+        if any(by_id.get(r, (None, None))[1] not in (None, "contracts") for r in refs):
+            late.append(tid)
+    out({"open_qa": open_qa, "late_contracts": late, "count": len(open_qa) + len(late)})
 
 
 # ── Script jobs (run inside the verify loop) ─────────────────────────────────────────────────────
@@ -629,13 +695,7 @@ def repo_job_cmd(repo, kind):
     return None
 
 
-def jobs(d, trace_mode):
-    # Each round's results come only from this round's jobs: a job file an agent left behind (by running
-    # `wf.py job` itself) would otherwise count as a failing job.
-    jd = d / "review" / "jobs"
-    for f in (jd.glob("*") if jd.is_dir() else []):
-        if f.is_file():
-            f.unlink()
+def job_names(d, trace_mode):
     js, e2e = [], False
     for repo in REPOS:
         files = changed_files(repo)
@@ -647,8 +707,160 @@ def jobs(d, trace_mode):
             js.append(f"{repo}:build")
         if repo == "benefit-be" and any(re.match(r"(packages/agents|packages/rag|evals)/", f) for f in files):
             js.append(f"{repo}:eval")
-    js += (["e2e"] if e2e else []) + (["main"] if js else []) + ["ownership", "tasks", f"trace:{trace_mode}"]
-    out({"jobs": js})
+    # e2e first: it is the longest, so it starts first
+    return (["e2e"] if e2e else []) + js + (["main"] if js else []) + ["ownership", "tasks", f"trace:{trace_mode}"]
+
+
+def clear_jobs(d):
+    # Each round's results come only from this round's jobs: a job file an agent left behind (by running
+    # `wf.py job` itself) would otherwise count as a failing job.
+    jd = d / "review" / "jobs"
+    for f in (jd.glob("*") if jd.is_dir() else []):
+        if f.is_file() and f.name != "runner.state":
+            f.unlink()
+
+
+def jobs(d, trace_mode):
+    clear_jobs(d)
+    out({"jobs": job_names(d, trace_mode)})
+
+
+JOB_WORKERS = 6       # heavy jobs (check, build, eval, e2e) are at most 5; the script checks take seconds
+JOBS_TIMEOUT = 3700   # seconds jobs-wait waits for the runner (each job's command stops itself at 3600)
+
+
+def runner_alive(pid):
+    if not pid:
+        return False
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    cmd = subprocess.run(["ps", "-o", "command=", "-p", str(pid)], capture_output=True, text=True).stdout
+    return "jobs-run" in cmd
+
+
+def stop_runner(d):
+    """Stops an earlier round's runner (an interrupted or resumed run) and puts any index it staged back."""
+    info = load_json(d / "review" / "jobs" / "runner.state", {}) or {}
+    pid = info.get("pid")
+    if runner_alive(pid):
+        try:
+            os.killpg(pid, signal.SIGTERM)
+        except OSError:
+            pass
+        for _ in range(30):
+            if not runner_alive(pid):
+                break
+            time.sleep(1)
+    for repo in REPOS:
+        if (repo_dir(repo) / ".git").exists() and git_path(repo, "wf-stage.json").exists():
+            stage_exit(repo, force=True)
+
+
+def jobs_start(d, trace_mode):
+    """Starts this round's jobs in a background runner and returns at once, so the reviews run meanwhile."""
+    jd = d / "review" / "jobs"
+    jd.mkdir(parents=True, exist_ok=True)
+    stop_runner(d)
+    clear_jobs(d)
+    js = job_names(d, trace_mode)
+    log = open(jd / "runner.log", "w")
+    # Its own session and no inherited pipes: the engine's shell step returns now, not when the jobs finish.
+    proc = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "jobs-run", rel(d), *js],
+                            stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True,
+                            env={**os.environ, "WF_ROOT": str(ROOT)})
+    (jd / "runner.state").write_text(json.dumps({"pid": proc.pid, "jobs": js, "started": time.time()}))
+    out({"jobs": js, "pid": proc.pid})
+
+
+def jobs_run(d, names):
+    """The background runner: every job in parallel, each as its own `wf.py job`."""
+    me = [sys.executable, str(Path(__file__).resolve()), "job", rel(d)]
+    with ThreadPoolExecutor(max_workers=JOB_WORKERS) as pool:
+        list(pool.map(lambda n: subprocess.run([*me, n], capture_output=True, text=True), names))
+    (d / "review" / "jobs" / "runner.done").write_text("\n".join(names) + "\n")
+
+
+def job_file(d, name):
+    return d / "review" / "jobs" / f"{name.replace(':', '-')}.json"
+
+
+def wait_for_jobs(d, timeout=JOBS_TIMEOUT):
+    """Waits for the runner; any job without a result (killed, timed out, crashed) is written as failed."""
+    jd = d / "review" / "jobs"
+    info = load_json(jd / "runner.state", {}) or {}
+    names, pid = info.get("jobs", []), info.get("pid")
+    deadline = time.time() + timeout
+    while runner_alive(pid) and not (jd / "runner.done").exists() and time.time() < deadline:
+        time.sleep(2)
+    if runner_alive(pid) and not (jd / "runner.done").exists():
+        stop_runner(d)
+    missing = []
+    for n in names:
+        if not job_file(d, n).exists():
+            missing.append(n)
+            job_file(d, n).write_text(json.dumps({"job": n, "status": "fail", "problems": [
+                f"the job didn't finish (no result after {timeout}s, or the runner stopped); see {rel(jd)}/runner.log"]}))
+    return names, missing
+
+
+def jobs_wait(d):
+    names, missing = wait_for_jobs(d)
+    out({"jobs": names, "missing": missing, "failing": failing_jobs(d)})
+
+
+def git_path(repo, name):
+    p = (git(repo, "rev-parse", "--path-format=absolute", "--git-path", name) or "").strip()
+    return Path(p) if p else None
+
+
+@contextmanager
+def stage_lock(repo):
+    lock = git_path(repo, "wf-stage.lock")
+    with open(lock, "a+") as fh:
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(fh, fcntl.LOCK_UN)
+
+
+def stage_enter(repo):
+    """Stage the working tree for a job. Jobs overlap (and share a repo), so it is counted: the first job in saves
+    the real index, the last one out puts it back."""
+    state, idx = git_path(repo, "wf-stage.json"), git_path(repo, "index")
+    with stage_lock(repo):
+        st = load_json(state, {}) or {}
+        if not st.get("count"):
+            backup = git_path(repo, "wf-stage.index")
+            if idx.exists():
+                shutil.copyfile(idx, backup)
+            st = {"count": 0, "had_index": idx.exists()}
+        st["count"] += 1
+        state.write_text(json.dumps(st))
+        for _ in range(10):  # a reviewer's `git status` may hold index.lock for a moment
+            if git(repo, "add", "-A") is not None:
+                break
+            time.sleep(0.5)
+
+
+def stage_exit(repo, force=False):
+    state, idx, backup = git_path(repo, "wf-stage.json"), git_path(repo, "index"), git_path(repo, "wf-stage.index")
+    with stage_lock(repo):
+        st = load_json(state, {}) or {}
+        if not st:
+            return
+        st["count"] = 0 if force else st.get("count", 1) - 1
+        if st["count"] > 0:
+            state.write_text(json.dumps(st))
+            return
+        if st.get("had_index") and backup.exists():
+            shutil.copyfile(backup, idx)
+        elif not st.get("had_index") and idx.exists():
+            idx.unlink()
+        backup.unlink(missing_ok=True)
+        state.unlink(missing_ok=True)
 
 
 def run_in_repo(repo, cmd, res, log_file, stage=None):
@@ -658,16 +870,11 @@ def run_in_repo(repo, cmd, res, log_file, stage=None):
     The loop commits nothing, so a check that diffs a generated file against git (openapi-check's
     `git diff --exit-code`) would fail every round. Stage the working tree for the command, then put the index back
     exactly as it was: the diff then means "regenerating changed something". No GIT_INDEX_FILE is exported,
-    because tests that make their own git repos would inherit it."""
-    saved = {}
-    for rp in stage or [repo]:
-        if not (repo_dir(rp) / ".git").exists():
-            continue
-        idx_path = (git(rp, "rev-parse", "--path-format=absolute", "--git-path", "index") or "").strip()
-        if idx_path:
-            idx = Path(idx_path)
-            saved[idx] = idx.read_bytes() if idx.exists() else None
-            git(rp, "add", "-A")
+    because tests that make their own git repos would inherit it. Reviewers, which run meanwhile, read the change
+    with `changes`/`delta`, which don't depend on the index."""
+    staged = [rp for rp in sorted(stage or [repo]) if (repo_dir(rp) / ".git").exists()]
+    for rp in staged:
+        stage_enter(rp)
     try:
         r = subprocess.run(cmd, shell=True, cwd=repo_dir(repo), capture_output=True, text=True, timeout=3600)
         res["status"] = "pass" if r.returncode == 0 else "fail"
@@ -675,11 +882,8 @@ def run_in_repo(repo, cmd, res, log_file, stage=None):
     except subprocess.TimeoutExpired:
         res["status"], log = "fail", "timed out after 3600s"
     finally:
-        for idx, data in saved.items():
-            if data is not None:
-                idx.write_bytes(data)
-            elif idx.exists():
-                idx.unlink()
+        for rp in staged:
+            stage_exit(rp)
     log_file.write_text(log)
     res["tail"] = log[-2000:]
 
@@ -716,8 +920,10 @@ def job(d, name):
         elif not make_has(repo_dir("benefit-be"), "verify"):
             res.update(status="warn", problems=["repos/benefit-be has no 'verify' target, so e2e didn't run"])
         else:
-            res["cmd"] = "make verify"
-            run_in_repo("benefit-be", "make verify", res, jd / "e2e.log", stage=REPOS)
+            # verify-stack: only the stages no other job runs (integration, client in sync, stack, e2e); plain
+            # `make verify` repeats the check and build jobs' stages too
+            res["cmd"] = "make verify-stack" if make_has(repo_dir("benefit-be"), "verify-stack") else "make verify"
+            run_in_repo("benefit-be", res["cmd"], res, jd / "e2e.log", stage=REPOS)
     else:
         res.update(status="fail", problems=[f"unknown job '{name}'"])
     (jd / f"{name.replace(':', '-')}.json").write_text(json.dumps(res, indent=2))
@@ -728,8 +934,9 @@ def job(d, name):
 def verify_init(d):
     rd = d / "review"
     rd.mkdir(parents=True, exist_ok=True)
+    stop_runner(d)
     for f in [*rd.glob("*.json"), *rd.glob("*.md"), *(rd / "jobs").glob("*")]:
-        if f.is_file() and f.name != "prs.json":
+        if f.is_file() and f.name not in ("prs.json", "integrate.md"):  # integrate.md: the merge before the lanes
             f.unlink()
     out({"cleared": rel(rd)})
 
@@ -742,14 +949,49 @@ def history(d):
     return h if isinstance(h, list) else []
 
 
+REVIEW_REPO = {f"code-{r}": r for r in REPOS}
+
+
+def fix_items(d, st):
+    """Who fixes this round: one fixer per repo when every blocker belongs to one repo (they run in parallel, each
+    in its own clone), else one fixer for everything. `main` is the integrator's, and a review with no valid
+    result (99) reruns by itself, so neither needs a fixer."""
+    repos, cross = set(), []
+    for j in st.get("jobs_failing", []):
+        head = j.partition(":")[0]
+        if head in REPOS:
+            repos.add(head)
+        elif j != "main":
+            cross.append(j)
+    for name, n in (st.get("reviews") or {}).items():
+        if not n or n == 99:
+            continue
+        if name in REVIEW_REPO:
+            repos.add(REVIEW_REPO[name])
+            continue
+        r = load_json(d / "review" / f"{name}.json", {}) or {}
+        found = [f for f in r.get("findings", []) if isinstance(f, dict)
+                 and str(f.get("severity", "")).lower() in ("critical", "major")]
+        for f in found or [{}]:
+            head = str(f.get("file", "")).partition(":")[0]
+            if head in REPOS:
+                repos.add(head)
+            else:
+                cross.append(name)
+    if cross:
+        return ["all"]
+    return sorted(repos)
+
+
 def needs_fix(d, coding_model="sonnet", judgement_model="opus"):
     """Start of a round. The first fix uses the coding model; once a fix has already been tried, what is left
     is the hard part, so later fixes use the judgement model."""
     st = load_json(d / "review" / "verify.json")
     blocking = int(st.get("blocking", 99)) if isinstance(st, dict) else 0  # no result yet = first round
+    items = fix_items(d, st) if isinstance(st, dict) and blocking > 0 else []
     rounds = len(history(d))
     model = coding_model if rounds <= 1 else judgement_model
-    out({"fix": blocking > 0, "blocking": blocking, "round": rounds + 1, "fix_model": model})
+    out({"fix": bool(items), "blocking": blocking, "fix_items": items, "round": rounds + 1, "fix_model": model})
 
 
 def keep_going(h):
@@ -774,13 +1016,21 @@ def review_names(d):
     return {"compliance": repos, **{f"code-{r}": [r] for r in repos}}
 
 
-def review_list(d):
+REVIEW_MODES = ("parallel", "on_green")
+
+
+def review_list(d, mode="parallel"):
     """Round 1 runs every review. Later rounds rerun a review only if it has no result, still blocks, or its
     repos changed since it last looked. snapshot.json = the trees the previous reviews saw (a re-review reads
-    only the change since then); reviewed.json = the trees this round's reviews see."""
+    only the change since then); reviewed.json = the trees this round's reviews see.
+
+    parallel: the reviews run while the jobs do (nothing edits the code meanwhile), so one fix gets both.
+    on_green: waits for the jobs first and runs no review while one fails (fewer review tokens, more rounds)."""
     rd = d / "review"
-    if failing_jobs(d):
-        out({"reviews": [], "reason": "a test, build or script check fails; reviews wait until it passes"})
+    if mode == "on_green":
+        wait_for_jobs(d)
+        if failing_jobs(d):
+            out({"reviews": [], "reason": "a test, build or script check fails; reviews wait until it passes"})
     before = load_json(rd / "reviewed.json", {}) or {}
     now = {r: tree_id(r) for r in REPOS}
     todo = []
@@ -798,6 +1048,17 @@ def review_list(d):
     out({"reviews": todo, "skipped": sorted(set(review_names(d)) - set(todo))})
 
 
+def changes(d, repo):
+    if not (repo_dir(repo) / ".git").exists():
+        out({"problems": [f"repos/{repo} is not cloned"]}, ok=False)
+    base = (git(repo, "merge-base", "origin/main", "HEAD") or "").strip()
+    now = tree_id(repo)
+    diff = git(repo, "diff", base, now) if base and now else None
+    if diff is None:
+        out({"problems": [f"couldn't diff {repo} against origin/main"]}, ok=False)
+    print(diff or f"(no changes in {repo} against origin/main)")
+
+
 def delta(d, repo):
     snap = (load_json(d / "review" / "snapshot.json", {}) or {}).get(repo)
     if not snap:
@@ -809,7 +1070,7 @@ def delta(d, repo):
     print(diff or f"(no changes in {repo} since the last review)")
 
 
-def verify_status(d):
+def verify_status(d, mode="parallel"):
     rd = d / "review"
     job_res = [load_json(f, {}) or {} for f in sorted((rd / "jobs").glob("*.json"))]
     failing = [j for j in job_res if j.get("status") not in ("pass", "warn")]
@@ -825,7 +1086,9 @@ def verify_status(d):
         lines.append("- no job results found")
     blocking = len(failing) + (0 if job_res else 99)
     reviews = {}
-    if not failing and job_res:  # reviews ran this round, or are still valid from an earlier one
+    # parallel: every review saw this round's code, so it counts even while a job fails (the fix gets both).
+    # on_green: reviews ran only if the jobs passed; otherwise they are still valid from an earlier round.
+    if job_res and (mode == "parallel" or not failing):
         lines += ["", "## Reviews"]
         for name in review_names(d):
             r = load_json(rd / f"{name}.json")
@@ -957,28 +1220,34 @@ def ci_gate(d):
 
 def main(argv):
     cmd, pos = (argv[1], argv[2:]) if len(argv) > 1 else ("", [])
-    one = {"plan-gate": plan_gate, "decisions-gate": decisions_gate, "tasks-gate": tasks_gate, "verify-init": verify_init, "needs-fix": needs_fix,
+    one = {"clarify-gate": clarify_gate, "qa-remaining": qa_remaining, "jobs-wait": jobs_wait, "plan-gate": plan_gate, "decisions-gate": decisions_gate, "tasks-gate": tasks_gate, "verify-init": verify_init, "needs-fix": needs_fix,
            "review-list": review_list, "behind": behind, "verify-status": verify_status, "final-gate": final_gate, "ci-wait": ci_wait,
            "ci-needs-fix": ci_needs_fix, "ci-gate": ci_gate}
     if cmd in one and len(pos) == 1:
         return one[cmd](fdir(pos[0]))
     if cmd == "ci-wait" and len(pos) == 2:
         return ci_wait(fdir(pos[0]), pos[1])
+    if cmd in ("review-list", "verify-status") and len(pos) == 2:
+        if pos[1] not in REVIEW_MODES:
+            out({"problems": [f"review mode must be parallel or on_green, got '{pos[1]}'"]}, ok=False)
+        return (review_list if cmd == "review-list" else verify_status)(fdir(pos[0]), pos[1])
     if cmd == "needs-fix" and len(pos) == 3:
         return needs_fix(fdir(pos[0]), pos[1], pos[2])
     if cmd == "prepare" and len(pos) in (3, 4):
         return prepare(*pos)
-    if cmd == "jobs" and len(pos) in (1, 2):
+    if cmd in ("jobs", "jobs-start") and len(pos) in (1, 2):
         mode = pos[1] if len(pos) == 2 else "strict"
         if mode not in ("strict", "warn"):
             out({"problems": [f"trace mode must be strict or warn, got '{mode}'"]}, ok=False)
-        return jobs(fdir(pos[0]), mode)
+        return (jobs if cmd == "jobs" else jobs_start)(fdir(pos[0]), mode)
+    if cmd == "jobs-run" and pos:
+        return jobs_run(fdir(pos[0]), pos[1:])
     if cmd == "ports" and not pos:
         return ports()
     if cmd == "job" and len(pos) == 2:
         return job(fdir(pos[0]), pos[1])
-    if cmd == "delta" and len(pos) == 2 and pos[1] in REPOS:
-        return delta(fdir(pos[0]), pos[1])
+    if cmd in ("delta", "changes") and len(pos) == 2 and pos[1] in REPOS:
+        return (delta if cmd == "delta" else changes)(fdir(pos[0]), pos[1])
     print(__doc__, file=sys.stderr)
     sys.exit(2)
 

@@ -10,9 +10,10 @@ You are the **compliance-reviewer agent**. Read `agents/compliance-reviewer/comp
 ## 1. What changed
 For each repo in `specs/<NNN-feature>/scope.json`:
 ```bash
-skills/review-changes/branch-status.sh <repo>                       # fetches; prints DIFF (origin/main...HEAD)
-git -C repos/<repo> diff --name-only origin/main...HEAD; git -C repos/<repo> status --short
+skills/review-changes/branch-status.sh <repo>                       # fetches; ahead, behind, merge conflicts
+python3 workflows/benefit-feature/scripts/wf.py changes specs/<NNN-feature> <repo>   # the whole change, uncommitted and new files included
 ```
+Read the change only this way, never with plain `git diff` or `git diff --cached`: in a feature run the verify jobs stage the git index while you review.
 **Re-review:** if both `specs/<NNN-feature>/review/snapshot.json` and an earlier `review/compliance.json` exist, review only `python3 workflows/benefit-feature/scripts/wf.py delta specs/<NNN-feature> <repo>` for each repo (the change since the last review, new files included) and re-check the earlier findings; otherwise review in full.
 
 ## 2. Load only the rules that apply

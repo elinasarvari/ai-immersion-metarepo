@@ -192,6 +192,37 @@ class Gates(WfCase):
         self.assertEqual(code, 0, data)
         self.assertEqual(data["lanes"], ["platform-ui-lane", "workflows-lane"])
         self.assertEqual((data["contracts_tasks"], data["qa_tasks"], data["cases"]), (1, 1, 2))
+        self.assertEqual(data["build_items"], ["platform-ui-lane", "workflows-lane", "qa"],
+                         "the QA tests are written beside the lanes")
+
+    def test_qa_remaining_lists_what_the_qa_item_left_and_late_contracts(self):
+        self.write("tasks.md", TASKS + "- [ ] T005 [contracts][benefit-be] Regenerate openapi.json after T002\n"
+                   "- [ ] T006 [qa][benefit-be] Eval needs the agent\n")
+        self.write("lanes/qa/done.json", json.dumps({"tasks": ["T004"]}))
+        data = self.wf("qa-remaining", FD)[1]
+        self.assertEqual((data["open_qa"], data["late_contracts"], data["count"]), (["T006"], ["T005"], 2))
+        self.write("lanes/qa/done.json", json.dumps({"tasks": ["T004", "T006"]}))
+        self.write("tasks.md", TASKS.replace("[ ] T004", "[X] T004"))
+        self.assertEqual(self.wf("qa-remaining", FD)[1]["count"], 0, "nothing left: the QA step is skipped")
+
+    def test_clarify_gate_counts_what_is_left_and_checks_each_answer_is_recorded(self):
+        self.write("spec.md", SPEC + "\n[NEEDS CLARIFICATION: which timezone?]\n")
+        code, data, _ = self.wf("clarify-gate", FD)
+        self.assertEqual((code, data["open"]), (0, 1), "no clarifier ran (decision_mode=ask): the gate asks a person")
+        answered = SPEC + "\n## Clarifications\n### Session 2026-11-10 (automated)\n- Q: which timezone? → A: UTC\n"
+        self.write("spec.md", answered)
+        self.write("clarifications.json", json.dumps([{"question": "which timezone?", "answer": "UTC",
+                                                       "kind": "product"}]))
+        code, data, _ = self.wf("clarify-gate", FD)
+        self.assertEqual(code, 1, "an answer without revisit_if is incomplete")
+        self.write("clarifications.json", json.dumps([
+            {"question": "which timezone?", "answer": "UTC", "kind": "product", "revisit_if": "users abroad"},
+            {"question": "which agency?", "left_open": True}]))
+        self.write("spec.md", answered + "[NEEDS CLARIFICATION: which agency?]\n")
+        code, data, _ = self.wf("clarify-gate", FD)
+        self.assertEqual((code, data["open"], data["answered"], data["left_open"]), (0, 1, 1, ["which agency?"]))
+        self.write("spec.md", SPEC)
+        self.assertEqual(self.wf("clarify-gate", FD)[0], 1, "answers recorded but no automated session in spec.md")
 
     def test_ids_the_spec_only_mentions_are_not_its_requirements(self):
         self.write("spec.md", SPEC + "\n## Moved\n| Old | New |\n|---|---|\n| FR-010-03 | FR-011-01 |\n"
@@ -392,8 +423,8 @@ class ScriptJobs(WfCase):
         self.assertEqual(data["jobs"], ["ownership", "tasks", "trace:warn"])
         self.repo_file("benefit-be", "packages/agents/prompt.py", "x = 1\n")
         code, data, _ = self.wf("jobs", FD)
-        self.assertEqual(data["jobs"], ["benefit-be:check", "benefit-be:eval", "e2e", "main", "ownership", "tasks",
-                                        "trace:strict"])
+        self.assertEqual(data["jobs"], ["e2e", "benefit-be:check", "benefit-be:eval", "main", "ownership", "tasks",
+                                        "trace:strict"], "e2e, the longest job, starts first")
 
     def test_a_repo_job_with_no_target_warns_instead_of_passing_silently(self):
         res = self.job("benefit-be:eval")
@@ -449,6 +480,72 @@ class ScriptJobs(WfCase):
         for repo in ("benefit-be", "benefit-fe"):
             self.assertEqual(subprocess.run(["git", "diff", "--cached", "--name-only"], cwd=self.root / "repos" / repo,
                                             capture_output=True, text=True).stdout, "")
+
+    def test_e2e_runs_only_the_stack_stages_when_the_repo_has_them(self):
+        self.repo_file("benefit-be", "Makefile", "verify:\n\texit 1\nverify-stack:\n\t@true\n")
+        with mock.patch.dict(os.environ, {"WF_STACK_PORTS": ""}):
+            res = self.job("e2e")
+        self.assertEqual((res["status"], res["cmd"]), ("pass", "make verify-stack"))
+
+    def test_overlapping_jobs_put_the_real_index_back(self):
+        """Jobs run side by side and stage the same repo: the last one out restores the index the first one saw."""
+        be = self.root / "repos" / "benefit-be"
+        self.repo_file("benefit-be", "staged.py", "a = 1\n")
+        sh("git", "add", "staged.py", cwd=be)          # something the person staged themselves
+        self.repo_file("benefit-be", "untracked.py", "b = 2\n")
+        self.repo_file("benefit-be", "Makefile", "check:\n\tsleep 2\n")
+        self.repo_file("benefit-fe", "Makefile", "check:\n\ttrue\n")
+        with mock.patch.dict(os.environ, {"WF_STACK_PORTS": ""}):
+            self.repo_file("benefit-be", "Makefile", "check:\n\tsleep 2\nverify:\n\tsleep 1\n")
+            env = {**os.environ, "WF_ROOT": str(self.root)}
+            procs = [subprocess.Popen([sys.executable, str(WF), "job", FD, n], env=env, stdout=subprocess.DEVNULL)
+                     for n in ("benefit-be:check", "e2e")]
+            for pr in procs:
+                pr.wait()
+        cached = subprocess.run(["git", "diff", "--cached", "--name-only"], cwd=be, capture_output=True,
+                                text=True).stdout.split()
+        self.assertEqual(cached, ["staged.py"])
+        self.assertFalse(any((be / ".git").glob("wf-stage*.json")))
+
+    def test_jobs_run_in_the_background_and_wait_collects_them(self):
+        code, data, _ = self.wf("jobs-start", FD, "warn")
+        self.assertEqual((code, data["jobs"]), (0, ["ownership", "tasks", "trace:warn"]))
+        code, data, _ = self.wf("jobs-wait", FD)
+        self.assertEqual((code, data["missing"]), (0, []))
+        self.assertEqual(data["failing"], ["tasks"], "T001-T004 are open")
+        self.assertTrue((self.fd / "review" / "jobs" / "ownership.json").exists())
+
+    def test_jobs_start_returns_before_the_jobs_finish(self):
+        """The engine's shell step must not wait on the runner, or the reviews wouldn't overlap the jobs."""
+        import time
+        self.repo_file("benefit-be", "Makefile", "check:\n\tsleep 4\n")
+        t0 = time.monotonic()
+        code, data, _ = self.wf("jobs-start", FD)
+        self.assertEqual(code, 0)
+        self.assertLess(time.monotonic() - t0, 3, "jobs-start waited for the jobs")
+        self.assertIn("benefit-be:check", data["jobs"])
+        self.assertFalse((self.fd / "review" / "jobs" / "benefit-be-check.json").exists())
+        code, data, _ = self.wf("jobs-wait", FD)
+        self.assertEqual(data["missing"], [])
+        self.assertEqual(json.loads((self.fd / "review" / "jobs" / "benefit-be-check.json").read_text())["status"],
+                         "pass")
+
+    def test_a_job_that_never_reported_counts_as_failed(self):
+        self.write("review/jobs/runner.state", json.dumps({"pid": 0, "jobs": ["benefit-be:check"]}))
+        data = self.wf("jobs-wait", FD)[1]
+        self.assertEqual((data["missing"], data["failing"]), (["benefit-be:check"], ["benefit-be:check"]))
+
+    def test_changes_shows_the_whole_branch_change_whatever_the_index_holds(self):
+        be = self.root / "repos" / "benefit-be"
+        self.repo_file("benefit-be", "committed.py", "c = 1\n")
+        sh("git", "add", "-A", cwd=be)
+        sh("git", "commit", "-qm", "feature work", cwd=be)
+        self.repo_file("benefit-be", "new.py", "n = 2\n")
+        sh("git", "add", "-A", cwd=be)                   # as a running job leaves it
+        code, _, text = self.wf("changes", FD, "benefit-be")
+        self.assertEqual(code, 0)
+        self.assertIn("c = 1", text)
+        self.assertIn("n = 2", text)
 
     def test_a_stack_port_held_by_this_project_does_not_count_as_busy(self):
         script = self.root / "repos" / "benefit-be" / "hold_port.py"
@@ -541,14 +638,47 @@ class VerifyLoop(WfCase):
 
     def test_first_round_needs_no_fix(self):
         self.wf("verify-init", FD)
-        self.assertEqual(self.wf("needs-fix", FD)[1], {"fix": False, "blocking": 0, "round": 1, "fix_model": "sonnet"})
+        self.assertEqual(self.wf("needs-fix", FD)[1], {"fix": False, "blocking": 0, "fix_items": [], "round": 1,
+                                                         "fix_model": "sonnet"})
 
-    def test_no_reviews_while_a_job_fails(self):
+    def test_on_green_mode_runs_no_reviews_while_a_job_fails(self):
         self.write("review/jobs/ownership.json", json.dumps({"job": "ownership", "status": "fail"}))
-        self.assertEqual(self.reviews(), [])
-        st = self.wf("verify-status", FD)[1]
+        self.assertEqual(self.wf("review-list", FD, "on_green")[1]["reviews"], [])
+        st = self.wf("verify-status", FD, "on_green")[1]
         self.assertEqual((st["blocking"], st["reviews"]), (1, {}))
         self.assertTrue(self.wf("needs-fix", FD)[1]["fix"])
+
+    def test_parallel_mode_reviews_while_a_job_fails_and_the_fix_gets_both(self):
+        self.write("review/jobs/ownership.json", json.dumps({"job": "ownership", "status": "fail"}))
+        self.assertEqual(self.reviews(), ["compliance", "code-benefit-be", "code-benefit-fe"])
+        for n in ("compliance", "code-benefit-fe"):
+            self.result(n, 0)
+        self.result("code-benefit-be", 2)
+        st = self.wf("verify-status", FD)[1]
+        self.assertEqual((st["blocking"], st["reviews"]["code-benefit-be"]), (3, 2), "1 failing job + 2 findings")
+        self.assertEqual(self.wf("needs-fix", FD)[1]["fix_items"], ["all"], "ownership is cross-repo: one fixer")
+
+    def fix_items_for(self, jobs_failing, reviews=None, compliance_files=()):
+        self.write("review/verify.json", json.dumps({"blocking": 5, "jobs_failing": jobs_failing,
+                                                     "reviews": reviews or {}}))
+        self.write("review/compliance.json", json.dumps({"blocking": len(compliance_files), "findings": [
+            {"id": f"C-{i}", "severity": "major", "file": f} for i, f in enumerate(compliance_files)] + [
+            {"id": "C-minor", "severity": "minor", "file": "README.md"}]}))
+        return self.wf("needs-fix", FD)[1]
+
+    def test_fixers_split_by_repo_when_every_blocker_belongs_to_one(self):
+        r = self.fix_items_for(["benefit-be:check", "benefit-fe:build"])
+        self.assertEqual((r["fix"], r["fix_items"]), (True, ["benefit-be", "benefit-fe"]))
+        r = self.fix_items_for([], {"code-benefit-fe": 1, "compliance": 1}, ["benefit-fe:src/App.tsx"])
+        self.assertEqual(r["fix_items"], ["benefit-fe"], "a compliance finding goes to the repo of its file")
+        r = self.fix_items_for(["benefit-be:check"], {"compliance": 1}, ["specs/010-demo/plan.md"])
+        self.assertEqual(r["fix_items"], ["all"], "a finding outside both repos needs the single fixer")
+        r = self.fix_items_for(["benefit-be:check", "e2e"])
+        self.assertEqual(r["fix_items"], ["all"], "e2e spans both repos")
+
+    def test_no_fixer_for_what_only_the_integrator_or_a_rerun_review_settles(self):
+        r = self.fix_items_for(["main"], {"code-benefit-be": 99})
+        self.assertEqual((r["fix"], r["fix_items"]), (False, []))
 
     def test_reviews_rerun_only_where_needed(self):
         self.green_jobs()
@@ -694,7 +824,7 @@ class Monitor(unittest.TestCase):
         self.run_dir("running", [ev("step_started", "lanes"), ev("step_completed", "lanes", status="completed"),
                                  ev("step_started", "lanes:lane:0"), ev("step_started", "lanes:lane:1"),
                                  ev("step_started", "lanes:lane:2"), ev("step_completed", "lanes:lane:1")], "lanes")
-        self.assertRegex(self.watch(), r"▶ .*Lanes, in parallel.*2 in parallel")
+        self.assertRegex(self.watch(), r"▶ .*Lanes and QA tests, in parallel.*2 in parallel")
 
     def test_permission_check_names_what_the_agents_lack(self):
         check = WF.parent / "check_permissions.py"

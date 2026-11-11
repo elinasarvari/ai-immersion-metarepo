@@ -19,7 +19,7 @@ A designed version of this page is published as an artifact: [Benefits Feature P
 flowchart LR
     you(["You"]):::you
     engine["Spec Kit engine<br/>benefit-feature<br/>order · gates · resume"]:::script
-    claude["Agents<br/>one claude -p session each<br/>up to 4 at once"]:::ai
+    claude["Agents<br/>one claude -p session each<br/>up to 5 at once"]:::ai
     scripts["Scripts<br/>wf.py · JSON pass/fail"]:::script
     rules[("Rules & agents<br/>agents/ · project-rules/<br/>constitution")]
     subgraph work["feature work"]
@@ -51,7 +51,9 @@ The engine never writes code. It is the orchestrator: it starts each **agent** a
 ```mermaid
 flowchart TB
     spec["Pick up the spec<br/>sync · prepare"]:::script
-    q1{{"Open questions?<br/>you answer in spec.md"}}:::you
+    sc["Spec clarifier, only if the spec has open questions<br/>answers on the evidence · each answer listed in the PR"]:::ai
+    g0["clarify-gate"]:::script
+    q1{{"A question only a person can answer?<br/>you answer in spec.md (rare)"}}:::you
     arch["Architect<br/>plan · research · data model · contracts<br/>ADRs · scope.json"]:::ai
     g1["plan-gate"]:::script
     dm["Decision-maker, only if an ADR is open<br/>decides on the evidence · never amends rules<br/>each decision listed in the PR"]:::ai
@@ -61,23 +63,24 @@ flowchart TB
     tasks["Tasks<br/>tagged by lane"]:::ai
     qe["Quality engineer<br/>test-plan.md · QA tasks"]:::ai
     g2["tasks-gate"]:::script
-    contracts["Branches + Contracts, alone<br/>packages/domain · OpenAPI · dependencies"]:::ai
+    sint["Branches · integrator, only if an earlier<br/>run's branch is behind main"]:::ai
+    contracts["Contracts, alone<br/>packages/domain · OpenAPI · dependencies"]:::ai
 
-    lanes["Lanes, in parallel, one session each<br/>workflows · agents · data · platform-ui<br/>tests first · own unit tests green"]:::ai
+    lanes["Lanes and the QA tests, in parallel, one session each<br/>workflows · agents · data · platform-ui · qa<br/>tests first · own unit tests green"]:::ai
 
-    qa["QA tests<br/>contract · integration · e2e · eval"]:::ai
+    qa["QA step, only for what needed the lanes' code<br/>late contracts · QA tests wired to the code"]:::ai
 
     subgraph verify["Verify loop · ≤6 rounds"]
         direction TB
-        fix["Fix (from round 2)<br/>everything verify.md lists<br/>coding model first, then judgement"]:::ai
+        fix["Fixers (from round 2)<br/>one per repo in parallel, or one for all<br/>coding model first, then judgement"]:::ai
         integ["Integrator, only if main moved<br/>merges origin/main · resolves clashes<br/>main wins · one ADR for the PR"]:::ai
-        jobs["Jobs, in parallel<br/>make check · build · eval · e2e · main<br/>ownership · tasks · trace"]:::script
-        reviews["Reviews, in parallel, only on green<br/>code benefit-be · code benefit-fe · compliance<br/>only those with no result, blocking, or changed"]:::ai
+        jobs["Jobs, in the background<br/>e2e first · make check · build · eval · main<br/>ownership · tasks · trace"]:::script
+        reviews["Reviews, at the same time<br/>code benefit-be · code benefit-fe · compliance<br/>only those with no result, blocking, or changed"]:::ai
         status["verify-status"]:::script
         fix --> integ --> jobs
-        jobs -- "all green" --> reviews
+        integ --> reviews
+        jobs --> status
         reviews --> status
-        jobs -. "red: no reviews" .-> status
         status -. "blocking: next round" .-> fix
     end
 
@@ -96,10 +99,11 @@ flowchart TB
     ready["Ready for review<br/>gh pr ready when all green"]:::script
     cigate["ci-gate<br/>still red after 3 rounds: stop"]:::script
 
-    spec --> arch --> g1 --> dm --> g3 --> tasks --> qe --> g2 --> contracts --> lanes --> qa --> verify
+    spec --> sc --> g0 --> arch --> g1 --> dm --> g3 --> tasks --> qe --> g2 --> sint --> contracts --> lanes --> qa --> verify
+    spec -- "no open questions" --> g0
+    g0 -.-> q1
     g1 -- "nothing open" --> tasks
     g3 -. "chose differently" .-> upd -.-> tasks
-    spec -.-> q1
     dm -.-> q2
     verify -- "clean" --> final --> pr --> gha
     gha -- "all green" --> ready
@@ -111,45 +115,48 @@ flowchart TB
     classDef you fill:#FAEEDF,stroke:#9C5512,color:#17212B,stroke-dasharray:5 3
 ```
 
-Each teal box is a separate agent session. Stages that depend on each other run in a chain; work that doesn't (the four lanes, the jobs, the reviews) runs in parallel. Planning is checked by one gate per stage; everything about the code is checked inside the verify loop, so any failure there goes to **Fix** instead of stopping the run. Each round ends on a verification, so a fix is never shipped unchecked. A failed gate stops the run; fix the cause and `specify workflow resume <run-id>`.
+Each teal box is a separate agent session. Stages that depend on each other run in a chain; work that doesn't (the lanes and the QA tests, the fixers for the two repos, the jobs and the reviews) runs in parallel. Planning is checked by one gate per stage; everything about the code is checked inside the verify loop, so any failure there goes to a **fixer** instead of stopping the run. Each round ends on a verification, so a fix is never shipped unchecked. A failed gate stops the run; fix the cause and `specify workflow resume <run-id>`.
 
 ### Inside one verify round
 
 ```mermaid
 flowchart LR
-    nf["needs-fix<br/>last round blocking?"]:::script
-    fix["Fix"]:::ai
+    nf["needs-fix<br/>what blocks? whose?"]:::script
+    fix["Fixers<br/>benefit-be ∥ benefit-fe<br/>or one for all"]:::ai
     bh["behind<br/>branch behind origin/main?"]:::script
     ig["Integrator"]:::ai
-    jl["jobs<br/>list for changed repos"]:::script
-    run["run each job<br/>review/jobs/*.json"]:::script
-    rl["review-list<br/>none if a job fails"]:::script
+    js["jobs-start<br/>background runner"]:::script
+    rl["review-list<br/>what needs a review"]:::script
     rv["reviews<br/>delta since last look"]:::ai
+    jw["jobs-wait<br/>review/jobs/*.json"]:::script
     vs["verify-status<br/>verify.md · verify.json"]:::script
     nf -- yes --> fix --> bh
     nf -- "no (round 1)" --> bh
-    bh -- yes --> ig --> jl
-    bh -- no --> jl
-    jl --> run --> rl --> rv --> vs
+    bh -- yes --> ig --> js
+    bh -- no --> js
+    js --> rl --> rv --> jw --> vs
 
     classDef ai fill:#E2F0F1,stroke:#1D6B74,color:#17212B
     classDef script fill:#EDF0F3,stroke:#536273,color:#17212B
 ```
 
-`review-list` reruns a review only when it has no result, still has blocking findings, or one of its repos changed since it last looked. It records the trees it reviewed, so `wf.py delta` can show a re-review exactly what changed, new files included.
+`jobs-start` hands the jobs to a background runner and returns at once, so the reviews run while the tests do; nothing edits the code until `jobs-wait`, so both see the same code, and the next round's fix gets the failing jobs and the review findings together. `review-list` reruns a review only when it has no result, still has blocking findings, or one of its repos changed since it last looked. It records the trees it reviewed, so `wf.py delta` can show a re-review exactly what changed, new files included. With `-i review_mode=on_green`, `review-list` waits for the jobs and runs no review while one fails (fewer review tokens, usually one more round).
+
+`needs-fix` splits the fix by repo when every blocker belongs to one: failing `benefit-be:*` or `benefit-fe:*` jobs, a code review's findings, and compliance findings by the repo of their file. The two fixers then work side by side, each only in its own clone. A blocker that spans both (`e2e`, `trace`, `tasks`, `ownership`, a finding outside both repos) gets one fixer for everything. `main` needs no fixer (the integrator merges it), and nor does a review with no valid result (it reruns).
 
 ## 3. Stage by stage
 
 | # | Stage | What happens | Output | Checked by |
 |---|---|---|---|---|
-| 0 | Spec (you) | You write the spec with `/speckit-specify` and `/speckit-clarify`. The run starts from it. | `spec.md` | `prepare` |
+| 0 | Spec (you) | You write the spec with `/speckit-specify` (and `/speckit-clarify` if you want to answer its questions yourself). The run starts from it. | `spec.md` | `prepare` |
+| 0b | Clarify (AI) | Only if the spec has `[NEEDS CLARIFICATION]` markers: the spec-clarifier agent, which didn't write the spec, answers each one on the evidence (the spec's goal, the constitution, the rules, earlier specs, policy sources, the code) and records the answer and when to revisit it. A question only a person can answer stays open for the spec gate. | answered `spec.md`, `clarifications.json` | `clarify-gate` |
 | 1 | Plan (AI) | The architect agent plans against the real code, the constitution and earlier decisions, records significant decisions as ADRs, and decides which lanes and repos are involved. Product, policy, cost, scope and amendment questions stay open, with options and a recommendation. | `plan.md`, `research.md`, `data-model.md`, `contracts/`, `decisions/`, `scope.json` | `plan-gate` |
 | 1b | Decide (AI) | Only if an ADR is open: the decision-maker agent, which didn't plan the feature, decides each one on the evidence and records why and when to revisit. If it chose other than the recommendation, the architect updates the plan. | decided ADRs, `decisions/auto-decisions.json` | `decisions-gate`, `plan-gate` |
 | 2 | Tasks, then QA (AI ×2) | Spec Kit's tasks, each tagged with one lane and repo; then, in its own session, the quality-engineer agent maps every requirement to named test cases and adds test-first and cross-lane QA tasks. | `tasks.md`, `test-plan.md` | `tasks-gate` |
-| 3 | Contracts (AI) | Feature branches from `origin/main` in the repos in `scope.json`, then the shared changes every lane depends on, done first and alone. | domain models, OpenAPI, dependencies | verify loop |
-| 4 | Lanes (AI ×4) | Each lane implements its own tasks, tests first, in its own folders, and gets its own unit tests green in the same session. | code per lane, `lanes/<lane>/done.json` | verify loop |
-| 5 | QA tests (AI) | Tests that span lanes or repos: contract, integration, end-to-end, eval. | tests | verify loop |
-| 6 | Verify (script + AI) | Fix (from round 2); the integrator if `origin/main` moved; then in parallel: `make check`, builds, evals, `e2e` (benefit-be's `make verify`: the stack and `pnpm e2e`, as in CI), `main` (the branch contains `origin/main`), `ownership` (files in their lane), `tasks` (none left open) and `trace` (every planned test defined by its exact name and not skipped). If all green, the reviews that need it, in parallel. | `review/verify.md`, `review/trace.md` | `verify-status`, `final-gate` |
+| 3 | Contracts (AI) | Feature branches from `origin/main` in the repos in `scope.json` (an existing branch with no commits of its own is fast-forwarded; one with its own work that main has passed goes to the integrator first), then the shared changes every lane depends on, done first and alone. | domain models, OpenAPI, dependencies | verify loop |
+| 4 | Lanes and QA tests (AI ×5) | Each lane implements its own tasks, tests first, in its own folders, and gets its own unit tests green in the same session. At the same time the qa item writes the planned contract, integration, end-to-end and eval tests against the contracts and plan, in the QA test folders only. | code per lane, QA tests, `lanes/<lane>/done.json` | verify loop |
+| 5 | QA step (AI) | Only if there is work left for it: the `[qa]` tasks that needed the lanes' code (in `lanes/qa/blocked.md`) and the late `[contracts]` tasks; it also wires the QA tests to what the lanes built, never weakening an assertion. | tests | `qa-remaining`, verify loop |
+| 6 | Verify (script + AI) | Fixers (from round 2, one per repo where they can); the integrator if `origin/main` moved; then in the background: `e2e` (benefit-be's `make verify-stack`: integration, the stack and `pnpm e2e`, as in CI), `make check`, builds, evals, `main` (the branch contains `origin/main`), `ownership` (files in their lane), `tasks` (none left open) and `trace` (every planned test defined by its exact name and not skipped); and, meanwhile, the reviews that need it, in parallel. | `review/verify.md`, `review/trace.md` | `verify-status`, `final-gate` |
 | 7 | Ship (AI + script) | Draft PRs from the feature branch (never `main`), one per repo and linked, backend first if the API changed. Then each repo's GitHub Actions: a red check's log goes to a CI fix step, which fixes it, runs `make check`, commits and pushes to the same branch, and CI runs again (up to 3 rounds). When all checks are green, the draft PRs are marked ready for review. | PR URLs, `review/ci.md` | `ci-wait`, `ci-gate` |
 
 ## 4. Who does what
@@ -159,6 +166,7 @@ Every AI step is an **agent**: a `*.agent.md` file with its rules (role, scope, 
 | Agent | Does | Writes | Skills |
 |---|---|---|---|
 | [Architect](../agents/architect/architect.agent.md) | Turns the spec into a buildable plan; makes the decisions that are its to make; frames the rest with options and a recommendation | plan artefacts, ADRs, `scope.json` | `architecture-plan`, `architecture-decision`, `architecture-capabilities` |
+| [Spec clarifier](../agents/spec-clarifier.agent.md) | Answers the spec's open questions independently, on the evidence: product by the spec's goal and earlier features, policy by its sources (else a caseworker decides), data by the most conservative option; leaves open only what a person alone can know | answered `spec.md`, `clarifications.json` | — |
 | [Decision-maker](../agents/decision-maker.agent.md) | Decides the open ADRs independently, on the evidence: product and scope by the spec, policy by its sources, cost by the cheapest compliant option; never amends the constitution or a rule | decided ADRs, `decisions/auto-decisions.json` | — |
 | [Quality engineer](../agents/quality-engineer/quality-engineer.agent.md) | Decides how each requirement is proven: test level, edge cases, synthetic data, eval thresholds | `test-plan.md`, test and QA tasks | `test-strategy` |
 | [Compliance reviewer](../agents/compliance-reviewer/compliance-reviewer.agent.md) | Checks the implementation against the constitution, the rules for each changed path, Accepted ADRs and the test plan | `review/compliance.md` + `.json` | `compliance-review` |
@@ -166,7 +174,7 @@ Every AI step is an **agent**: a `*.agent.md` file with its rules (role, scope, 
 | [Backend reviewer](../agents/backend-reviewer.agent.md) | Senior code review of `benefit-be`: bugs, async and MongoDB mistakes, Temporal in practice, security, tests, design | `review/code-benefit-be.md` + `.json` | — |
 | [Frontend reviewer](../agents/frontend-reviewer.agent.md) | Senior code review of `benefit-fe`: state and data bugs, security, accessibility, tests, API-contract fit | `review/code-benefit-fe.md` + `.json` | — |
 
-The decision-maker is separate from the architect on purpose: the agent that framed the options doesn't grade them. Its decisions aren't hidden: each one is in `decisions/README.md` and in a "Decided automatically" section of the PR, with what the architect recommended and when to revisit it.
+The decision-maker is separate from the architect on purpose: the agent that framed the options doesn't grade them. Its decisions aren't hidden: each one is in `decisions/README.md` and in a "Decided automatically" section of the PR, with what the architect recommended and when to revisit it. The spec clarifier works the same way for the spec's questions: each answer is in the spec's `## Clarifications` section (an `(automated)` session) and in the same PR section.
 
 **Lanes** (workflows, agents, data, platform-ui) are folder ownership, not agents ([backend-architecture.md](../project-rules/backend-architecture.md)). They decide which rules apply (`TW-*`, `AG-*`, `KD-*`, `PL-*`, `FE-*`) and what can run in parallel.
 
@@ -174,12 +182,12 @@ The decision-maker is separate from the architect on purpose: the agent that fra
 
 | Gate | Appears when | What you do | Continue with |
 |---|---|---|---|
-| Spec questions | The spec still has `[NEEDS CLARIFICATION]` markers | Answer them in `spec.md` | `-i spec_verdict=approve` |
+| Spec questions | Rare: the spec clarifier left a question open because only a person can answer it (why is in `clarifications.json`); with `decision_mode=ask`, every open question | Answer them in `spec.md` | `-i spec_verdict=approve` |
 | No compliant option | Rare: the decision-maker finds that every option for an ADR breaks the constitution or a rule (the run stops at `decisions_gate`) | Decide it, or start the amendment PR (all three team members) | fix, then `specify workflow resume <run-id>` |
-| Your decisions | Only with `decision_mode=ask`: an ADR is a product, policy or cost call, or needs a rule or constitution change | Answer it, or accept the ADR's fallback | `-i decision_verdict=approve` |
+| Your decisions | Only with `decision_mode=ask` (which also sends every spec question to the spec gate): an ADR is a product, policy or cost call, or needs a rule or constitution change | Answer it, or accept the ADR's fallback | `-i decision_verdict=approve` |
 | Before pushing | Only with `pr_mode=ask` | Read `review/verify.md` (including its Warnings), `review/trace.md` and the diff | `-i pr_verdict=approve` |
 
-With the defaults (`decision_mode=auto`, `pr_mode=draft`), your review happens on the PRs in GitHub: they open as drafts and are marked ready for review once GitHub Actions is green, where branch protection already requires an approval: the code, and each decision the decision-maker made. Use `pr_mode=none` for a rehearsal that stops before pushing. Each gate has its own answer, so approving one can never approve another.
+With the defaults (`decision_mode=auto`, `pr_mode=draft`), your review happens on the PRs in GitHub: they open as drafts and are marked ready for review once GitHub Actions is green, where branch protection already requires an approval: the code, each spec answer the spec clarifier gave, and each decision the decision-maker made. Use `pr_mode=none` for a rehearsal that stops before pushing. Each gate has its own answer, so approving one can never approve another.
 
 ## 6. How it stays correct, and cheap
 
@@ -192,22 +200,31 @@ With the defaults (`decision_mode=auto`, `pr_mode=draft`), your review happens o
 - Each repo's own GitHub Actions must pass on the PR. CI differs from a laptop (no `.env`, services only in the integration job), so a red check goes to a CI fix step that pushes to the feature branch until it's green (up to 3 rounds). Only then is a draft marked ready for review, so nobody reviews code CI hasn't passed. `trace` also flags a planned unit test placed in a folder whose tests need MongoDB or Temporal (`tests/db/`, `tests/integration/`), the mistake behind feature 001's first red CI.
 - Tasks are checked twice before any code: the quality engineer checks they cover the plan (every ADR's "Work this creates", every module in the Project Structure, every requirement) and adds what's missing; `tasks-gate` checks their tags and coverage, and moves a `[contracts]` task that waits for lane work ("after T020") to the QA step, which runs after the lanes.
 - The verify loop keeps going while the blocking count falls, up to 6 rounds, and stops early after 2 rounds without progress (`review/history.json`); the first fix uses `coding_model`, later fixes `judgement_model`, and every fix adds the test that would have caught its finding.
-- The stack is started by a script, not by an agent: when a feature changes code, the `e2e` job runs benefit-be's `make verify`, which starts MongoDB, Temporal and the app and runs the API and `pnpm e2e` tests the way CI's e2e job does. Running the stack, e2e or the quickstart is never a task, so no task stays open because an agent couldn't keep a server up. If a stack port (8000, 8001, 5173, 7233, 8233, 27017) is already taken, for example by your own `make dev`, the job doesn't run, because `make verify` resets the database. It leaves a non-blocking warning that the PR repeats, and CI's e2e job still runs on the PR. `run.sh` lists the taken ports at start.
-- The branch never ships against an outdated main. Each round, `wf.py behind` fetches `origin/main` (only main, so other features' branches never land in the clone) and, if another feature merged meanwhile, the integrator agent commits the feature's work, merges main and resolves the clashes before the round's checks, which then test the merged code. Main wins (it's merged, may hold data, and other code depends on it): the feature takes main's names and fields, renumbers its migrations after main's, and replaces anything main marks as a stand-in for it. Every resolution goes in one ADR, listed for review in the PR like the decision-maker's. If keeping both sides' requirements is impossible, it aborts the merge, records the clash as `Needs decision`, and the `main` job keeps blocking. The integrator only commits on the feature branch; nothing is pushed before the PR step.
-- The fix step fixes the code to meet the requirement, never the test. For each failing test it first looks up what the test proves: its case in `test-plan.md`, the requirement in `spec.md`, and any ADR. Then it changes the code to meet that requirement. It never weakens a test (expected values, pins, thresholds, names, skips), and changes a test only where it contradicts the spec, plan or an ADR. A failure caused by the machine (a missing tool, an unpinned version, a missing login) is recorded as an environment problem, not patched in the code. Each round's reasoning is in `review/fixes.md`.
+- The stack is started by a script, not by an agent: when a feature changes code, the `e2e` job runs benefit-be's `make verify-stack` (`make verify` where the repo doesn't have it yet), which starts MongoDB, Temporal and the app and runs the integration, API and `pnpm e2e` tests the way CI's e2e job does. It skips the static, unit, workflow and contract stages, which the `check` and `build` jobs run beside it. Running the stack, e2e or the quickstart is never a task, so no task stays open because an agent couldn't keep a server up. If a stack port (8000, 8001, 5173, 7233, 8233, 27017) is already taken, for example by your own `make dev`, the job doesn't run, because `make verify` resets the database. It leaves a non-blocking warning that the PR repeats, and CI's e2e job still runs on the PR. `run.sh` lists the taken ports at start.
+- The branch never ships against an outdated main, and the lanes never build on one. Before the lanes, an earlier run's branch that main has passed goes to the integrator, and one with no commits of its own is fast-forwarded. Each verify round, `wf.py behind` fetches `origin/main` (only main, so other features' branches never land in the clone) and, if another feature merged meanwhile, the integrator agent commits the feature's work, merges main and resolves the clashes before the round's checks, which then test the merged code. Main wins (it's merged, may hold data, and other code depends on it): the feature takes main's names and fields, renumbers its migrations after main's, and replaces anything main marks as a stand-in for it. Every resolution goes in one ADR, listed for review in the PR like the decision-maker's. If keeping both sides' requirements is impossible, it aborts the merge, records the clash as `Needs decision`, and the `main` job keeps blocking. The integrator only commits on the feature branch; nothing is pushed before the PR step.
+- The fix step fixes the code to meet the requirement, never the test. For each failing test it first looks up what the test proves: its case in `test-plan.md`, the requirement in `spec.md`, and any ADR. Then it changes the code to meet that requirement. It never weakens a test (expected values, pins, thresholds, names, skips), and changes a test only where it contradicts the spec, plan or an ADR. A failure caused by the machine (a missing tool, an unpinned version, a missing login) is recorded as an environment problem, not patched in the code. Each round's reasoning is in `review/fixes-<scope>.md` (`fixes-benefit-be.md`, `fixes-benefit-fe.md`, or `fixes-all.md`). A fixer reruns the tests that failed and those of the code it changed, plus lint and types; the full suites run in the jobs right after it.
 - Before handing over, each lane reviews its own diff against the reviewer's checklist and the ADRs' "How we verify it", and the quality engineer plans the failure paths reviewers block on (retries running out, every API error body, recorded refusals), so fewer findings reach the reviews at all.
 - Running a feature again (its spec changed) updates instead of starting over: `prepare` clears the earlier run's lane reports, the tasks step keeps each ticked task the code on the branch still satisfies, reopens the ones that no longer match and adds tasks only for what isn't built, and the quality engineer extends `test-plan.md`, keeping existing case IDs.
+- Jobs run side by side and share each repo's git index (they stage the working tree so a generated-file check means "regenerating changed something"): the first job in saves the real index, the last one out puts it back, under a lock. The reviewers, running at the same time, read the change with `wf.py changes` and `wf.py delta`, which don't use the index. A job that never reports (killed, crashed, timed out) counts as failed.
 - After the code, the `tasks` job in every verify round blocks while any task is open; the tests, `trace` and the reviews prove the ticked ones were really done.
 - The checks are tested themselves: `python3 -m unittest discover -s workflows/benefit-feature/tests` runs the tests for every `wf.py` command plus Spec Kit's validator on `workflow.yml`.
 
 **Token economy**
-- Four agent sessions plan the whole feature (architect; tasks; quality engineer; contracts), plus the decision-maker only when an ADR is open, and the architect again only if it chose another option.
+- Four agent sessions plan the whole feature (architect; tasks; quality engineer; contracts), plus the spec clarifier only when the spec has open questions, the decision-maker only when an ADR is open, and the architect again only if it chose another option.
 - Each lane is one session: it fixes its own unit tests with its context still loaded, instead of in extra fix sessions.
 - Two models: `judgement_model` (default `opus`) for the architect, decision-maker, quality engineer, integrator and reviewers; `coding_model` (default `sonnet`, much faster) for tasks, contracts, lanes, QA tests, fixes and PRs, which follow a written plan. Override either with `-i coding_model=opus`, for example.
-- Reviews run only on green jobs; later rounds rerun only the reviews with no result, still blocking, or whose repo changed.
+- Later rounds rerun only the reviews with no result, still blocking, or whose repo changed. With the default `review_mode=parallel` a review can also run on a round whose jobs fail, which costs review tokens but saves a round; `on_green` saves those tokens.
 - Re-reviews read only `wf.py delta`, the change since they last looked.
 - Each agent reads only the rule files mapped to the paths it touches, and the diff.
 - Results go to files; replies are a few lines.
+
+**Speed** (measured on feature 001's runs, where fix rounds were 24–39 minutes of 64–93)
+- The reviews run while the jobs do, so one fix round handles both the failing tests and the findings, instead of a round for each.
+- The fix is split by repo when it can be, so the backend and frontend fixes run side by side.
+- The QA tests are written beside the lanes; only what needs the lanes' code waits for them.
+- `e2e`, the longest job, starts first and doesn't repeat the other jobs' stages.
+- A fixer runs only the tests it needs; the jobs run the full suites straight after.
+- An earlier run's branch catches up with main before the lanes, not late in the verify loop.
 
 ## 7. Running it
 
@@ -271,6 +288,7 @@ ai-immersion-metarepo/
 ├── agents/
 │   ├── README.md                      who's who + shared conventions
 │   ├── architect/                     architect.agent.md + 3 skills
+│   ├── spec-clarifier.agent.md
 │   ├── decision-maker.agent.md
 │   ├── integrator.agent.md
 │   ├── quality-engineer/              quality-engineer.agent.md + test-strategy
