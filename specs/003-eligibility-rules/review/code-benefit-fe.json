@@ -1,0 +1,9 @@
+{
+  "blocking": 0,
+  "verdict": "PASS",
+  "findings": [
+    {"id": "FE-1", "severity": "minor", "file": "benefit-fe:src/features/caseworker/case-page/DeterminationSection.tsx", "line": 35, "rule": "FR-003-23", "summary": "With several determinations, each heading is only the result, with no date and no 'latest' marker, so the headings are ambiguous for screen-reader users"},
+    {"id": "FE-2", "severity": "minor", "file": "benefit-fe:src/features/caseworker/case-page/DeterminationSection.tsx", "line": 25, "rule": "FR-003-23", "summary": "Missing items show the raw code (pay_stub) without a readable label or the member/job they belong to"},
+    {"id": "FE-3", "severity": "minor", "file": "benefit-fe:e2e/pages/DeterminationSection.ts", "line": 52, "rule": "FR-003-23", "summary": "The e2e check compares rule ID, threshold and outcome with the API but not the inputs used"}
+  ]
+}

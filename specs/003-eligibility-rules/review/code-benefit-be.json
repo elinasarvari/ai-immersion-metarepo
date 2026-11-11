@@ -1,0 +1,9 @@
+{
+  "blocking": 0,
+  "verdict": "PASS",
+  "findings": [
+    {"id": "BE-1", "severity": "minor", "file": "benefit-be:apps/worker/activities/determination.py", "line": 87, "rule": "TW-11", "summary": "On a duplicate-key retry the activity returns the fresh evaluation's summary rather than the stored record's, so the two can differ after an engine or rule-set deploy"},
+    {"id": "BE-2", "severity": "minor", "file": "benefit-be:apps/worker/activities/determination.py", "line": 44, "rule": "design", "summary": "Reason-code mapping is duplicated in apps/api/services/determinations.py:42 and can drift"},
+    {"id": "BE-3", "severity": "minor", "file": "benefit-be:apps/worker/repositories/snapshots.py", "line": 65, "rule": "tests", "summary": "members_for_year and application_form are tested only through fakes; real BSON decoding (Decimal128, datetime dates) is untested"}
+  ]
+}

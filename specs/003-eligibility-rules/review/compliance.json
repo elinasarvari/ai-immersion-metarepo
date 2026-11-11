@@ -1,0 +1,14 @@
+{
+  "blocking": 0,
+  "verdict": "PASS",
+  "findings": [
+    {
+      "id": "C-1",
+      "severity": "minor",
+      "file": "benefit-be:tests/apps/worker/workflows/test_determination_failures.py",
+      "line": 38,
+      "rule": "TC-99, TW-10",
+      "summary": "TC-99 tests a store that recovers after 5 failures (per ADR-001-02 UNTIL_DONE); the plan's wording says 'always raises' and attributes under_review to the failure. Update the test-plan wording or the test."
+    }
+  ]
+}

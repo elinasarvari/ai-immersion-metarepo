@@ -1,0 +1,5 @@
+{
+  "lanes": ["data-lane", "workflows-lane", "platform-ui-lane"],
+  "repos": ["benefit-be", "benefit-fe"],
+  "reason": "data-lane: packages/rules, db/migrations 0005, db/seeds (data set, test sets, history). workflows-lane: apps/worker determine_eligibility body, snapshot capture, repositories. platform-ui-lane: apps/api determinations endpoint, scope registry, openapi, benefit-fe case page section and e2e."
+}
