@@ -49,6 +49,20 @@ evaluation commands, the rotation table) describe the full build and are not par
 The AI requirements in 000 (FR-000-12, FR-000-22, FR-000-28) and the AI review reasons in 010
 (FR-010-01: AI causes of "Verification review", "Explanation review") are not exercised.
 
+**Before the split (MVP):** merge the contracts in [mvp-contracts.md](mvp-contracts.md) as one
+contracts PR per repo. That doc also covers who owns `case.py`, the case page sections and the
+routes. The seed data gaps are in [mvp-seed-data-tasks.md](mvp-seed-data-tasks.md). With three
+people:
+
+| Seat | Phase 1 | Phase 2 |
+|---|---|---|
+| A, Workflows | 011 (owns `case.py`) | join 007b onto 011's wait and notices |
+| B, Workflows | 007a against the contract stubs | 007b once 011 lands |
+| C, Knowledge & data, plus 002's workflow module | seed tasks S-01 to S-04, then 002 | 004a, then S-05 and S-06; 008 only if time allows |
+
+Each seat builds its own screens in `benefit-fe`, in the files the contracts PR assigns. 004b
+and 008 are deferred unless a seat finishes early.
+
 006 (Caseworker console and applicant portal) was retired on 2026-11-10. Its screens moved into
 the features whose operations they use, and the rules every screen follows moved to 000
 (FR-000-29 to FR-000-31). The old IDs map to the new ones in
@@ -78,6 +92,8 @@ Tests in `tests/` mirror the source tree and belong to the lane that owns the so
 Knowledge & data writes the baseline migration (every table, including users) in the contracts PR.
 
 ## Rotation
+
+*Full build. For the MVP, use the three seats under "MVP scope" above; the Agents lane has no MVP work.*
 
 Four lanes, three people. Workflows and Agents form one seat, because activities call agents
 through a single shared contract; Knowledge & data and Platform & UI are a seat each. People
@@ -186,6 +202,8 @@ checked against current regulation, and every spec uses them.
 
 ## Cut first if behind
 
+*Full build. For the MVP, cut in the order in [mvp-spec-review.md](mvp-spec-review.md) ("No slack"): 004b, 007b, 008's month filter, 008 entirely.*
+
 If the team is behind at a checkpoint, cut in this order. Every cut keeps the demo story intact.
 
 1. P3 stories: deadline visibility (001 US3) and upcoming redeterminations (007 US4,
@@ -244,6 +262,8 @@ Each spec is reviewed by the lane that **uses** what it provides (see "Depends o
       with no Server Components, and `backend-architecture.md` assigns ownership by lane.
 
 ## Spec review round 2 (2026-11-09): defaults to confirm in PR review
+
+*Items about AI (agent credentials, tracing, agent success, AI override rate, AI activity) and 005's sources are superseded by the MVP scope; the MVP's own defaults are in [mvp-contracts.md](mvp-contracts.md).*
 
 A completeness review found gaps that would have changed the schema, contracts or workflow
 signals mid-build. Each was closed with the default below; overrule any of them in PR review,

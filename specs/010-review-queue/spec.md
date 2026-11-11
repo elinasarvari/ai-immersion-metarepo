@@ -141,13 +141,14 @@ to escalated tasks.
   |---|---|---|
   | Adverse determination | Determination is Ineligible | Approve denial → Decided, Denied (notice delivered); Override to approve* → Decided, Approved; Request information → request drafted (002) |
   | Cannot determine | Determination is Cannot determine | Request information → request drafted listing the missing items; Correct a value* → determined again |
-  | Notice approval | An AI-drafted notice is ready | Approve → sent; Edit and approve → edited version sent, both kept |
-  | Verification review | Low confidence, unreadable document, different person, identity or income source mismatch, missing citation, verification unavailable, or retry limit reached (002, FR-010-03) | Accept findings → Determining; Correct a value* → Determining with the corrected value; Dismiss a finding* → Determining without it; Request information → request drafted |
+  | Notice approval | A request for information or redetermination form is ready (FR-011-12, FR-007-03) | Approve → delivered. *Not in MVP:* Edit and approve |
+  | Verification review | Income mismatch, different person, conflicting stubs or identity mismatch (FR-002-16), or retry limit reached (FR-010-03). *Not in MVP:* low confidence, unreadable document, missing citation, verification unavailable | Accept findings → Determining; Correct a value* → Determining with the corrected value; Dismiss a finding* → Determining without it; Request information → request drafted |
   | Missed response deadline | A response window ends with no response (FR-011-02, FR-007-04) | Deny for missing information → Decided, Denied (for a redetermination: coverage ended by caseworker decision); Extend by 15 days* (once per request) → Awaiting applicant; Continue with held data* → Determining |
-  | Explanation review | An explanation fails its checks (FR-004-11) | Approve as is; Edit and approve. Does not block the decision. |
+  | Explanation review | *Not in MVP* (FR-004-11 removed): never raised. The reason stays in the enum. | none |
 
-  Correcting a value and dismissing a finding both count as overrides of AI output (FR-002-11,
-  FR-002-19).
+  Correcting a value and dismissing a finding are recorded caseworker overrides (FR-002-19).
+  With no AI in the MVP they no longer feed an evaluation set. (MVP revision 2026-11-11; see
+  [mvp-contracts.md](../mvp-contracts.md) section 4.)
 - **FR-010-02**: If a review task is not actioned within 2 days, the system MUST remind
   caseworkers by marking the task "reminder" in the queue (there are no email or text
   notifications); after 4 days, or when a household's coverage end date passes while its

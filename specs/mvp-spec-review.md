@@ -2,6 +2,8 @@
 
 Reviewed 2026-11-11 against `specs/*/spec.md` on `feature/new-agent-refactor` and the code on `main` of `benefit-be` and `benefit-fe`. Effort figures are estimates, in person-hours, for one developer with Copilot.
 
+> **Follow-up, 2026-11-11:** checked against the code, "everything they need is already on `main`" isn't quite true. The shared contracts (notice types, verification result, timers, signals) aren't defined yet, and the seed data has no reference records, no demo renewal households, no redetermination outcomes, and a procedural denial rate with a different denominator. See [mvp-contracts.md](mvp-contracts.md) and [mvp-seed-data-tasks.md](mvp-seed-data-tasks.md). Both have to be done before the split.
+
 ## Executive summary
 
 Of the seven specs listed, two need no work: 006 was retired on 2026-11-10 (its screens moved into the other features) and 005 exists only to serve AI agents, so it is retired with them. 009 is not missing: it is the delivery factory in the metarepo, not a product feature. That leaves five specs to build: 002, 004, 007, 008 and 011. With every AI component removed they come to about 10.5 person-hours. **Four people can finish all five in 3 hours with no slack. Three people (the current team) cannot: defer 008 and the policy search half of 004.** All five can start at hour 0 after a 20-minute contract session, because everything they need from 000, 001, 003 and 010 is already on `main`. The one real sequence is 011 → 007, and 007 is the highest-risk spec.

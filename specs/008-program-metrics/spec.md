@@ -14,8 +14,12 @@
 - **Provides**: a program metrics page.
 - **Depends on**: 001 (case history), 010 (review outcomes), 003 (data set, including seeded
   past decisions and redetermination outcomes, and the expected metric values), 000 (app
-  shell). All are on `main`, so this feature can start immediately. It reads 007's
-  redetermination outcomes once they exist, and is built and tested against the seeded ones.
+  shell). 000, 001 and 010 are on `main`. **The data set on `main` has past decisions but no
+  redetermination outcomes, no expected automatic renewal rate, and a procedural denial rate
+  with a different denominator.** Seed task S-05 in
+  [mvp-seed-data-tasks.md](../mvp-seed-data-tasks.md) adds and fixes them. Until it lands,
+  build against a small fixture worked out by hand. It reads 007's redetermination outcomes
+  once they exist.
 - **Out of scope**: federal reporting file formats, real-time dashboards, exports, metrics for
   individual caseworkers, any metric about AI.
 
@@ -102,8 +106,9 @@ metrics twice and compare.
 
 Metric definitions:
 
-- **Average time to decision**: days from application received to decision, for cases decided
-  in the period.
+- **Average time to decision**: days from application received to decision, for new
+  applications decided in the period (redeterminations are counted by the renewal rate
+  instead).
 - **Decided within deadline**: decisions on new applications made within 45 days ÷ all
   decisions on new applications in the period (redeterminations have no 45-day deadline).
 - **Automatic renewal rate**: redeterminations renewed automatically ÷ redeterminations that

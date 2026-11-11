@@ -148,7 +148,20 @@ correction is recorded.
   answers (FR-007-13). (Replaces FR-002-13 and FR-005-12.)
 - **FR-002-23**: The check MUST be a single pass with a fixed result: the same case data always
   gives the same verification result. It is offered to the case workflow as
-  `verify_documents(case_id) -> VerificationResult`.
+  `verify_documents(case_id) -> VerificationResult` (shape in
+  [mvp-contracts.md](../mvp-contracts.md) section 2).
+- **FR-002-24**: When the reference lookup has no identity record for a member, the check MUST
+  record an "identity mismatch" finding that says no record was found. When a caseworker
+  dismisses an identity mismatch finding with a reason, that member counts as identity verified
+  for the rules.
+- **FR-002-25**: The verification result MUST decide what happens next, in this order:
+  1. Any open finding raises a "Verification review" task, and the determination waits for the
+     caseworker's action.
+  2. With no open findings and missing information, 011 produces the case's one automatic
+     request for information (FR-011-12).
+  3. With no open findings, missing information, and the automatic request already used, the
+     case goes on to determination. The rules return "Cannot determine", which goes to review.
+  4. Otherwise the case goes on to determination.
 
 ### Removed and moved
 
@@ -186,5 +199,12 @@ correction is recorded.
 
 - Only pay stubs are in scope.
 - The 10% threshold is a team default, adjustable by configuration.
-- The synthetic data set (003) holds an identity record and per-job income for every seeded
-  person, including the seeded disagreements that 005's simulated sources would have used.
+- The synthetic data set (003) holds an identity record and per-job reference income for every
+  seeded person, including deliberate disagreements. **These are not on `main` yet:** seed tasks
+  S-01 to S-03 in [mvp-seed-data-tasks.md](../mvp-seed-data-tasks.md) add them, and this
+  feature's lookup tests depend on them.
+- Demo applicants must enter the seeded name and date of birth exactly; anything else is an
+  identity mismatch (FR-002-24), which a caseworker can dismiss.
+- This feature never edits `apps/worker/workflows/case.py`. Its branch lives in its own module
+  and is called from the hook added by the contracts PR ([mvp-contracts.md](../mvp-contracts.md)
+  section 1).

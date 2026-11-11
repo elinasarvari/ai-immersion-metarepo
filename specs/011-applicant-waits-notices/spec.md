@@ -21,8 +21,10 @@
   information, pay stub upload) and 004 (explanations); until they land it uses a stubbed
   verification result and the rule-by-rule trace (FR-003-05).
 - **Agree first**: the notice type names (FR-011-06), the timer names and the applicant-response
-  signal, because 007 builds on them. This feature owns changes to the case workflow; 002 and
-  007 add their steps as separate activities.
+  signal, because 007 builds on them. They are drafted in
+  [mvp-contracts.md](../mvp-contracts.md) section 2 and merged in the contracts PR before the
+  split. This feature owns `apps/worker/workflows/case.py`; 002 and 007 add their steps in
+  their own modules, called from hooks the contracts PR adds.
 - **Split from**: 001 Case lifecycle (2026-11-10). Old IDs map to new ones: FR-001-05 →
   FR-011-01, FR-001-06 → FR-011-02, FR-001-13 (waiting periods and demo time scale) →
   FR-011-04, FR-001-15 → FR-011-05, FR-001-17 → FR-011-06, FR-001-14 → FR-011-07. The case clock
@@ -239,8 +241,9 @@ sign in as a caseworker and confirm there's no button.
 ### Key Entities
 
 - **Notice**: type (FR-011-06), content, approval status, delivered time.
-- **Timer**: a pending wait on a case (response deadline, review reminder, review escalation),
-  with its due time on the case clock.
+- **Timer**: a pending wait on a case (`response_deadline`, `review_reminder`,
+  `review_escalation`, and for 007 `redetermination_response_deadline` and `coverage_end`).
+  Each has its due time on the case clock, and "Advance clock" fires whichever is due first.
 - **Demo action**: a supervisor's advance-clock action, recorded in case history with both
   case-clock and real times.
 

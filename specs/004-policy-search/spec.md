@@ -16,6 +16,13 @@
   (the explanation in adverse notices).
 - **Depends on**: 003 (determinations and the rule-by-rule trace, FR-003-05) and 001 (the case
   page and coverage periods). Both are on `main`, so this feature can start immediately.
+- **Who does what**: this feature provides the pure function `explain_determination`
+  (`packages/rules/explanations.py`) and the citation table. 011 calls it when a determination
+  is stored and saves the result (FR-011-07). This feature writes no workflow code.
+- **Seeded history**: seeded explanations on `main` use an older shape. Seed task S-06 in
+  [mvp-seed-data-tasks.md](../mvp-seed-data-tasks.md) moves them to `DecisionExplanation`
+  ([mvp-contracts.md](../mvp-contracts.md) section 2), so seeded and new explanations look the
+  same on screen.
 - **Two parts**: **004a Decision explanations** is the MVP and is everything below except the
   "Deferred" section. **004b Policy search** is deferred: with no AI agents nothing in the
   product calls it.

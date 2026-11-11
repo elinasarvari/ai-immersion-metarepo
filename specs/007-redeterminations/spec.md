@@ -155,7 +155,10 @@ redetermination continues and renews.
 - **FR-007-05**: A renewal MUST create a new 12-month coverage period linked to the household's
   history.
 - **FR-007-06**: Any adverse redetermination outcome MUST wait for caseworker approval.
-- **FR-007-07**: Only one redetermination MAY run per household per coverage period.
+- **FR-007-07**: Only one redetermination MAY run per household per coverage period. A
+  redetermination's case identifier is derived from the coverage period it renews, so a second
+  start for the same period finds the running one and links to it instead (mechanism in
+  [mvp-contracts.md](../mvp-contracts.md) section 2; it replaces the deferred FR-007-15).
 - **FR-007-08**: Redeterminations MUST use the same income check, rules, explanation and review
   steps as new applications, but have no 45-day decision deadline.
 - **FR-007-10**: A caseworker or supervisor MUST be able to start a household's redetermination on
@@ -174,7 +177,9 @@ redetermination continues and renews.
   or out of date. (Revised: an ordinary lookup, not simulated sources.)
 - **FR-007-14**: A renewed coverage period MUST start the day after the previous one ends. While a
   redetermination review is open after the coverage end date, the coverage period's status MUST
-  be "continued pending review" and coverage continues.
+  be "continued pending review" and coverage continues. The `coverage_end` timer from 010
+  (FR-010-02) sets this status and escalates the open review task. This feature uses that timer
+  and does not add its own.
 - **FR-007-16**: An applicant's redetermination response MUST let them confirm or correct the
   pre-filled items (household members, jobs and income) and upload pay stubs; it creates a new
   household snapshot for the case (FR-003-19).
@@ -218,4 +223,13 @@ redetermination continues and renews.
 - The 30-day response window and 12-month coverage period are project values for this training
   build. All day counts are calendar days.
 - The synthetic data set (003) includes households due for redetermination with reference
-  income that agrees and disagrees with held income.
+  income that agrees and disagrees with held income. **These are not on `main` yet:** seed tasks
+  S-01, S-02 and S-04 in [mvp-seed-data-tasks.md](../mvp-seed-data-tasks.md) add the reference
+  records, the expected renewal paths, and the two demo households: household E renews
+  automatically (US1), and `applicant4` / household D needs one pay stub (US2, US5).
+- The 30-day wait is the `redetermination_response_deadline` timer, built with 011's wait
+  helper. The applicant's answer arrives on 011's `applicant_response` signal
+  ([mvp-contracts.md](../mvp-contracts.md) section 2).
+- This feature never edits `apps/worker/workflows/case.py`. Its path lives in
+  `apps/worker/workflows/redetermination.py` and is called from the hook added by the contracts
+  PR. Until 011 lands, 007a tests against the stubs that hook provides.
