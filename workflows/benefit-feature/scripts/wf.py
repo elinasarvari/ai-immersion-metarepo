@@ -39,7 +39,8 @@ Ship (CI loop: a failing check goes to a fix step, which pushes to the feature b
   ci-gate     <feature_dir>                     fails unless the last CI run passed
 
 Script jobs (run by `job`, also usable by hand): ownership, tasks, trace:strict, trace:warn, e2e, main.
-  ports                                         the stack ports something already listens on (never fails)
+  ports                                         the default stack ports something already listens on (information
+                                                only: e2e runs on free ports of its own; never fails)
 Paths are relative to the metarepo root. The lane ownership map mirrors project-rules/backend-architecture.md.
 """
 import fcntl, json, os, re, shutil, signal, socket, subprocess, sys, tempfile, time
@@ -990,18 +991,11 @@ def job(d, name):
         if still:
             res.update(status="fail", problems=[*res.get("problems", []), *[
                 f"port {p} ({n}) still in use after the e2e run: its stack didn't stop" for n, p in still]])
-    elif name == "e2e":  # an older branch: `make verify` on the default ports, the way CI's e2e job runs them
-        busy = busy_ports()
-        if busy:  # never borrow or wipe another stack (make verify runs make reset); CI still runs e2e on the PR
-            res.update(status="warn", problems=[f"e2e didn't run here: port {p} is in use ({h}). Stop that stack to "
-                                                "run it locally; CI's e2e job runs it on the PR" for p, h in busy])
-        elif not make_has(repo_dir("benefit-be"), "verify"):
-            res.update(status="warn", problems=["repos/benefit-be has no 'verify' target, so e2e didn't run"])
-        else:
-            # verify-stack: only the stages no other job runs (integration, client in sync, stack, e2e); plain
-            # `make verify` repeats the check and build jobs' stages too
-            res["cmd"] = "make verify-stack" if make_has(repo_dir("benefit-be"), "verify-stack") else "make verify"
-            run_in_repo("benefit-be", res["cmd"], res, jd / "e2e.log", stage=REPOS)
+    elif name == "e2e":  # a branch without the isolated stack: never fall back to the shared default ports
+        res.update(status="warn", problems=[
+            "e2e didn't run here: repos/benefit-be has no 'verify-stack' target (its isolated stack on free ports), "
+            "and the default ports would clash with another run or `make dev`. The integrator merges origin/main, "
+            "which has it, into the branch; CI's e2e job still runs on the PR"])
     else:
         res.update(status="fail", problems=[f"unknown job '{name}'"])
     (jd / f"{name.replace(':', '-')}.json").write_text(json.dumps(res, indent=2))
