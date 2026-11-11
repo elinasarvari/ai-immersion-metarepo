@@ -1,6 +1,6 @@
 ---
 name: feature-workflow
-description: Build an existing Benefits Case spec end to end with the Spec Kit workflow engine, each AI step a separate agent - architect plan, decision-maker for open ADRs, tasks and QA tasks, contracts, lanes in parallel, QA tests, verify loop (fix, then parallel tests, builds and script checks, then parallel code and compliance reviews), draft PRs and GitHub Actions - asking a person only when automation can't decide. Use when the user asks to build, implement, deliver or ship a spec or feature, or to start, resume or check a feature run.
+description: Build an existing Benefits Case spec end to end with the Spec Kit workflow engine, each AI step a separate agent - architect plan, decision-maker for open ADRs, tasks and QA tasks, contracts, lanes in parallel, QA tests, verify loop (fix, the integrator if main moved, then parallel tests, builds, e2e and script checks, then parallel code and compliance reviews), draft PRs and GitHub Actions - asking a person only when automation can't decide. Use when the user asks to build, implement, deliver or ship a spec or feature, or to start, resume or check a feature run.
 ---
 
 # Feature workflow

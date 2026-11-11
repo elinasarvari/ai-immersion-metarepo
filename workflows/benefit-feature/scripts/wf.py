@@ -12,6 +12,7 @@ Gates (one after each planning stage; the skills also run them as their self-che
 Verify loop (every check runs here, so the fix step can repair any failure):
   verify-init <feature_dir>                     clears earlier results before the loop
   needs-fix   <feature_dir> [coding judgement]  start of a round: anything blocking? which model should fix it?
+  behind      <feature_dir>                     the repos whose feature branch is behind origin/main (the integrator merges them)
   jobs        <feature_dir> [strict|warn]       lists this round's jobs (tests, builds, evals, script checks)
   job         <feature_dir> <job>               runs one job, writes review/jobs/<job>.json and .log; never fails
   review-list <feature_dir>                     the reviews to run (none while a job fails); records the trees reviewed
@@ -26,7 +27,7 @@ Ship (CI loop: a failing check goes to a fix step, which pushes to the feature b
                                                 With pr_mode draft, marks the PRs ready for review once all green
   ci-gate     <feature_dir>                     fails unless the last CI run passed
 
-Script jobs (run by `job`, also usable by hand): ownership, tasks, trace:strict, trace:warn, e2e.
+Script jobs (run by `job`, also usable by hand): ownership, tasks, trace:strict, trace:warn, e2e, main.
   ports                                         the stack ports something already listens on (never fails)
 Paths are relative to the metarepo root. The lane ownership map mirrors project-rules/backend-architecture.md.
 """
@@ -546,6 +547,29 @@ def job_trace(d, mode):
 STACK_PORTS = [int(p) for p in os.environ.get("WF_STACK_PORTS", "8000,8001,5173,7233,8233,27017").split(",") if p]
 
 
+def behind_main(repo):
+    """(commits the feature branch is behind origin/main, files a merge would conflict in). Fetches main only, so
+    other features' branches never land in the clone (gitleaks scans every ref it knows)."""
+    if not (repo_dir(repo) / ".git").exists() or not changed_files(repo):
+        return 0, []
+    git(repo, "fetch", "-q", "origin", "main")
+    n = int((git(repo, "rev-list", "--count", "HEAD..origin/main") or "0").strip() or 0)
+    files = []
+    if n:
+        r = subprocess.run(["git", "-C", str(repo_dir(repo)), "merge-tree", "--write-tree", "--name-only",
+                            "--no-messages", "origin/main", "HEAD"], capture_output=True, text=True)
+        files = [ln for ln in r.stdout.splitlines()[1:] if ln] if r.returncode == 1 else []
+    return n, files
+
+
+def behind_repos():
+    return [{"repo": r, "behind": n, "conflicts": f} for r in REPOS for n, f in [behind_main(r)] if n]
+
+
+def behind(d):
+    out({"repos": behind_repos()})
+
+
 def project_dirs():
     """This checkout and the main checkout it belongs to (a feature worktree's metarepo), as path prefixes."""
     dirs = {str(ROOT)}
@@ -623,7 +647,7 @@ def jobs(d, trace_mode):
             js.append(f"{repo}:build")
         if repo == "benefit-be" and any(re.match(r"(packages/agents|packages/rag|evals)/", f) for f in files):
             js.append(f"{repo}:eval")
-    js += (["e2e"] if e2e else []) + ["ownership", "tasks", f"trace:{trace_mode}"]
+    js += (["e2e"] if e2e else []) + (["main"] if js else []) + ["ownership", "tasks", f"trace:{trace_mode}"]
     out({"jobs": js})
 
 
@@ -678,6 +702,12 @@ def job(d, name):
             res.update(status="warn", problems=[f"repos/{head} has no '{arg}' target, so this job didn't run"])
         else:
             run_in_repo(head, cmd, res, jd / f"{name.replace(':', '-')}.log")
+    elif name == "main":  # the branch must contain main: what ships is tested against what is already there
+        rs = behind_repos()
+        res.update(status="fail" if rs else "pass", problems=[
+            f"repos/{r['repo']}: {r['behind']} commit(s) behind origin/main"
+            + (f", would conflict in {', '.join(r['conflicts'])}" if r["conflicts"] else "")
+            + "; the integrator merges it at the start of the next round" for r in rs])
     elif name == "e2e":  # the stack and e2e, the way CI's e2e job runs them
         busy = busy_ports()
         if busy:  # never borrow or wipe another stack (make verify runs make reset); CI still runs e2e on the PR
@@ -928,7 +958,7 @@ def ci_gate(d):
 def main(argv):
     cmd, pos = (argv[1], argv[2:]) if len(argv) > 1 else ("", [])
     one = {"plan-gate": plan_gate, "decisions-gate": decisions_gate, "tasks-gate": tasks_gate, "verify-init": verify_init, "needs-fix": needs_fix,
-           "review-list": review_list, "verify-status": verify_status, "final-gate": final_gate, "ci-wait": ci_wait,
+           "review-list": review_list, "behind": behind, "verify-status": verify_status, "final-gate": final_gate, "ci-wait": ci_wait,
            "ci-needs-fix": ci_needs_fix, "ci-gate": ci_gate}
     if cmd in one and len(pos) == 1:
         return one[cmd](fdir(pos[0]))

@@ -392,7 +392,7 @@ class ScriptJobs(WfCase):
         self.assertEqual(data["jobs"], ["ownership", "tasks", "trace:warn"])
         self.repo_file("benefit-be", "packages/agents/prompt.py", "x = 1\n")
         code, data, _ = self.wf("jobs", FD)
-        self.assertEqual(data["jobs"], ["benefit-be:check", "benefit-be:eval", "e2e", "ownership", "tasks",
+        self.assertEqual(data["jobs"], ["benefit-be:check", "benefit-be:eval", "e2e", "main", "ownership", "tasks",
                                         "trace:strict"])
 
     def test_a_repo_job_with_no_target_warns_instead_of_passing_silently(self):
@@ -463,6 +463,29 @@ class ScriptJobs(WfCase):
         finally:
             proc.kill()
             proc.wait()
+
+    def test_a_branch_behind_main_is_listed_for_the_integrator_and_blocks_until_merged(self):
+        rd = self.root / "repos" / "benefit-be"
+        self.repo_file("benefit-be", "feature.py", "x = 1\n")
+        self.assertEqual(self.wf("behind", FD)[1]["repos"], [])
+        self.assertEqual(self.job("main")["status"], "pass")
+        # Another feature lands on main and touches the same file.
+        sh("git", "switch", "-q", "main", cwd=rd)
+        self.repo_file("benefit-be", "README.md", "main changed this\n")
+        sh("git", "commit", "-qam", "other feature", cwd=rd)
+        sh("git", "update-ref", "refs/remotes/origin/main", "HEAD", cwd=rd)
+        sh("git", "switch", "-q", "feature/010-demo", cwd=rd)
+        self.repo_file("benefit-be", "README.md", "the feature changed this\n")
+        sh("git", "commit", "-qam", "feature", cwd=rd)
+        repos = self.wf("behind", FD)[1]["repos"]
+        self.assertEqual([(r["repo"], r["behind"], r["conflicts"]) for r in repos], [("benefit-be", 1, ["README.md"])])
+        res = self.job("main")
+        self.assertEqual(res["status"], "fail")
+        self.assertIn("would conflict in README.md", res["problems"][0])
+        # The integrator merges main: nothing behind any more.
+        subprocess.run(["git", "merge", "-q", "-X", "ours", "-m", "merge main", "origin/main"], cwd=rd, check=True,
+                       capture_output=True)
+        self.assertEqual(self.job("main")["status"], "pass")
 
     def test_each_round_counts_only_its_own_jobs(self):
         self.write("review/jobs/trace.json", json.dumps({"job": "trace", "status": "fail"}))

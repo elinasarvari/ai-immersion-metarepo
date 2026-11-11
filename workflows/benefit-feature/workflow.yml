@@ -290,13 +290,39 @@ steps:
               protects and why the code fails it, then change the code so it meets that requirement. Never make a test pass
               by weakening it: don't change its expected values, pins, thresholds or test name, and don't skip, xfail,
               delete or loosen it. Change a test only where it contradicts the spec, the plan or an Accepted ADR, and then
-              cite the FR or ADR. If a failure comes from the machine, not the code (a missing tool, a different tool
+              cite the FR or ADR. A check that scans git history (gitleaks) covers this branch only: a finding in a
+              commit that isn't on this branch belongs to another feature, so narrow the check's scope (gitleaks
+              --log-opts=HEAD) rather than touching that file. If a failure comes from the machine, not the code (a missing tool, a different tool
               version than the pinned one, a service or login that isn't there), don't change code, pins or tests for it:
               record it as an environment problem. Write {{ steps.feature.output.data.review_dir }}/fixes.md, one entry
               per failure: test or check, the FR/TC/ADR it proves, why it failed, what you changed (or "environment:"
               and what the machine needs). For each review finding, add or correct the test that would have caught it, so
               it can't come back. Follow the lane rule files and Accepted ADRs; keep each change in its owner's folders.
               Run make check in each repo you changed before finishing. Commit nothing. Reply in ≤5 lines.
+
+      # Main moved (another feature merged) since the branch was cut or last merged: the integrator agent merges
+      # it in and resolves the clashes before this round's checks, which then test the merged code.
+      - id: behind
+        type: shell
+        run: "python3 workflows/benefit-feature/scripts/wf.py behind {{ steps.feature.output.data.feature_dir }}"
+        output_format: json
+
+      - id: maybe_integrate
+        type: if
+        condition: "{{ (steps.behind.output.data.repos | length) > 0 }}"
+        then:
+          - id: integrate
+            type: prompt
+            integration: "{{ inputs.integration }}"
+            model: "{{ inputs.judgement_model }}"
+            timeout: 2400
+            prompt: >-
+              You are the integrator agent (agents/integrator.agent.md). Merge origin/main into branch
+              {{ steps.feature.output.data.branch }} for feature {{ steps.feature.output.data.feature_dir }} in these
+              repos: {{ steps.behind.output.data.repos }}. Follow its steps: commit the feature's work, merge, resolve
+              every textual and semantic clash (main wins unless that breaks one of this feature's FRs), update the
+              plan artefacts, record the resolutions in one ADR, run the checks, commit the merge. Never push.
+              Write {{ steps.feature.output.data.review_dir }}/integrate.md. Reply in ≤5 lines.
 
       - id: job_list
         type: shell

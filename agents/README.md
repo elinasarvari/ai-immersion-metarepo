@@ -8,6 +8,7 @@ Every agent is a separate subagent: its own session and context, started by a wo
 | [`decision-maker`](decision-maker.agent.md) | decides the open ADRs independently, on the evidence; never amends rules | open ADRs' decision, `decisions/README.md`, `decisions/auto-decisions.json` | — |
 | [`quality-engineer`](quality-engineer/quality-engineer.agent.md) | test strategy: every requirement mapped to test cases and QA tasks | `test-plan.md`, test tasks in `tasks.md` | `test-strategy` |
 | [`compliance-reviewer`](compliance-reviewer/compliance-reviewer.agent.md) | checks the implementation against the constitution, rules, ADRs, security and data rules | `review/compliance.md`, `review/compliance.json` | `compliance-review` |
+| [`integrator`](integrator.agent.md) | merges `origin/main` into the feature branch when another feature landed; resolves textual and semantic clashes by intent (main wins unless that breaks this feature's requirements) | the merge commit, `decisions/ADR-…-align-with-main.md`, `review/integrate.md` | — |
 | [`backend-reviewer`](backend-reviewer.agent.md) | senior code review of `benefit-be` | `review/code-benefit-be.md`, `review/code-benefit-be.json` | — |
 | [`frontend-reviewer`](frontend-reviewer.agent.md) | senior code review of `benefit-fe` | `review/code-benefit-fe.md`, `review/code-benefit-fe.json` | — |
 
@@ -25,4 +26,4 @@ Keep them short; they're read on every run.
 4. **Cite, don't quote.** `repo:path:line`, rule IDs (`TW-3`), principles (constitution V), `ADR-…`, `FR-…`. Never paste rule text or large code blocks.
 5. **Only real findings.** Confirmed in the code, with the input or state that triggers it. No style points that linters already enforce.
 6. **On a re-review, review the change.** If `review/snapshot.json` and your earlier result exist, review `wf.py delta <feature_dir> <repo>` (the change since your last review) and re-check the earlier findings; don't redo the whole review. The workflow reruns a review only when it has no result, still blocks, or its repo changed.
-7. **Never edit outside your files.** No agent edits code unless its skill says so.
+7. **Never edit outside your files.** No agent edits code unless its skill or agent file says so (the integrator does, to resolve a merge).

@@ -24,6 +24,7 @@ Central store for shared AI-assisted development assets (see README.md for folde
   - **decision-maker**: decides the open ADRs (product, policy, cost, scope, amendments) independently of the architect, and records each for review in the PR.
   - **quality-engineer**: the test plan, and test and QA tasks. Skill: `test-strategy`.
   - **compliance-reviewer**: checks the implementation against the constitution, rules, ADRs and test plan. Skill: `compliance-review`.
+  - **integrator**: when another feature lands on main during a run, merges `origin/main` into the feature branch and resolves the clashes (main wins unless that breaks this feature's requirements), recorded in one ADR for the PR.
   - **backend-reviewer**, **frontend-reviewer**: senior code review per repo.
 
   An agent is a `*.agent.md` file (its rules), with its own procedures in `<agent>/skills/`. Only the user, or the decision-maker agent (in a run with `decision_mode=auto`, the default, or when the user asks it to decide), may accept a `Needs decision` or `Proposed – needs amendment` ADR. Nobody changes the constitution or a rule set without all three team members (Governance): the decision-maker picks a compliant option and leaves the amendment as a suggestion.
@@ -32,7 +33,7 @@ Central store for shared AI-assisted development assets (see README.md for folde
   2. tasks, then the quality engineer's test plan and QA tasks
   3. contracts
   4. lanes in parallel (one `speckit.implement` session each, which gets its own unit tests green), then QA tests
-  5. verify loop, while it makes progress (at most 6 rounds; it stops after 2 rounds without progress): fix (from round 2; later fixes use the judgement model), then tests, builds, evals and the script checks (ownership, open tasks, traceability) in parallel, then, only if green, the code and compliance reviews that need rerunning, in parallel
+  5. verify loop, while it makes progress (at most 6 rounds; it stops after 2 rounds without progress): fix (from round 2; later fixes use the judgement model), the integrator if `origin/main` moved, then tests, builds, evals, e2e and the script checks (branch contains main, ownership, open tasks, traceability) in parallel, then, only if green, the code and compliance reviews that need rerunning, in parallel
   6. final gate, draft PRs, then GitHub Actions
 
   `benefit-feature/scripts/wf.py` holds every check: one gate after each planning stage, and every check on the code inside the verify loop, so the fix step can repair it. Its tests are in `benefit-feature/tests/` (`python3 -m unittest discover -s workflows/benefit-feature/tests`); run them after changing the workflow or `wf.py`. The workflow asks a person only for open spec questions, an ADR the decision-maker finds no compliant option for (or every open ADR with `decision_mode=ask`), or before pushing with `pr_mode=ask`. Start, resume or check a run with the **feature-workflow** skill, which uses `workflows/benefit-feature/run.sh` (`start`, `resume`, `watch`, `status`, `worktrees`, `cleanup`, `check`); never start the engine directly, because `run.sh` creates the feature's worktree and passes the agents' permissions (`.claude/settings.json`) to every `claude -p` step. Never answer a gate (`spec_verdict`, `decision_verdict`, `pr_verdict`) unless the user explicitly decided what it shows.

@@ -11,7 +11,7 @@ How a spec becomes merged code in `benefit-be` and `benefit-fe`. [benefit-featur
 | 3 | Contracts | `/speckit-implement` on `[contracts]` tasks, alone | `packages/domain`, OpenAPI, dependencies | verify loop |
 | 4 | Lanes, in parallel | `/speckit-implement` per lane: tests first, then its unit tests green | code in each lane's folders, `lanes/<lane>/done.json` | verify loop |
 | 5 | QA tests | `/speckit-implement` on `[qa]` tasks | contract, integration, e2e and eval tests | verify loop |
-| 6 | Verify, while it makes progress (≤6 rounds) | fix (from round 2; later fixes on the judgement model) → jobs in parallel: `make check`, builds, evals, `ownership`, `tasks`, `trace` → if green, the reviews that need it, in parallel | `review/verify.md`, `review/trace.md` | `verify-status`, then `final-gate` |
+| 6 | Verify, while it makes progress (≤6 rounds) | fix (from round 2; later fixes on the judgement model) → the integrator if `origin/main` moved → jobs in parallel: `make check`, builds, evals, `e2e`, `main`, `ownership`, `tasks`, `trace` → if green, the reviews that need it, in parallel | `review/verify.md`, `review/trace.md` | `verify-status`, then `final-gate` |
 | 7 | Ship | `create-pr` skill | draft PRs, then GitHub Actions | `ci-wait` |
 | 8 | After merge | `sync-repos` skill | clones on the latest `main` | — |
 

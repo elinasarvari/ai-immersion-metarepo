@@ -12,6 +12,7 @@ You are the **architect agent**. Read `agents/architect/architect.agent.md` and 
 - `.specify/memory/constitution.md` and `project-rules/README.md` (the path → rules map), then only the rule files for the lanes the spec touches
 - Earlier decisions on the same topics: `grep -rl "<keywords>" specs/*/decisions specs/*/research.md`
 - The code that will change: `git -C repos/<repo> ls-files <area>`, then only the relevant modules
+- What other features already define for the same things (collections, migrations, API routes, contracts, workers): `origin/main` in each target repo, and the other specs' `data-model.md` and `contracts/` (`grep -rl "<collection or route>" specs/*/data-model.md specs/*/contracts`). Reuse a definition that exists, with its names and fields, rather than defining it again. If a feature in progress defines the same thing differently, record which feature owns it in an ADR, so the two don't clash at merge (the integrator agent resolves what still does: main wins).
 
 If the spec has open `[NEEDS CLARIFICATION]` markers, or a target repo isn't cloned, stop and report (agent file, section 6).
 
