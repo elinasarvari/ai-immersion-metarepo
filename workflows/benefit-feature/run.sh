@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # One entry point for the benefit-feature workflow: checks the machine, gives each feature its own worktree,
-# gives every unattended `claude -p` step its permissions, then starts, resumes, shows or watches a run.
+# gives every unattended agent step (`claude -p` or `copilot -p`) its permissions, then starts, resumes, shows or
+# watches a run.
 #
 #   workflows/benefit-feature/run.sh start   <feature> [-i key=value ...]            e.g. start 001
+#                     -i integration=copilot runs the agents with GitHub Copilot CLI instead of Claude Code
 #                     one way: agents decide, then draft PRs, ready for review once CI is green
 #   workflows/benefit-feature/run.sh start   --in-place <feature> ...               old way: in this checkout
 #   workflows/benefit-feature/run.sh prepare <feature>                              only create the worktree
@@ -11,7 +13,7 @@
 #   workflows/benefit-feature/run.sh watch   [run-id|NNN] [--once]                  live progress view
 #   workflows/benefit-feature/run.sh worktrees                                      list feature worktrees
 #   workflows/benefit-feature/run.sh cleanup <feature> [--yes]                      remove a feature's worktrees
-#   workflows/benefit-feature/run.sh check                                          preflight only
+#   workflows/benefit-feature/run.sh check   [-i integration=copilot]               preflight only
 #
 # Worktrees: each feature runs in <metarepo>.worktrees/<NNN-name>/ (override with WF_WORKTREES), a git worktree
 # of the metarepo on feature/<NNN-name> whose repos/<name> are git worktrees of the main clones on the same
@@ -20,7 +22,12 @@
 #
 # Why the permissions are passed explicitly: Claude Code applies a project's .claude/settings.json only after
 # someone trusts the folder interactively. Passing the same file with --settings works without that, so a fresh
-# clone runs unattended the same way on every machine.
+# clone runs unattended the same way on every machine. Copilot CLI runs with every tool allowed (Spec Kit passes
+# --yolo); the repo hook .github/hooks/benefit-guard.json denies the same commands as that file's deny list, and
+# GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS loads it in prompt mode.
+#
+# Models: the inputs default to Claude Code aliases (opus, sonnet); for Copilot, scripts/ai.py turns them into
+# Copilot model IDs (claude-opus-5.5, claude-sonnet-5.5; override with WF_COPILOT_OPUS / WF_COPILOT_SONNET).
 set -euo pipefail
 SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"   # the checkout this script is in
 # The main checkout, even when this script runs from inside a feature worktree.
@@ -38,16 +45,31 @@ green() { printf '\033[32m%s\033[0m\n' "$*"; }
 note() { printf '  %s\n' "$*"; }
 die() { red "✗ $*"; exit 1; }
 
-check_tools() {  # $1 = the settings file the run will use
-  local settings="$1" missing="" t missing_rules
-  for t in specify claude git gh uv pnpm make python3; do
+check_tools() {  # $1 = the settings file the run will use; AI = the agents' CLI (resolve_ai)
+  local settings="$1" missing="" t missing_rules problem
+  for t in specify git gh uv pnpm make python3; do
     command -v "$t" >/dev/null 2>&1 || missing="$missing $t"
   done
   [ -z "$missing" ] || die "missing tools:$missing"
+  problem="$(python3 "$SELF/workflows/benefit-feature/scripts/ai.py" check "$AI")" || die "$problem"
   python3 -m json.tool "$settings" >/dev/null 2>&1 || die "$settings is missing or not valid JSON (it holds the agents' permissions)"
   missing_rules="$(python3 "$SELF/workflows/benefit-feature/scripts/check_permissions.py" "$settings")" \
     || die "the agents' permissions in $settings lack: $missing_rules"
-  note "tools: specify, claude, git, gh, uv, pnpm, make, python3 ✓  permissions: .claude/settings.json ✓"
+  if [ "$AI" = "copilot" ]; then
+    [ -f "$(dirname "$(dirname "$settings")")/.github/hooks/benefit-guard.json" ] \
+      || die ".github/hooks/benefit-guard.json is missing (it applies the deny list to Copilot's agents)"
+  fi
+  note "tools: specify, $AI, git, gh, uv, pnpm, make, python3 ✓  permissions: .claude/settings.json ✓"
+}
+
+resolve_ai() {  # $1 = the run's saved inputs.json ("" for a new run), then the run.sh args; sets AI and AI_ARGS
+  local saved="$1" line first=1
+  shift
+  AI=""; AI_ARGS=()
+  while IFS= read -r line; do
+    if [ -n "$first" ]; then AI="$line"; first=""; else AI_ARGS+=("$line"); fi
+  done < <(python3 "$SELF/workflows/benefit-feature/scripts/ai.py" args "$saved" ${1+"$@"})
+  case "$AI" in claude|copilot) ;; *) die "integration '${AI:-?}' isn't supported; use -i integration=claude or copilot" ;; esac
 }
 
 check_ports() {  # information only: the e2e job runs on free ports of its own (benefit-be's `make verify-stack`)
@@ -220,6 +242,8 @@ print(runs[0] if runs else "")' "$1" "$MAIN" "$WT_HOME")"
 
 run_env() {  # $1 = where the run lives
   export SPECKIT_INTEGRATION_CLAUDE_EXTRA_ARGS="--settings $1/.claude/settings.json"
+  export SPECKIT_INTEGRATION_COPILOT_EXTRA_ARGS="--no-ask-user"
+  export GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS=true
   # One local mongod for every worktree (the Makefile would otherwise look for one per worktree, on the same port).
   [ "$1" = "$MAIN" ] || export MONGO_DIR="${MONGO_DIR:-$MAIN/repos/benefit-be/.data/mongo}"
 }
@@ -297,7 +321,8 @@ list_worktrees() {
 cmd="${1:-}"; shift || true
 case "$cmd" in
   check)
-    echo "Preflight (changes nothing)"; check_tools "$MAIN/.claude/settings.json"; check_gh; check_clones; check_ports
+    resolve_ai "" ${1+"$@"}
+    echo "Preflight for $AI (changes nothing)"; check_tools "$MAIN/.claude/settings.json"; check_gh; check_clones; check_ports
     note "feature worktrees: $WT_HOME"; green "✓ ready" ;;
   prepare|start)
     in_place=""; args=()
@@ -309,6 +334,7 @@ case "$cmd" in
     fi
     folder="$(feature_folder "$feature")"
     [ -n "$folder" ] || die "no single spec folder matches '$feature' under specs/"
+    [ "$cmd" = "prepare" ] || resolve_ai "" ${1+"$@"}
     echo "Preflight"
     [ "$cmd" = "prepare" ] || check_gh
     check_clones
@@ -321,25 +347,26 @@ case "$cmd" in
     [ "$cmd" = "prepare" ] || check_ports
     if [ "$cmd" = "prepare" ]; then green "✓ prepared $home"; exit 0; fi
     run_env "$home"
-    green "✓ ready: $folder, in $home"
+    green "✓ ready: $folder, in $home, agents on $AI"
     note "watch it in another terminal: workflows/benefit-feature/run.sh watch ${folder%%-*}"
     echo
     cd "$home"
-    code=0; run_engine "$home" "$folder" specify workflow run "$WF" -i feature="$folder" "$@" || code=$?
+    code=0; run_engine "$home" "$folder" specify workflow run "$WF" -i feature="$folder" ${AI_ARGS[@]+"${AI_ARGS[@]}"} || code=$?
     exit "$code" ;;
   resume)
     id=""; if [ $# -gt 0 ] && [ "${1#-}" = "$1" ]; then id="$1"; shift; fi
     find_run "$id"
+    resolve_ai "$RUN_HOME/.specify/workflows/runs/$RUN_ID/inputs.json" ${1+"$@"}
     echo "Preflight for run $RUN_ID ($RUN_HOME)"
     check_tools "$RUN_HOME/.claude/settings.json"
     check_gh
     check_ports
     run_env "$RUN_HOME"
-    green "✓ resuming $RUN_ID"
+    green "✓ resuming $RUN_ID, agents on $AI"
     note "watch it in another terminal: workflows/benefit-feature/run.sh watch $RUN_ID"
     echo
     cd "$RUN_HOME"
-    code=0; run_engine "$RUN_HOME" "$(run_feature)" specify workflow resume "$RUN_ID" "$@" || code=$?
+    code=0; run_engine "$RUN_HOME" "$(run_feature)" specify workflow resume "$RUN_ID" ${AI_ARGS[@]+"${AI_ARGS[@]}"} || code=$?
     exit "$code" ;;
   status)
     find_run "${1:-}"; cd "$RUN_HOME"

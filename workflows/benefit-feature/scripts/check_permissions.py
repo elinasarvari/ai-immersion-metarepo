@@ -4,7 +4,8 @@
   python3 workflows/benefit-feature/scripts/check_permissions.py .claude/settings.json
 
 The agent steps run as `claude -p` with no one to approve a prompt, so a command that isn't allowed is
-refused and a coding step stalls on it. run.sh calls this before starting or resuming a run.
+refused and a coding step stalls on it. run.sh calls this before starting or resuming a run. (Copilot CLI steps
+allow every tool and take only this file's deny list, through scripts/ai.py guard.)
 """
 import json, sys
 

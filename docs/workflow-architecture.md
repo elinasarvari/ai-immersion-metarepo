@@ -11,7 +11,7 @@ Each feature runs in its own git worktree (section 7), so several features can r
 
 A designed version of this page is published as an artifact: [Benefits Feature Pipeline](https://claude.ai/artifact/M1L7pdUf9uMiZK6A2LhJ94) (private; share it from the page's Share menu). This file is the source of truth; update it when the workflow changes.
 
-**Legend:** teal = AI session (one agent, its own `claude -p` session) · grey = script (deterministic check or command) · amber dashed = you (only when needed).
+**Legend:** teal = AI session (one agent, its own `claude -p` or `copilot -p` session) · grey = script (deterministic check or command) · amber dashed = you (only when needed).
 
 ## 1. How the pieces fit
 
@@ -19,7 +19,7 @@ A designed version of this page is published as an artifact: [Benefits Feature P
 flowchart LR
     you(["You"]):::you
     engine["Spec Kit engine<br/>benefit-feature<br/>order · gates · resume"]:::script
-    claude["Agents<br/>one claude -p session each<br/>up to 5 at once"]:::ai
+    claude["Agents<br/>one claude -p or copilot -p<br/>session each, up to 5 at once"]:::ai
     scripts["Scripts<br/>wf.py · JSON pass/fail"]:::script
     rules[("Rules & agents<br/>agents/ · project-rules/<br/>constitution")]
     subgraph work["feature work"]
@@ -262,16 +262,17 @@ Inside it every path is the same as in the checkout (`repos/<name>`, `specs/…`
 - Each clone worktree gets its own `.venv` and `node_modules` (`uv sync`, `pnpm install`, quick from their caches) and a copy of the main clone's `.env`. All worktrees share the main clone's local `mongod` (`MONGO_DIR`), so integration tests of two runs at the same time share one database.
 
 **What `start` does before the engine runs:**
-- checks that `specify`, `claude`, `git`, `gh` (logged in), `uv`, `pnpm` and `make` are installed, and that `.claude/settings.json` is valid and allows every command the agents need (`scripts/check_permissions.py`)
+- checks that `specify`, the agents' CLI (`claude`, or `copilot` with `-i integration=copilot`), `git`, `gh` (logged in), `uv`, `pnpm` and `make` are installed, and that `.claude/settings.json` is valid and allows every command the agents need (`scripts/check_permissions.py`)
 - fetches the main clones, then creates the feature's worktree, or reuses it on a restart. A new clone worktree starts its branch from `origin/main` (or from an existing local or remote `feature/NNN-name`). If a main clone still has that branch checked out from an in-place run, it is moved to `main` when clean, or `start` stops with the reason
 - with `--in-place`: puts each clone of the checkout on an up-to-date `main` instead (switches a clean clone that has nothing unpushed, fast-forwards it to `origin/main`, stops with the reason for anything else)
-- passes `.claude/settings.json` to every `claude -p` step with `--settings` (through `SPECKIT_INTEGRATION_CLAUDE_EXTRA_ARGS`)
+- passes `.claude/settings.json` to every `claude -p` step with `--settings` (through `SPECKIT_INTEGRATION_CLAUDE_EXTRA_ARGS`); for Copilot, passes `--no-ask-user` and loads the repo hook `.github/hooks/benefit-guard.json` in prompt mode (`GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS`)
+- with `-i integration=copilot`, turns the model inputs' Claude aliases into Copilot model IDs (`opus` → `claude-opus-5.5`, `sonnet` → `claude-sonnet-5.5`; override with `WF_COPILOT_OPUS`, `WF_COPILOT_SONNET`), and back on a resume that switches to Claude (`scripts/ai.py`)
 
-AI steps run unattended, so they can't ask for permission. Claude Code applies a project's `.claude/settings.json` on its own only after someone trusts the folder interactively; passing it with `--settings` works without that, on any machine. Starting the engine directly, without `run.sh`, skips all of this, and an agent step then typically ends with "Prompt exited with code 1" and writes nothing.
+AI steps run unattended, so they can't ask for permission. Claude Code applies a project's `.claude/settings.json` on its own only after someone trusts the folder interactively; passing it with `--settings` works without that, on any machine. Copilot CLI runs with every tool allowed (Spec Kit passes `--yolo`), and its own deny rules can't match flags such as `git push --force`; the hook (`scripts/ai.py guard`) denies the same commands as the settings file's deny list, so both tools refuse the same things. Starting the engine directly, without `run.sh`, skips all of this, and an agent step then typically ends with "Prompt exited with code 1" and writes nothing.
 
 **`watch`** shows each stage (✓ done, ▶ running, ✗ failed, ⏸ waiting for you, – not needed, · not started) with its duration, the agent sessions running now, what each agent has produced (`plan.md`, ADRs, tasks done, test cases, verify results, PR links) and, when the run stops, the failed step, its last output, the usual cause and the exact command to continue. It only reads files.
 
-The engine runs Claude Code; Copilot users follow the same stages by hand from [workflows/feature.md](../workflows/feature.md).
+The engine runs Claude Code by default, or GitHub Copilot CLI with `run.sh start <NNN> -i integration=copilot` (a resume can switch a run either way). Without either CLI, follow the same stages by hand from [workflows/feature.md](../workflows/feature.md).
 
 ## 8. Where things live
 

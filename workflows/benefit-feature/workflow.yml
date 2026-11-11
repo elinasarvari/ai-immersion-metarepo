@@ -2,7 +2,7 @@ schema_version: "1.0"
 workflow:
   id: "benefit-feature"
   name: "Benefits Case feature"
-  version: "0.10.0"
+  version: "0.11.0"
   author: "ai-immersion-metarepo"
   description: >-
     From an existing spec to draft PRs, each AI step a separate agent: spec clarifier answers open spec
@@ -14,20 +14,22 @@ workflow:
 requires:
   speckit_version: ">=1.0.0"
   integrations:
-    any: ["claude"]
+    any: ["claude", "copilot"]
 
 inputs:
   feature:
     type: string
     required: true
     prompt: "Spec to build: its number (e.g. 003) or folder (specs/003-name)"
+  # claude (Claude Code) or copilot (GitHub Copilot CLI); auto = the project's (.specify/integration.json).
   integration: {type: string, default: "auto"}
   trace_mode:
     type: string
     default: "strict"
     prompt: "strict = fail if a planned test is missing; warn = report only"
   # Models per step: judgement (plan, decisions, test design, reviews) vs following a written plan (tasks,
-  # code, fixes, PRs). Any value `claude --model` accepts: an alias (opus, sonnet) or a full model ID.
+  # code, fixes, PRs). Claude Code aliases (opus, sonnet) or a full model ID; with integration=copilot, run.sh
+  # turns the aliases into Copilot model IDs (scripts/ai.py).
   judgement_model: {type: string, default: "opus"}
   coding_model: {type: string, default: "sonnet"}
   # The spectator's test plan: maps requirements to named cases from the architect's brief; test-gate and the
@@ -514,8 +516,8 @@ steps:
               (integration and e2e: `make verify-stack` in repos/benefit-be, which runs them on its own free ports and
               stops its stack; never start a stack on the default ports, and stop any process you started before you
               finish), and fix it the way the lane rules and Accepted ADRs require, adding the test that would have caught
-              it. Run make check in each repo you changed. Then commit with a conventional message ending with the
-              line "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>", and push with
+              it. Run make check in each repo you changed. Then commit with a conventional message ending with a
+              Co-Authored-By trailer that names you (your AI tool and model), and push with
               git push origin {{ steps.feature.output.data.branch }}. Never push to main, force-push or skip hooks.
               Reply in ≤5 lines.
 

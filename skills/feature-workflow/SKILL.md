@@ -12,10 +12,12 @@ Runs [workflows/benefit-feature/workflow.yml](../../workflows/benefit-feature/wo
 The spec must already exist (write it with `/speckit-specify` first). There are no modes, so don't ask for one: the spec clarifier answers open spec questions, the decision-maker settles open ADRs, the spectator plans the tests, and once everything passes the run pushes the feature branch, opens draft PRs, fixes GitHub Actions failures on the feature branch and marks the PRs ready for review when CI is green. Asking to build or run the feature is the approval to push its feature branch and open PRs; nothing is ever pushed to `main`.
 
 ```bash
-workflows/benefit-feature/run.sh start <NNN> [-i trace_mode=strict|warn] [-i coding_model=sonnet|opus] [-i judgement_model=opus] [-i test_plan_model=sonnet|opus] < /dev/null
+workflows/benefit-feature/run.sh start <NNN> [-i integration=claude|copilot] [-i trace_mode=strict|warn] [-i coding_model=sonnet|opus] [-i judgement_model=opus] [-i test_plan_model=sonnet|opus] < /dev/null
 ```
 
-Always use `run.sh`, never `specify workflow run` directly: it runs the preflight, creates the feature's own git worktree, and passes `.claude/settings.json` to every agent step with `--settings`, which works even if the folder was never trusted. Without it, agent steps can't write and end with "Prompt exited with code 1". Tell the user they can follow the run live with `workflows/benefit-feature/run.sh watch <NNN>` in a second terminal.
+The agents run on Claude Code by default; `-i integration=copilot` runs them on GitHub Copilot CLI (it needs the real `copilot` CLI, logged in, not VS Code's install shim; the preflight checks). Model aliases are mapped to Copilot model IDs for it. `resume <run_id> -i integration=...` switches a run's tool.
+
+Always use `run.sh`, never `specify workflow run` directly: it runs the preflight, creates the feature's own git worktree, and gives every agent step its permissions: `.claude/settings.json` with `--settings` for Claude (which works even if the folder was never trusted), and for Copilot the repo hook `.github/hooks/benefit-guard.json`, which denies what that file denies. Without it, agent steps can't write and end with "Prompt exited with code 1". Tell the user they can follow the run live with `workflows/benefit-feature/run.sh watch <NNN>` in a second terminal.
 
 **Worktree.** The run happens in `../ai-immersion-metarepo.worktrees/<NNN-feature>/` (a worktree of the metarepo on `feature/<NNN-feature>`, with `repos/<name>` as worktrees of the main clones on the same branch), so the user's checkout and clones stay free and features can run side by side. Tell the user:
 - the plan, ADRs, tasks and reviews are written in the worktree's `specs/<NNN-feature>/`; read and edit them there (gate answers too), and commit them there;
@@ -46,4 +48,4 @@ Help the user answer in the worktree's `spec.md`. Only after their explicit answ
 | `final_gate` | still blocking when the verify loop stopped, after 2 rounds without progress or 6 rounds (a failing job, an open task, a missing or skipped planned test, a file outside its lane, or a review finding); see `review/verify.md` |
 | `ci_gate` | GitHub Actions still red after 3 CI fix rounds; see `review/ci.md` |
 
-AI steps run as `claude -p`, up to four at once, with the permissions in `.claude/settings.json` (passed by `run.sh`). If one fails on a permission, say which command was refused and suggest the allow rule; don't change settings yourself.
+AI steps run as `claude -p` (or `copilot -p`), up to four at once, with the permissions in `.claude/settings.json` (passed by `run.sh`; for Copilot, its deny list through the hook). If one fails on a permission, say which command was refused and suggest the allow rule; don't change settings yourself.

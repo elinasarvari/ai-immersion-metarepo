@@ -171,7 +171,7 @@ def stage_rows(state, evs, now):
 
 
 def sessions():
-    """The agent sessions (claude -p) running now: (name, elapsed)."""
+    """The agent sessions (claude -p or copilot -p) running now: (name, elapsed)."""
     try:
         out = subprocess.run(["ps", "-o", "etime=,args=", "-ax"], capture_output=True, text=True).stdout
     except OSError:
@@ -179,15 +179,16 @@ def sessions():
     found = []
     for line in out.splitlines():
         m = re.match(r"\s*(\S+)\s+(.*)", line)
-        if not m or "claude -p" not in m.group(2):
+        p = re.search(r"(?:^|[/\s])(?:claude|copilot) -p (.*)", m.group(2)) if m else None
+        if not p:
             continue
-        a = m.group(2)
+        a, prompt = m.group(2), p.group(1).lstrip()
         name = (re.search(r"You are the ([\w-]+) agent", a) or re.search(r"tasks tagged \[([\w-]+)\]", a)
                 or re.search(r'Review "([\w-]+)"', a) or re.search(r"ONLY the \[(\w+)\] tasks", a))
-        label = name.group(1) if name else ("fix" if a.split("-p", 1)[-1].strip().startswith("Fix") else "agent")
+        label = name.group(1) if name else ("fix" if prompt.startswith("Fix") else "agent")
         if "tasks tagged" in a:
             label = f"lane {label}"
-        elif a.lstrip().startswith(("For ", "claude -p For")) or "speckit-tasks" in a[:400]:
+        elif prompt.startswith("For ") or "speckit-tasks" in a[:400]:
             label = "tasks"
         found.append((label, m.group(1)))
     return found

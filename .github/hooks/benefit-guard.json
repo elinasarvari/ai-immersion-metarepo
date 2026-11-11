@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "hooks": {
+    "PreToolUse": [
+      {
+        "type": "command",
+        "matcher": "Bash",
+        "exec": "python3",
+        "args": ["workflows/benefit-feature/scripts/ai.py", "guard"],
+        "cwd": ".",
+        "timeoutSec": 15
+      }
+    ]
+  }
+}
