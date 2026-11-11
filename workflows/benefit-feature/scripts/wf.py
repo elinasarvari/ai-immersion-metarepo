@@ -39,7 +39,8 @@ Ship (CI loop: a failing check goes to a fix step, which pushes to the feature b
   ci-gate     <feature_dir>                     fails unless the last CI run passed
 
 Script jobs (run by `job`, also usable by hand): ownership, tasks, trace:strict, trace:warn, e2e, main.
-  ports                                         the stack ports something already listens on (never fails)
+  ports                                         the default stack ports something already listens on (information
+                                                only: e2e runs on free ports of its own; never fails)
 Paths are relative to the metarepo root. The lane ownership map mirrors project-rules/backend-architecture.md.
 """
 import fcntl, json, os, re, shutil, signal, socket, subprocess, sys, tempfile, time
@@ -990,18 +991,11 @@ def job(d, name):
         if still:
             res.update(status="fail", problems=[*res.get("problems", []), *[
                 f"port {p} ({n}) still in use after the e2e run: its stack didn't stop" for n, p in still]])
-    elif name == "e2e":  # an older branch: `make verify` on the default ports, the way CI's e2e job runs them
-        busy = busy_ports()
-        if busy:  # never borrow or wipe another stack (make verify runs make reset); CI still runs e2e on the PR
-            res.update(status="warn", problems=[f"e2e didn't run here: port {p} is in use ({h}). Stop that stack to "
-                                                "run it locally; CI's e2e job runs it on the PR" for p, h in busy])
-        elif not make_has(repo_dir("benefit-be"), "verify"):
-            res.update(status="warn", problems=["repos/benefit-be has no 'verify' target, so e2e didn't run"])
-        else:
-            # verify-stack: only the stages no other job runs (integration, client in sync, stack, e2e); plain
-            # `make verify` repeats the check and build jobs' stages too
-            res["cmd"] = "make verify-stack" if make_has(repo_dir("benefit-be"), "verify-stack") else "make verify"
-            run_in_repo("benefit-be", res["cmd"], res, jd / "e2e.log", stage=REPOS)
+    elif name == "e2e":  # a branch without the isolated stack: never fall back to the shared default ports
+        res.update(status="warn", problems=[
+            "e2e didn't run here: repos/benefit-be has no 'verify-stack' target (its isolated stack on free ports), "
+            "and the default ports would clash with another run or `make dev`. The integrator merges origin/main, "
+            "which has it, into the branch; CI's e2e job still runs on the PR"])
     else:
         res.update(status="fail", problems=[f"unknown job '{name}'"])
     (jd / f"{name.replace(':', '-')}.json").write_text(json.dumps(res, indent=2))
@@ -1361,8 +1355,31 @@ def gh(*args, timeout=120):
         return 1, str(e)
 
 
+# A CI job that failed on the runner's network (a package mirror down, DNS, a reset connection), not on the
+# code. The same patterns as each repo's scripts/ci/retry-flaky.sh. ECONNREFUSED isn't one, and nor is any
+# error naming the runner itself: in the e2e jobs those mean our own stack didn't start, a real failure.
+NETWORK_ERROR = re.compile(
+    r"Temporary failure resolving|Could not resolve host|Could not resolve hostname|Name or service not known"
+    r"|EAI_AGAIN|ETIMEDOUT|ECONNRESET|ERR_SOCKET_TIMEOUT|socket hang up|Connection timed out"
+    r"|Connection reset by peer|Operation timed out|TLS handshake timeout|i/o timeout"
+    r"|Failed to connect to \S+ port \d+|Unable to connect to|502 Bad Gateway|503 Service Unavailable"
+    r"|504 Gateway Time-?out|Failed to fetch https?://|Some index files failed to download|error: RPC failed"
+    r"|The runner has received a shutdown signal|lost communication with the server")
+OWN_STACK = re.compile(r"localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0")
+CI_ATTEMPTS = 3  # a run's attempts in all: the repo's retry-flaky workflow may already have made the second
+
+
+def network_error(log):
+    """The first line of a job log that shows a network failure on the runner, or '' if there's none."""
+    for ln in log.splitlines():
+        if NETWORK_ERROR.search(ln) and not OWN_STACK.search(ln):
+            return ln.split("\t")[-1].strip()[:200]
+    return ""
+
+
 def failing_checks(url):
-    """[(check name, link, log tail)] for the failed checks of a PR."""
+    """The failed checks of a PR: [{name, link, slug, run, log (the failed step's tail), network}], where
+    network is the log line showing the job failed on the network ('' if it didn't)."""
     code, text = gh("pr", "checks", url, "--json", "name,state,link")
     try:
         checks = json.loads(text) if code in (0, 1, 8) else []
@@ -1377,40 +1394,79 @@ def failing_checks(url):
         if not m or (c.get("name"), m.group(1)) in seen:
             continue
         seen.add((c.get("name"), m.group(1)))
-        args = ["run", "view", m.group(1), "--job", m.group(2), "--log-failed"]
-        if repo:
-            args += ["-R", repo.group(1)]
-        _, log = gh(*args)
-        found.append((c.get("name", "?"), c.get("link", ""), "\n".join(log.splitlines()[-80:])))
+        where = ["-R", repo.group(1)] if repo else []
+        _, log = gh("run", "view", m.group(1), "--job", m.group(2), "--log-failed", *where)
+        # the whole log, not only the failed step: a job cancelled at its time limit has no failed step, and
+        # the network error is usually in an earlier, slow setup step
+        _, full = gh("run", "view", m.group(1), "--job", m.group(2), "--log", *where)
+        found.append({"name": c.get("name", "?"), "link": c.get("link", ""), "slug": repo.group(1) if repo else "",
+                      "run": m.group(1), "log": "\n".join(log.splitlines()[-80:]), "network": network_error(full)})
     return found
+
+
+def rerun_failed(slug, run):
+    """Rerun a CI run's failed jobs (fewer than CI_ATTEMPTS so far) and wait until GitHub has picked the
+    rerun up. True if it's running again, also when the repo's retry-flaky workflow got there first."""
+    where = ["-R", slug] if slug else []
+    _, attempt = gh("run", "view", run, *where, "--json", "attempt", "-q", ".attempt")
+    _, status = gh("run", "view", run, *where, "--json", "status", "-q", ".status")
+    if status.strip() != "completed":
+        return True  # already rerunning
+    if not attempt.strip().isdigit() or int(attempt) >= CI_ATTEMPTS:
+        return False
+    code, text = gh("run", "rerun", run, *where, "--failed")
+    if code != 0 and "already" not in text.lower():
+        return False
+    for _ in range(int(os.environ.get("WF_RERUN_WAIT", "30"))):  # until `gh pr checks --watch` sees it pending
+        if gh("run", "view", run, *where, "--json", "status", "-q", ".status")[1].strip() != "completed":
+            return True
+        time.sleep(2)
+    return True
 
 
 def ci_wait(d):
     """Wait for GitHub Actions on every PR. A red check is reported (review/ci.md), not raised, so the CI fix
-    step can repair it; ci-gate decides after the loop. When everything is green, the draft PRs are marked
-    ready for review."""
+    step can repair it; ci-gate decides after the loop. When every failed job failed on the network rather
+    than the code, the failed jobs are rerun first, instead of sending a fixer to change code that isn't
+    broken. When everything is green, the draft PRs are marked ready for review."""
     rd = d / "review"
     prs = load_json(rd / "prs.json")
     if not isinstance(prs, dict) or not prs:
         out({"problems": ["review/prs.json missing or invalid (the PR step writes it)"]}, ok=False)
-    results, report, failing = {}, ["# GitHub Actions", ""], 0
+    results, report, failing, reran = {}, ["# GitHub Actions", ""], 0, []
     for repo, url in prs.items():
-        code, text = gh("pr", "checks", url, "--watch", "--interval", "30", timeout=5400)
+        for watch in range(CI_ATTEMPTS):  # a rerun is only started while there's a watch left to see it
+            code, text = gh("pr", "checks", url, "--watch", "--interval", "30", timeout=5400)
+            if "no checks reported" in text or code == 0:
+                fails = []
+                break
+            fails = failing_checks(url)
+            runs = sorted({(f["slug"], f["run"]) for f in fails})
+            if (watch == CI_ATTEMPTS - 1 or not fails or not all(f["network"] for f in fails)
+                    or not all(rerun_failed(*r) for r in runs)):
+                break
+            reran += [{"repo": repo, "run": run, "why": fails[0]["network"]} for _, run in runs]
         if "no checks reported" in text:
             results[repo] = "no checks configured"
         elif code == 0:
             results[repo] = "pass"
         else:
             results[repo] = "fail"
-            fails = failing_checks(url)
             failing += max(1, len(fails))
             report += [f"## {repo}: failed ({url})", ""]
-            for name, link, log in fails:
-                report += [f"### `{name}` ({link})", "", "```", log, "```", ""]
+            for f in fails:
+                report += [f"### `{f['name']}` ({f['link']})", ""]
+                if f["network"]:
+                    report += [f"Failed on the network, not the code (`{f['network']}`); a rerun didn't help. "
+                               "Push again or rerun it later; there's nothing in the code to fix.", ""]
+                report += ["```", f["log"], "```", ""]
             if not fails:
                 report += ["(couldn't read the failing jobs; open the PR's Checks tab)", ""]
         if results[repo] != "fail":
             report.append(f"- {repo}: {results[repo]} ({url})")
+    if reran:
+        report += ["", "Reran after a network failure (not the code): "
+                   + ", ".join(f"{r['repo']} run {r['run']} (`{r['why']}`)" for r in reran)]
     ready = []
     if failing == 0:
         for repo, url in prs.items():
@@ -1419,7 +1475,7 @@ def ci_wait(d):
                 ready.append(url)
         if ready:
             report += ["", "All green: marked ready for review: " + ", ".join(ready)]
-    st = {"ci": results, "failing": failing, "ready": ready}
+    st = {"ci": results, "failing": failing, "ready": ready, "reran": reran}
     (rd / "ci.json").write_text(json.dumps(st, indent=2))
     (rd / "ci.md").write_text("\n".join(report) + "\n")
     out(st)
