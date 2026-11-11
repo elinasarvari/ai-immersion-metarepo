@@ -1,0 +1,29 @@
+# Compliance review: 010-review-queue (round 2)
+
+Run 52ee27bc, verify-loop re-review. Repo `benefit-be`, branch `feature/010-review-queue`, uncommitted. Scope: the fixes for code review findings 1–4 (`apps/worker/workflows/review.py`, `packages/domain/review.py`, `db/migrations/versions/0002_review_queue.py`, `tests/apps/worker/workflows/`), plus the spec doc updates (ADR-010-05/06 Accepted, decisions/README.md, plan.md, tasks.md, data-model.md, ADR-010-02). Round 1 findings re-checked.
+
+**Verdict: PASS**: 0 critical, 0 major, 7 minor (4 carried over, 3 new).
+
+Evidence summary:
+- TW-1/TW-2: the new `_project` retry loop uses `asyncio.sleep` (a durable Temporal timer in workflow code) and `workflow.logger`. No clock, random, uuid or I/O imports added. Cancellation is re-raised. TW-4/TW-11: the projection activities are idempotent, so retrying them without limit is safe. TW-7: new, unreleased workflow type; the replay test (`test_FR_010_01_review_history_replays_without_nondeterminism`) still passes under `make check`.
+- FR-010-05: `validate_action` now refuses `correct_value`/`dismiss_finding`/`edit_and_approve` without their field (`missing_required_field`). FR-010-04/US2: a failed caseworker draft is recorded as rejected (`request_draft_failed`) and the task stays open; a failed automatic draft opens a blocking review and waits (`open_review`).
+- BA-6: `packages/domain/review.py` still holds only Pydantic models and tables; the change is additive (two `RejectionCode` values). KD-11: migration 0002 is not applied anywhere (unmerged, new on this branch), so editing it is allowed; its `rejection_code` enum matches `RejectionCode`. data-model.md and ADR-010-02 list both codes.
+- PL-11: new log lines carry only IDs, activity names, retry state and rejection codes. PR-3: new tests use generated UUIDs only. PR-4: no dependency or lockfile change. PR-6: `make check` passes (`review/jobs/benefit-be-check.json`, gitleaks clean, pip-audit clean).
+- ADR-010-05/06: Accepted with Option A, matching the constants `DETERMINATION_FAILURE_REASON`/`_CAUSE` and `REVIEW_DAY_COUNTING`; TC-22 and TC-26–30 assert them. decisions/README.md, plan.md and tasks.md agree.
+- Test plan: all 46 planned TC test names still exist. The 4 new tests are named after FRs (`test_FR_010_05_action_without_its_required_field_refused`, `test_FR_010_03_projection_fails_past_retries_is_retried_and_case_does_not_stall`, `test_FR_010_04_caseworker_request_draft_fails_rejected_and_task_stays_open`, `test_FR_010_04_automatic_request_draft_fails_opens_review_and_case_waits`), but have no TC in test-plan.md (finding 6).
+- `.env*` files are denied by permissions and were not reviewed.
+
+| # | Severity | File:line | Rule/ADR/TC | Violation | Required change |
+|---|---|---|---|---|---|
+| 1 | minor | benefit-be:apps/worker/workflows/review.py:146-163 | security.md (authorization per request), constitution IV | Carried over (round 1 #1). `validate_action` still does not refuse a `reviewer_role` other than `caseworker`/`supervisor`. No sender exists yet (API is 006), so no current impact. | Refuse non-staff roles with a rejection code, or record in ADR-010-02 that only the API enforces this. |
+| 2 | minor | benefit-be:apps/worker/workflows/review_harness.py:65 | ADR-010-03 | Carried over (round 1 #2). No production starter passes `ReviewWindowSettings.from_settings(settings)`. | Pass it at workflow start when 001's starter lands (T018). |
+| 3 | minor | benefit-be:apps/worker/workflows/review_ports.py:90-171 | BA-8, TW-5 | Carried over (round 1 #3). Stand-in 002/003 activity I/O and `AdvanceClock` live in `apps/worker`, not `packages/domain`. | Move them with each owning feature's contract (T018). |
+| 4 | minor | benefit-be:apps/worker/repositories/review_tasks.py:66; caseworker_actions.py:93 | database.md (always send a projection) | Carried over (round 1 #4). `find_one` without a projection. | Pass an explicit projection. |
+| 5 | minor | benefit-be:packages/domain/review.py:82-85; db/migrations/versions/0002_review_queue.py:66-67 | BA-8, constitution VI, backend-architecture.md lane rule (one lane's files per commit) | The fix changed the shared contract (`RejectionCode`) and the data lane's migration from the workflows fix step, not a contracts step. The change is additive and documented (data-model.md, ADR-010-02), and nothing is committed yet, so there is no current impact. `RejectionCode` is consumed by Platform & UI (API 006) and Knowledge & data. | Commit `packages/domain/review.py` and the 0002 migration separately from the workflow code, and say in the contract PR that the two new codes need Platform & UI and Knowledge & data agreement (BA-8). |
+| 6 | minor | specs/010-review-queue/test-plan.md; tasks.md | test plan traceability | The 4 new tests (named above) are not mapped to any TC, and tasks.md has no task for the fixes (missing required field, draft failure, projection retry). TC-01–46 are unaffected. | Add TC-47–50 to test-plan.md (FR, level `unit`/`workflow`, test name) and record the fix work in tasks.md, so traceability covers them. |
+| 7 | minor | benefit-be:apps/worker/workflows/review.py:66; apps/worker/workflows/review_timers.py:15 | ADR-010-05, ADR-010-06 | The code comments still say "Needs decision"; both ADRs are now Accepted. | Change the comments to "Accepted, Option A". |
+
+## Notes
+- Constitution VI (contract merged before dependent work) is still checked at the PR stage: the contract PR must include the two new `RejectionCode` values.
+- The migration test (`test_0002_review_queue.py:162-163`) checks that the `reason` and `cause` enums match the domain, but not `rejection_code`. They match today. Consider checking the same for `rejection_code` and `action`.
+- `action_id_unique` still duplicates the `_id` index (round 1 note, code review #9). Please confirm against database.md.

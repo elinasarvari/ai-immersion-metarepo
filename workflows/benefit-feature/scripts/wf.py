@@ -159,10 +159,12 @@ DEFINED_FR_RE = re.compile(r"^\s*-\s*\*\*(FR-\d{3}-\d{2})\*\*", re.M)
 
 def spec_frs(d: Path):
     """The requirements this spec defines (its `- **FR-…**` list items). IDs it only mentions, such as
-    requirements moved to another feature or cross-references, belong to that other spec."""
+    requirements moved to another feature or cross-references, belong to that other spec. A spec with no such
+    list counts the IDs with its own number (FR-<NNN>-xx for specs/<NNN>-name)."""
     s = read(d / "spec.md")
     defined = sorted(set(DEFINED_FR_RE.findall(s)))
-    return defined or sorted({f"FR-{a}-{b}" for a, b in FR_RE.findall(s)})
+    own = re.match(r"(\d{3})-", d.name)
+    return defined or sorted({f"FR-{a}-{b}" for a, b in FR_RE.findall(s) if own is None or a == own.group(1)})
 
 
 # ── Gates ─────────────────────────────────────────────────────────────────────────────────────────

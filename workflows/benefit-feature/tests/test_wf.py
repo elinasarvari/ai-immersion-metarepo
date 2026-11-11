@@ -230,6 +230,13 @@ class Gates(WfCase):
         code, data, _ = self.wf("tasks-gate", FD)
         self.assertEqual(code, 0, data)
 
+    def test_a_spec_without_an_fr_list_counts_only_its_own_numbers(self):
+        self.write("spec.md", SPEC.replace("- **FR-010-01**", "- FR-010-01").replace("- **FR-010-02**", "- FR-010-02")
+                   + "\nSee FR-011-01 for notices.\n")
+        self.write("test-plan.md", TEST_PLAN)
+        data = self.wf("tasks-gate", FD)[1]
+        self.assertFalse(any("FR-011-01" in p for p in data["problems"] + data["warnings"]), data)
+
     def test_a_contracts_task_that_waits_for_lane_work_moves_to_the_qa_step(self):
         self.write("tasks.md", TASKS + "- [ ] T005 [contracts][benefit-be] Regenerate openapi.json after T002 and T003\n"
                    "- [ ] T006 [contracts][benefit-be] Write the model tests before T001\n")

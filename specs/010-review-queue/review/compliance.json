@@ -1,0 +1,21 @@
+{
+  "blocking": 0,
+  "verdict": "PASS",
+  "round": 2,
+  "counts": {"critical": 0, "major": 0, "minor": 7},
+  "findings": [
+    {"id": "C-1", "severity": "minor", "file": "benefit-be:apps/worker/workflows/review.py", "line": 146, "rule": "security.md; constitution IV", "summary": "Carried over: validate_action does not refuse a non-staff reviewer_role"},
+    {"id": "C-2", "severity": "minor", "file": "benefit-be:apps/worker/workflows/review_harness.py", "line": 65, "rule": "ADR-010-03", "summary": "Carried over: REVIEW_* settings not passed in by a production starter"},
+    {"id": "C-3", "severity": "minor", "file": "benefit-be:apps/worker/workflows/review_ports.py", "line": 90, "rule": "BA-8; TW-5", "summary": "Carried over: stand-in activity I/O and advance_clock payload in apps/worker"},
+    {"id": "C-4", "severity": "minor", "file": "benefit-be:apps/worker/repositories/review_tasks.py", "line": 66, "rule": "database.md (projection)", "summary": "Carried over: find_one without projection"},
+    {"id": "C-5", "severity": "minor", "file": "benefit-be:packages/domain/review.py", "line": 82, "rule": "BA-8; constitution VI; lane commit rule", "summary": "Contract (RejectionCode) and data-lane migration changed in the workflows fix step; commit separately and get lane agreement in the contract PR"},
+    {"id": "C-6", "severity": "minor", "file": "specs/010-review-queue/test-plan.md", "line": null, "rule": "test plan traceability", "summary": "4 new FR-named tests have no TC; fixes not recorded in tasks.md"},
+    {"id": "C-7", "severity": "minor", "file": "benefit-be:apps/worker/workflows/review.py", "line": 66, "rule": "ADR-010-05; ADR-010-06", "summary": "Code comments still say Needs decision (also review_timers.py:15)"}
+  ],
+  "notes": [
+    "Constitution VI checked at PR stage: contract PR must include the two new RejectionCode values",
+    "Migration test does not check rejection_code/action enum parity with the domain (they match today)",
+    "action_id_unique index duplicates _id index; clarify vs database.md",
+    ".env* files denied by permissions and not reviewed"
+  ]
+}
