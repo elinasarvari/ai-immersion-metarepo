@@ -2,8 +2,8 @@
 # One entry point for the benefit-feature workflow: checks the machine, gives each feature its own worktree,
 # gives every unattended `claude -p` step its permissions, then starts, resumes, shows or watches a run.
 #
-#   workflows/benefit-feature/run.sh start   <feature> [pr_mode] [-i key=value ...]  e.g. start 001
-#                     pr_mode: draft (default: draft PRs, ready for review once CI is green) | ask | none
+#   workflows/benefit-feature/run.sh start   <feature> [-i key=value ...]            e.g. start 001
+#                     one way: agents decide, then draft PRs, ready for review once CI is green
 #   workflows/benefit-feature/run.sh start   --in-place <feature> ...               old way: in this checkout
 #   workflows/benefit-feature/run.sh prepare <feature>                              only create the worktree
 #   workflows/benefit-feature/run.sh resume  [run-id|NNN] [-i key=value ...]        (default: latest run)
@@ -50,21 +50,21 @@ check_tools() {  # $1 = the settings file the run will use
   note "tools: specify, claude, git, gh, uv, pnpm, make, python3 ✓  permissions: .claude/settings.json ✓"
 }
 
-check_ports() {  # warns only: the verify loop's e2e job skips itself (warning, not blocking) while a port is taken
+check_ports() {  # information only: the e2e job runs on free ports of its own (benefit-be's `make verify-stack`)
   local busy
   busy="$(python3 "$SELF/workflows/benefit-feature/scripts/wf.py" ports \
     | python3 -c 'import json,sys; print("\n".join("port %s: %s" % (b["port"], b["holder"]) for b in json.load(sys.stdin)["busy"]))' 2>/dev/null || true)"
   if [ -n "$busy" ]; then
-    yellow "  ! stack ports in use, so the verify loop's e2e job won't run here (CI still runs it on the PR):"
+    note "default stack ports in use (fine: e2e runs on free ports of its own, and nothing else is touched):"
     printf '%s\n' "$busy" | sed 's/^/      /'
-    note "  (stop that stack first to run e2e locally)"
+    note "  an older branch without 'make verify-stack' still skips e2e locally while these are taken"
   else
-    note "stack ports free: e2e can run locally ✓"
+    note "stack ports free ✓ (e2e runs on free ports of its own either way)"
   fi
 }
 
-check_gh() {  # only needed when the run may push
-  gh auth status >/dev/null 2>&1 || die "gh is not logged in (gh auth login); needed to open PRs. Use pr_mode none to skip."
+check_gh() {  # every run ends by pushing and opening PRs
+  gh auth status >/dev/null 2>&1 || die "gh is not logged in (gh auth login); needed to open PRs."
   note "gh: logged in ✓"
 }
 
@@ -218,15 +218,38 @@ print(runs[0] if runs else "")' "$1" "$MAIN" "$WT_HOME")"
   p="${p%/}"; RUN_ID="${p##*/}"; RUN_HOME="${p%/.specify/workflows/runs/*}"
 }
 
-pr_mode_of() {  # the pr_mode a run was started with
-  python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["inputs"].get("pr_mode","draft"))' \
-    "$RUN_HOME/.specify/workflows/runs/$RUN_ID/inputs.json" 2>/dev/null || echo draft
-}
-
 run_env() {  # $1 = where the run lives
   export SPECKIT_INTEGRATION_CLAUDE_EXTRA_ARGS="--settings $1/.claude/settings.json"
   # One local mongod for every worktree (the Makefile would otherwise look for one per worktree, on the same port).
   [ "$1" = "$MAIN" ] || export MONGO_DIR="${MONGO_DIR:-$MAIN/repos/benefit-be/.data/mongo}"
+}
+
+free_ports() {  # $1 = where the run lives, $2 = feature folder: stop what the run left listening, whatever its outcome
+  [ -n "${2:-}" ] && [ -d "$1/specs/$2" ] || return 0
+  echo
+  if (cd "$1" && python3 workflows/benefit-feature/scripts/wf.py ports-freed "specs/$2" > /dev/null); then
+    note "ports: nothing this run started is still listening (specs/$2/review/ports.md)"
+  else
+    yellow "  ! one of this run's processes is still listening; see $1/specs/$2/review/ports.md"
+  fi
+  grep -q "^- warning" "$1/specs/$2/review/ports.md" 2>/dev/null \
+    && note "ports held by processes this run didn't start are listed there (left alone)"
+  return 0
+}
+
+run_engine() {  # $1 = where the run lives, $2 = feature folder, then the engine command; keeps its exit code
+  local home="$1" folder="$2" code=0
+  shift 2
+  trap 'free_ports "$home" "$folder"; exit 130' INT TERM
+  "$@" || code=$?
+  trap - INT TERM
+  free_ports "$home" "$folder"
+  return "$code"
+}
+
+run_feature() {  # the feature folder a run was started for
+  python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["inputs"].get("feature",""))' \
+    "$RUN_HOME/.specify/workflows/runs/$RUN_ID/inputs.json" 2>/dev/null || true
 }
 
 cleanup() {  # $1 = feature, $2 = --yes
@@ -280,13 +303,14 @@ case "$cmd" in
     in_place=""; args=()
     for a in "$@"; do if [ "$a" = "--in-place" ]; then in_place=1; else args+=("$a"); fi; done
     set -- ${args[@]+"${args[@]}"}
-    feature="${1:?usage: run.sh $cmd <feature> [pr_mode] [-i key=value ...]}"; shift
-    pr_mode="draft"
-    if [ $# -gt 0 ] && [ "${1#-}" = "$1" ]; then pr_mode="$1"; shift; fi
+    feature="${1:?usage: run.sh $cmd <feature> [-i key=value ...]}"; shift
+    if [ $# -gt 0 ] && [ "${1#-}" = "$1" ]; then
+      die "unexpected '$1': there are no modes any more (a run always decides, then opens draft PRs); usage: run.sh $cmd <feature> [-i key=value ...]"
+    fi
     folder="$(feature_folder "$feature")"
     [ -n "$folder" ] || die "no single spec folder matches '$feature' under specs/"
     echo "Preflight"
-    [ "$cmd" = "prepare" ] || [ "$pr_mode" = "none" ] || check_gh
+    [ "$cmd" = "prepare" ] || check_gh
     check_clones
     if [ -n "$in_place" ]; then
       prepare_repos_in_place "feature/$folder"; home="$MAIN"
@@ -297,24 +321,26 @@ case "$cmd" in
     [ "$cmd" = "prepare" ] || check_ports
     if [ "$cmd" = "prepare" ]; then green "✓ prepared $home"; exit 0; fi
     run_env "$home"
-    green "✓ ready: $folder, pr_mode=$pr_mode, in $home"
+    green "✓ ready: $folder, in $home"
     note "watch it in another terminal: workflows/benefit-feature/run.sh watch ${folder%%-*}"
     echo
     cd "$home"
-    exec specify workflow run "$WF" -i feature="$folder" -i pr_mode="$pr_mode" "$@" ;;
+    code=0; run_engine "$home" "$folder" specify workflow run "$WF" -i feature="$folder" "$@" || code=$?
+    exit "$code" ;;
   resume)
     id=""; if [ $# -gt 0 ] && [ "${1#-}" = "$1" ]; then id="$1"; shift; fi
     find_run "$id"
     echo "Preflight for run $RUN_ID ($RUN_HOME)"
     check_tools "$RUN_HOME/.claude/settings.json"
-    [ "$(pr_mode_of)" = "none" ] || check_gh
+    check_gh
     check_ports
     run_env "$RUN_HOME"
     green "✓ resuming $RUN_ID"
     note "watch it in another terminal: workflows/benefit-feature/run.sh watch $RUN_ID"
     echo
     cd "$RUN_HOME"
-    exec specify workflow resume "$RUN_ID" "$@" ;;
+    code=0; run_engine "$RUN_HOME" "$(run_feature)" specify workflow resume "$RUN_ID" "$@" || code=$?
+    exit "$code" ;;
   status)
     find_run "${1:-}"; cd "$RUN_HOME"
     exec specify workflow status "$RUN_ID" < /dev/null ;;

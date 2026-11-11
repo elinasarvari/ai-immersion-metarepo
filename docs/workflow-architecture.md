@@ -3,7 +3,7 @@
 One command takes an approved spec to draft pull requests in `benefit-be` and `benefit-fe`. Separate agents plan, decide, build and review; scripts check every step; you're asked only when automation can't decide, and you review the result on the draft PRs.
 
 ```bash
-workflows/benefit-feature/run.sh start 003 ask    # or /feature-workflow in chat
+workflows/benefit-feature/run.sh start 003        # or /feature-workflow in chat
 workflows/benefit-feature/run.sh watch 003        # live progress, in a second terminal
 ```
 
@@ -72,7 +72,7 @@ flowchart TB
 
     subgraph verify["Verify loop · ≤6 rounds"]
         direction TB
-        fix["Fixers (from round 2)<br/>one per repo in parallel, or one for all<br/>coding model first, then judgement"]:::ai
+        fix["Fixers (from round 2)<br/>one per repo in parallel, or one for all<br/>coding model"]:::ai
         integ["Integrator, only if main moved<br/>merges origin/main · resolves clashes<br/>main wins · one ADR for the PR"]:::ai
         jobs["Jobs, in the background<br/>e2e first · make check · build · eval · main<br/>ownership · tasks · trace"]:::script
         reviews["Reviews, at the same time<br/>code benefit-be · code benefit-fe · compliance<br/>only those with no result, blocking, or changed"]:::ai
@@ -85,7 +85,6 @@ flowchart TB
     end
 
     final["final-gate<br/>nothing blocking"]:::script
-    q3{{"pr_mode=ask?<br/>you approve the push"}}:::you
     pr["Draft PRs<br/>create-pr · feature branch, never main<br/>one per repo · linked"]:::ai
 
     subgraph gha["GitHub Actions · ≤3 rounds"]
@@ -108,7 +107,6 @@ flowchart TB
     verify -- "clean" --> final --> pr --> gha
     gha -- "all green" --> ready
     gha -. "still red" .-> cigate
-    final -.-> q3
 
     classDef ai fill:#E2F0F1,stroke:#1D6B74,color:#17212B
     classDef script fill:#EDF0F3,stroke:#536273,color:#17212B
@@ -182,12 +180,10 @@ The decision-maker is separate from the architect on purpose: the agent that fra
 
 | Gate | Appears when | What you do | Continue with |
 |---|---|---|---|
-| Spec questions | Rare: the spec clarifier left a question open because only a person can answer it (why is in `clarifications.json`); with `decision_mode=ask`, every open question | Answer them in `spec.md` | `-i spec_verdict=approve` |
+| Spec questions | Rare: the spec clarifier left a question open because only a person can answer it (why is in `clarifications.json`) | Answer them in `spec.md` | `-i spec_verdict=approve` |
 | No compliant option | Rare: the decision-maker finds that every option for an ADR breaks the constitution or a rule (the run stops at `decisions_gate`) | Decide it, or start the amendment PR (all three team members) | fix, then `specify workflow resume <run-id>` |
-| Your decisions | Only with `decision_mode=ask` (which also sends every spec question to the spec gate): an ADR is a product, policy or cost call, or needs a rule or constitution change | Answer it, or accept the ADR's fallback | `-i decision_verdict=approve` |
-| Before pushing | Only with `pr_mode=ask` | Read `review/verify.md` (including its Warnings), `review/trace.md` and the diff | `-i pr_verdict=approve` |
 
-With the defaults (`decision_mode=auto`, `pr_mode=draft`), your review happens on the PRs in GitHub: they open as drafts and are marked ready for review once GitHub Actions is green, where branch protection already requires an approval: the code, each spec answer the spec clarifier gave, and each decision the decision-maker made. Use `pr_mode=none` for a rehearsal that stops before pushing. Each gate has its own answer, so approving one can never approve another.
+There are no modes, so nothing else stops for you: starting the run is the approval to push the feature branch (never `main`), and your review happens on the PRs in GitHub: they open as drafts and are marked ready for review once GitHub Actions is green, where branch protection already requires an approval: the code, each spec answer the spec clarifier gave, and each decision the decision-maker made.
 
 ## 6. How it stays correct, and cheap
 
@@ -199,7 +195,7 @@ With the defaults (`decision_mode=auto`, `pr_mode=draft`), your review happens o
 - Never a silent pass: a missing or unreadable result counts as blocking, and a job that couldn't run (no `make` target) is a warning in `verify.md` and the PR.
 - Each repo's own GitHub Actions must pass on the PR. CI differs from a laptop (no `.env`, services only in the integration job), so a red check goes to a CI fix step that pushes to the feature branch until it's green (up to 3 rounds). Only then is a draft marked ready for review, so nobody reviews code CI hasn't passed. `trace` also flags a planned unit test placed in a folder whose tests need MongoDB or Temporal (`tests/db/`, `tests/integration/`), the mistake behind feature 001's first red CI.
 - Tasks are checked twice before any code: the quality engineer checks they cover the plan (every ADR's "Work this creates", every module in the Project Structure, every requirement) and adds what's missing; `tasks-gate` checks their tags and coverage, and moves a `[contracts]` task that waits for lane work ("after T020") to the QA step, which runs after the lanes.
-- The verify loop keeps going while the blocking count falls, up to 6 rounds, and stops early after 2 rounds without progress (`review/history.json`); the first fix uses `coding_model`, later fixes `judgement_model`, and every fix adds the test that would have caught its finding.
+- The verify loop keeps going while the blocking count falls, up to 6 rounds, and stops early after 2 rounds without progress (`review/history.json`); every fix uses `coding_model`, and every fix adds the test that would have caught its finding.
 - The stack is started by a script, not by an agent: when a feature changes code, the `e2e` job runs benefit-be's `make verify-stack` (`make verify` where the repo doesn't have it yet), which starts MongoDB, Temporal and the app and runs the integration, API and `pnpm e2e` tests the way CI's e2e job does. It skips the static, unit, workflow and contract stages, which the `check` and `build` jobs run beside it. Running the stack, e2e or the quickstart is never a task, so no task stays open because an agent couldn't keep a server up. If a stack port (8000, 8001, 5173, 7233, 8233, 27017) is already taken, for example by your own `make dev`, the job doesn't run, because `make verify` resets the database. It leaves a non-blocking warning that the PR repeats, and CI's e2e job still runs on the PR. `run.sh` lists the taken ports at start.
 - The branch never ships against an outdated main, and the lanes never build on one. Before the lanes, an earlier run's branch that main has passed goes to the integrator, and one with no commits of its own is fast-forwarded. Each verify round, `wf.py behind` fetches `origin/main` (only main, so other features' branches never land in the clone) and, if another feature merged meanwhile, the integrator agent commits the feature's work, merges main and resolves the clashes before the round's checks, which then test the merged code. Main wins (it's merged, may hold data, and other code depends on it): the feature takes main's names and fields, renumbers its migrations after main's, and replaces anything main marks as a stand-in for it. Every resolution goes in one ADR, listed for review in the PR like the decision-maker's. If keeping both sides' requirements is impossible, it aborts the merge, records the clash as `Needs decision`, and the `main` job keeps blocking. The integrator only commits on the feature branch; nothing is pushed before the PR step.
 - The fix step fixes the code to meet the requirement, never the test. For each failing test it first looks up what the test proves: its case in `test-plan.md`, the requirement in `spec.md`, and any ADR. Then it changes the code to meet that requirement. It never weakens a test (expected values, pins, thresholds, names, skips), and changes a test only where it contradicts the spec, plan or an ADR. A failure caused by the machine (a missing tool, an unpinned version, a missing login) is recorded as an environment problem, not patched in the code. Each round's reasoning is in `review/fixes-<scope>.md` (`fixes-benefit-be.md`, `fixes-benefit-fe.md`, or `fixes-all.md`). A fixer reruns the tests that failed and those of the code it changed, plus lint and types; the full suites run in the jobs right after it.
@@ -212,7 +208,7 @@ With the defaults (`decision_mode=auto`, `pr_mode=draft`), your review happens o
 **Token economy**
 - Four agent sessions plan the whole feature (architect; tasks; quality engineer; contracts), plus the spec clarifier only when the spec has open questions, the decision-maker only when an ADR is open, and the architect again only if it chose another option.
 - Each lane is one session: it fixes its own unit tests with its context still loaded, instead of in extra fix sessions.
-- Two models: `judgement_model` (default `opus`) for the architect, decision-maker, quality engineer, integrator and reviewers; `coding_model` (default `sonnet`, much faster) for tasks, contracts, lanes, QA tests, fixes and PRs, which follow a written plan. Override either with `-i coding_model=opus`, for example.
+- Two models: `judgement_model` (default `opus`) for the architect, decision-maker, quality engineer, integrator and reviewers; `coding_model` (default `sonnet`, much faster) for everything that implements, tests or verifies against a written plan: tasks, contracts, lanes, QA tests, every fix, PRs and CI fixes. Tests, builds and checks are scripts and use no model. Override either with `-i coding_model=opus`, for example.
 - Later rounds rerun only the reviews with no result, still blocking, or whose repo changed. With the default `review_mode=parallel` a review can also run on a round whose jobs fail, which costs review tokens but saves a round; `on_green` saves those tokens.
 - Re-reviews read only `wf.py delta`, the change since they last looked.
 - Each agent reads only the rule files mapped to the paths it touches, and the diff.
@@ -233,12 +229,12 @@ Always go through `run.sh`. It checks the machine, gives the feature its own wor
 ```bash
 R=workflows/benefit-feature/run.sh
 $R check                       # preflight only: tools, gh login, permissions file, repos (changes nothing)
-$R start 003                   # start; pr_mode draft (default: draft PRs, ready once CI is green) | ask | none
+$R start 003                   # start: agents decide, then draft PRs, ready once CI is green
 $R watch 003                   # live view of 003's latest run (second terminal), with a macOS notification
                                # when it waits for you, fails or finishes; Ctrl+C stops watching only
 $R status 003                  # the engine's own summary (a run id or NNN; nothing = the latest of any run)
 $R resume 003                  # continue 003's latest run after fixing what stopped it
-$R resume <run-id> -i pr_verdict=approve      # answer a gate, only after you decided
+$R resume <run-id> -i spec_verdict=approve    # answer the spec gate, only after you decided
 $R worktrees                   # each feature worktree: branches, changed files, latest run
 $R cleanup 003                 # after the PRs merge: remove 003's worktrees (asks; keeps the branches)
 $R prepare 003                 # only create or refresh the worktree, e.g. to work in it by hand
@@ -262,7 +258,7 @@ Inside it every path is the same as in the checkout (`repos/<name>`, `specs/…`
 - Each clone worktree gets its own `.venv` and `node_modules` (`uv sync`, `pnpm install`, quick from their caches) and a copy of the main clone's `.env`. All worktrees share the main clone's local `mongod` (`MONGO_DIR`), so integration tests of two runs at the same time share one database.
 
 **What `start` does before the engine runs:**
-- checks that `specify`, `claude`, `git`, `gh` (logged in, unless `pr_mode=none`), `uv`, `pnpm` and `make` are installed, and that `.claude/settings.json` is valid and allows every command the agents need (`scripts/check_permissions.py`)
+- checks that `specify`, `claude`, `git`, `gh` (logged in), `uv`, `pnpm` and `make` are installed, and that `.claude/settings.json` is valid and allows every command the agents need (`scripts/check_permissions.py`)
 - fetches the main clones, then creates the feature's worktree, or reuses it on a restart. A new clone worktree starts its branch from `origin/main` (or from an existing local or remote `feature/NNN-name`). If a main clone still has that branch checked out from an in-place run, it is moved to `main` when clean, or `start` stops with the reason
 - with `--in-place`: puts each clone of the checkout on an up-to-date `main` instead (switches a clean clone that has nothing unpushed, fast-forwards it to `origin/main`, stops with the reason for anything else)
 - passes `.claude/settings.json` to every `claude -p` step with `--settings` (through `SPECKIT_INTEGRATION_CLAUDE_EXTRA_ARGS`)

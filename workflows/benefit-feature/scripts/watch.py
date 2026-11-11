@@ -28,7 +28,6 @@ STAGES = [
     ("plan_gate", "plan-gate", "script", []),
     ("decide", "Decision-maker settles open ADRs", "agent",
      ["decision_maker", "decisions_gate", "plan_update", "architect_update", "plan_recheck"]),
-    ("decision_questions", "Your decisions (decision_mode=ask)", "you", ["approve_decisions"]),
     ("tasks", "Tasks, tagged by lane", "agent", []),
     ("quality_engineer", "Quality engineer: test plan, QA tasks", "agent", []),
     ("tasks_gate", "tasks-gate", "script", []),
@@ -42,11 +41,12 @@ STAGES = [
     ("verify_init", "Clear earlier results", "script", []),
     ("verify_loop", "Verify loop (while it makes progress)", "agent",
      ["needs_fix", "maybe_fix", "fixes", "fix", "behind", "maybe_integrate", "integrate", "jobs_start",
-      "review_list", "reviews", "review", "jobs_wait", "verify_status"]),
+      "review_list", "reviews", "review", "jobs_wait", "verify_status", "e2e_phase"]),
     ("final_gate", "final-gate", "script", []),
-    ("pr_approval", "Approve the push (pr_mode=ask)", "you", ["approve_pr"]),
-    ("ship", "PRs, GitHub Actions (fix until green)", "agent",
-     ["create_pr", "ci_loop", "ci_needs_fix", "maybe_ci_fix", "ci_fix", "ci", "ci_gate"]),
+    ("create_pr", "Draft PRs", "agent", []),
+    ("ci_loop", "GitHub Actions (fix until green)", "agent", ["ci_needs_fix", "maybe_ci_fix", "ci_fix", "ci"]),
+    ("ci_gate", "ci-gate", "script", []),
+    ("ports_freed", "Ports freed", "script", []),
 ]
 # What a failure at each step usually means (mirrors skills/feature-workflow/SKILL.md).
 HINTS = {
@@ -61,6 +61,7 @@ HINTS = {
     "final_gate": "still blocking when the verify loop stopped (no progress, or 6 rounds); see review/verify.md",
     "ci": "GitHub Actions failed on a PR",
     "ci_gate": "GitHub Actions still red after 3 CI fix rounds; see review/ci.md",
+    "ports_freed": "one of this run's processes is still listening; see review/ports.md",
 }
 TOKEN = re.compile(r"[:./\[\]#]+")
 C = {"g": "32", "r": "31", "y": "33", "c": "36", "d": "2", "b": "1"}
@@ -163,13 +164,6 @@ def stage_rows(state, evs, now):
         secs = None
         if i["start"]:
             secs = ((i["end"] or now) - i["start"]).total_seconds()
-        # Gates that this run's settings switch off: say so up front instead of showing a pending "YOU".
-        inputs = state.get("inputs") or {}
-        off = {"pr_approval": inputs.get("pr_mode", "draft") != "ask" and f"pr_mode={inputs.get('pr_mode', 'draft')}: no approval",
-               "decision_questions": inputs.get("decision_mode", "auto") != "ask" and "decision_mode=auto: the decision-maker decides",
-               "spec_questions": inputs.get("decision_mode", "auto") == "ask" and "decision_mode=ask: you answer at the spec gate"}
-        if off.get(sid) and st in (None, "completed"):
-            st, note = "skipped", off[sid]
         rows.append((sid, label, who, st or "pending", secs, note))
     return rows
 
@@ -236,8 +230,22 @@ def artifacts(fd):
          (lambda c: (f"{c.get('failing')} failing" if c.get("failing") else "all green")
           + (", marked ready" if c.get("ready") else ""))(load(fd / "review" / "ci.json", {}) or {})
          if has("review/ci.json") else ""),
+        ("review/ports.md", has("review/ports.md"), ports_note(fd / "review" / "ports.md")),
     ]
     return rows
+
+
+def ports_note(path):
+    """One line from wf.py ports-freed's report: free, or what still listens."""
+    if not path.exists():
+        return ""
+    text = path.read_text(errors="ignore")
+    own = text.count("still listening, this run's own")
+    other = text.count("- warning: port")
+    stopped = text.count("- stopped:")
+    parts = [f"{own} of this run's still listening" if own else "nothing of this run's listening",
+             *([f"{stopped} stopped"] if stopped else []), *([f"{other} held by others (left alone)"] if other else [])]
+    return ", ".join(parts)
 
 
 def failure(state):
@@ -263,8 +271,7 @@ def render(run_dir, color=False):
     scol = {"completed": "g", "failed": "r", "paused": "y", "running": "c"}.get(status, "d")
     L = [paint(f"benefit-feature run {run_dir.name}", "b", color) + f"   {feature}   " +
          paint(status.upper(), scol, color) + (f"   {dur((now - created).total_seconds())} so far" if created else ""),
-         paint(f"pr_mode={inputs.get('pr_mode', '?')}  decision_mode={inputs.get('decision_mode', 'auto')}  "
-               f"trace_mode={inputs.get('trace_mode', '?')}", "d", color), ""]
+         paint(f"trace_mode={inputs.get('trace_mode', '?')}", "d", color), ""]
     icon = {"completed": ("✓", "g"), "running": ("▶", "c"), "failed": ("✗", "r"), "paused": ("⏸", "y"),
             "skipped": ("–", "d"), "stopped": ("■", "y"), "pending": ("·", "d")}
     for sid, label, who, st, secs, note in stage_rows(state, evs, now):
@@ -293,7 +300,7 @@ def render(run_dir, color=False):
                          "an interrupted session. Start runs with run.sh, which passes the agents' permissions.)")
         L += ["", f"   fix it, then continue:  {here} resume {run_dir.name}"]
     elif status == "paused":
-        gate = {"approve_spec": "spec_verdict", "approve_decisions": "decision_verdict", "approve_pr": "pr_verdict"}
+        gate = {"approve_spec": "spec_verdict"}
         cur = state.get("current_step_id", "")
         verdict = next((v for k, v in gate.items() if k in cur), None)
         L += ["", paint(f"Waiting for you at '{cur}'", "y", color)]

@@ -126,7 +126,7 @@ class WfCase(unittest.TestCase):
 class Gates(WfCase):
     def test_prepare_selects_spec_and_counts_open_questions(self):
         self.write("spec.md", SPEC + "\n[NEEDS CLARIFICATION: which timezone?]\n")
-        code, data, _ = self.wf("prepare", "010", "draft", "strict")
+        code, data, _ = self.wf("prepare", "010", "strict")
         self.assertEqual(code, 0)
         self.assertEqual((data["feature_dir"], data["branch"], data["open"]), (FD, "feature/010-demo", 1))
         self.assertTrue((self.root / ".specify" / "feature.json").exists())
@@ -134,19 +134,23 @@ class Gates(WfCase):
     def test_prepare_accepts_number_folder_name_or_path(self):
         for arg in ("010", "010-demo", "specs/010-demo"):
             with self.subTest(arg):
-                code, data, _ = self.wf("prepare", arg, "ask", "strict")
+                code, data, _ = self.wf("prepare", arg, "strict")
                 self.assertEqual((code, data.get("feature_dir")), (0, FD), data)
 
-    def test_prepare_accepts_every_pr_mode(self):
-        for mode in ("draft", "ask", "none"):
-            with self.subTest(mode):
-                self.assertEqual(self.wf("prepare", "010", mode, "strict")[0], 0)
-        self.assertEqual(self.wf("prepare", "010", "ready", "strict")[0], 1)
+    def test_there_are_no_modes_left(self):
+        # One way only: agents decide, then draft PRs. An old-style mode argument is a usage error.
+        data = self.wf("prepare", "010", "strict")[1]
+        self.assertNotIn("pr_mode", data)
+        self.assertNotIn("decision_mode", data)
+        self.assertEqual(self.wf("prepare", "010", "draft", "strict")[0], 2)
+        wf = (WF.parents[1] / "workflow.yml").read_text()
+        for gone in ("pr_mode", "decision_mode", "pr_verdict", "decision_verdict", "approve_pr", "approve_decisions"):
+            self.assertNotIn(gone, wf)
 
     def test_a_new_run_clears_an_earlier_runs_lane_reports_and_knows_it_is_an_update(self):
         self.write("lanes/workflows-lane/done.json", json.dumps({"tasks": ["T002"]}))
         self.write("lanes/workflows-lane/blocked.md", "old note\n")
-        code, data, _ = self.wf("prepare", "010", "draft", "strict")
+        code, data, _ = self.wf("prepare", "010", "strict")
         self.assertEqual(code, 0)
         self.assertTrue(data["update"], "tasks.md exists, so this run updates an earlier one")
         self.assertEqual(len(data["cleared_lane_reports"]), 2)
@@ -154,10 +158,10 @@ class Gates(WfCase):
         self.assertFalse((self.fd / "lanes/workflows-lane/blocked.md").exists())
 
     def test_prepare_rejects_bad_inputs_and_bad_spec(self):
-        self.assertEqual(self.wf("prepare", "010", "yolo", "strict")[0], 1)
-        self.assertEqual(self.wf("prepare", "999", "draft", "strict")[0], 1)
+        self.assertEqual(self.wf("prepare", "010", "yolo")[0], 1)
+        self.assertEqual(self.wf("prepare", "999", "strict")[0], 1)
         self.write("spec.md", "# no sections\n")
-        code, data, _ = self.wf("prepare", "010", "draft", "strict")
+        code, data, _ = self.wf("prepare", "010", "strict")
         self.assertEqual(code, 1)
         self.assertTrue(any("User Scenarios" in p for p in data["problems"]))
 
@@ -208,7 +212,7 @@ class Gates(WfCase):
     def test_clarify_gate_counts_what_is_left_and_checks_each_answer_is_recorded(self):
         self.write("spec.md", SPEC + "\n[NEEDS CLARIFICATION: which timezone?]\n")
         code, data, _ = self.wf("clarify-gate", FD)
-        self.assertEqual((code, data["open"]), (0, 1), "no clarifier ran (decision_mode=ask): the gate asks a person")
+        self.assertEqual((code, data["open"]), (0, 1), "no clarifier answered it: the gate asks a person")
         answered = SPEC + "\n## Clarifications\n### Session 2026-11-10 (automated)\n- Q: which timezone? → A: UTC\n"
         self.write("spec.md", answered)
         self.write("clarifications.json", json.dumps([{"question": "which timezone?", "answer": "UTC",
@@ -348,11 +352,6 @@ class Decisions(WfCase):
                 code, data, _ = self.wf("decisions-gate", FD)
                 self.assertEqual(code, 1, f"{label}: {data}")
 
-    def test_prepare_checks_decision_mode(self):
-        self.assertEqual(self.wf("prepare", "010", "draft", "strict", "auto")[1]["decision_mode"], "auto")
-        self.assertEqual(self.wf("prepare", "010", "draft", "strict")[1]["decision_mode"], "auto")
-        self.assertEqual(self.wf("prepare", "010", "draft", "strict", "maybe")[0], 1)
-
 
 class Trace(WfCase):
     def test_passes_when_every_planned_test_is_defined(self):
@@ -430,8 +429,9 @@ class ScriptJobs(WfCase):
         self.assertEqual(data["jobs"], ["ownership", "tasks", "trace:warn"])
         self.repo_file("benefit-be", "packages/agents/prompt.py", "x = 1\n")
         code, data, _ = self.wf("jobs", FD)
-        self.assertEqual(data["jobs"], ["e2e", "benefit-be:check", "benefit-be:eval", "main", "ownership", "tasks",
-                                        "trace:strict"], "e2e, the longest job, starts first")
+        self.assertEqual(data["jobs"], ["benefit-be:check", "benefit-be:eval", "main", "ownership", "tasks",
+                                        "trace:strict"], "e2e isn't a first-phase job")
+        self.assertTrue(data["e2e"], "a code change needs e2e, in the round's second phase")
 
     def test_a_repo_job_with_no_target_warns_instead_of_passing_silently(self):
         res = self.job("benefit-be:eval")
@@ -487,6 +487,29 @@ class ScriptJobs(WfCase):
         for repo in ("benefit-be", "benefit-fe"):
             self.assertEqual(subprocess.run(["git", "diff", "--cached", "--name-only"], cwd=self.root / "repos" / repo,
                                             capture_output=True, text=True).stdout, "")
+
+    def test_e2e_runs_on_its_own_free_ports_even_when_a_stack_port_is_busy(self):
+        """A repo with verify-stack (isolated mode) runs e2e beside another stack instead of skipping it."""
+        with socket.socket() as busy:
+            busy.bind(("127.0.0.1", 0))
+            busy.listen()
+            self.repo_file("benefit-be", "Makefile", "verify-stack:\n\t@touch ran\n")
+            with mock.patch.dict(os.environ, {"WF_STACK_PORTS": str(busy.getsockname()[1])}):
+                res = self.job("e2e")
+        self.assertEqual((res["status"], res["cmd"]), ("pass", "make verify-stack"))
+        self.assertTrue((self.root / "repos/benefit-be/ran").exists())
+
+    def test_e2e_fails_when_a_port_its_run_used_is_still_in_use(self):
+        with socket.socket() as left:
+            left.bind(("127.0.0.1", 0))
+            left.listen()
+            port = left.getsockname()[1]
+            # the run reports its ports in the file the job names, then exits leaving one of them open
+            self.repo_file("benefit-be", "Makefile",
+                           "verify-stack:\n\t@printf '{\"ports\": {\"api\": %s}}' > \"$$VERIFY_PORTS_FILE\"\n" % port)
+            res = self.job("e2e")
+        self.assertEqual(res["status"], "fail")
+        self.assertIn(f"port {port} (api) still in use after the e2e run", res["problems"][-1])
 
     def test_e2e_runs_only_the_stack_stages_when_the_repo_has_them(self):
         self.repo_file("benefit-be", "Makefile", "verify:\n\texit 1\nverify-stack:\n\t@true\n")
@@ -619,6 +642,61 @@ class VerifyLoop(WfCase):
         self.result("compliance", blocking_reviews)
         return self.wf("verify-status", FD)[1]
 
+    def code_change(self):
+        self.repo_file("benefit-be", "apps/api/x.py", "x = 1\n")
+        self.repo_file("benefit-be", "Makefile", "verify-stack:\n\t@touch e2e-ran\n")
+
+    def test_e2e_is_pending_and_not_run_while_another_job_fails(self):
+        self.code_change()
+        self.write("review/jobs/ownership.json", json.dumps({"job": "ownership", "status": "fail"}))
+        for n in ("compliance", "code-benefit-be", "code-benefit-fe"):
+            self.result(n, 0)
+        st = self.wf("verify-status", FD)[1]
+        self.assertEqual((st["blocking"], st["e2e"]), (1, "pending"), "pending isn't a blocker in itself")
+        self.assertIn("pending", (self.fd / "review" / "verify.md").read_text())
+        st = self.wf("e2e-phase", FD)[1]
+        self.assertFalse(st["ran"])
+        self.assertFalse((self.root / "repos/benefit-be/e2e-ran").exists())
+
+    def test_e2e_is_pending_while_a_review_blocks(self):
+        self.code_change()
+        st = self.status_with(1)
+        self.assertEqual(st["e2e"], "pending")
+        self.assertFalse(self.wf("e2e-phase", FD)[1]["ran"])
+        self.assertFalse((self.root / "repos/benefit-be/e2e-ran").exists())
+
+    def test_e2e_runs_once_everything_else_is_green_in_the_same_round(self):
+        self.code_change()
+        self.status_with(2)
+        st = self.status_with(0)
+        self.assertEqual((st["blocking"], st["e2e"]), (0, "pending"))
+        st = self.wf("e2e-phase", FD)[1]
+        self.assertEqual((st["e2e"], st["blocking"], st["continue"]), ("pass", 0, False))
+        self.assertTrue((self.root / "repos/benefit-be/e2e-ran").exists())
+        self.assertEqual(st["history"], [2, 0], "e2e joins the round it ran in, not a new one")
+        self.assertEqual(self.wf("final-gate", FD)[0], 0)
+
+    def test_a_failing_e2e_blocks_and_the_next_round_fixes_it(self):
+        self.code_change()
+        self.repo_file("benefit-be", "Makefile", "verify-stack:\n\texit 1\n")
+        self.status_with(0)
+        st = self.wf("e2e-phase", FD)[1]
+        self.assertEqual((st["e2e"], st["blocking"], st["continue"]), ("fail", 1, True))
+        self.assertEqual(self.wf("needs-fix", FD)[1]["fix_items"], ["all"])
+
+    def test_the_final_gate_blocks_without_a_passing_e2e(self):
+        self.code_change()
+        st = self.status_with(0)
+        self.assertEqual(st["e2e"], "pending")
+        code, _, _ = self.wf("final-gate", FD)
+        self.assertEqual(code, 1, "e2e never ran")
+
+    def test_no_e2e_needed_for_a_change_without_code(self):
+        self.repo_file("benefit-be", "docs/notes.md", "x\n")
+        st = self.status_with(0)
+        self.assertEqual(st["e2e"], "not needed")
+        self.assertEqual(self.wf("final-gate", FD)[0], 0)
+
     def test_the_loop_keeps_going_while_it_makes_progress(self):
         rounds = [self.status_with(n) for n in (5, 3, 2, 1)]
         self.assertEqual([r["continue"] for r in rounds], [True, True, True, True])
@@ -636,12 +714,19 @@ class VerifyLoop(WfCase):
         self.assertEqual(rounds[-1]["continue"], False)
         self.assertIn("6 rounds", rounds[-1]["why"])
 
-    def test_later_fixes_use_the_judgement_model(self):
+    def test_every_fix_uses_the_coding_model(self):
         models = []
         for n in (4, 3, 2):
             self.status_with(n)
             models.append(self.wf("needs-fix", FD, "sonnet", "opus")[1]["fix_model"])
-        self.assertEqual(models, ["sonnet", "opus", "opus"])
+        self.assertEqual(models, ["sonnet", "sonnet", "sonnet"])
+
+    def test_only_judgement_steps_use_the_judgement_model(self):
+        import re
+        text = (WF.parents[1] / "workflow.yml").read_text()
+        steps = re.findall(r"- id: (\w+)\n(?:(?!- id:).)*?model: \"\{\{ inputs\.judgement_model \}\}\"", text, re.S)
+        self.assertEqual(sorted(set(steps)), sorted({"spec_clarifier", "architect", "decision_maker", "architect_update",
+                                                     "quality_engineer", "start_integrator", "integrate", "reviews"}))
 
     def test_first_round_needs_no_fix(self):
         self.wf("verify-init", FD)
@@ -743,6 +828,98 @@ class VerifyLoop(WfCase):
         self.assertEqual(self.wf("final-gate", FD)[0], 1)
 
 
+LISTENER = """
+import signal, socket, sys, time
+if sys.argv[2] == "stubborn":
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+s = socket.socket()
+s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+s.bind(("127.0.0.1", int(sys.argv[1])))
+s.listen()
+print("up", flush=True)
+time.sleep(120)
+"""
+# Respawns its listener whenever it dies: a process of this run that survives being stopped.
+SUPERVISOR = """
+import subprocess, sys
+while True:
+    subprocess.run([sys.executable, "-c", sys.argv[1], sys.argv[2], "plain"])
+"""
+
+
+class PortsFreed(WfCase):
+    def setUp(self):
+        super().setUp()
+        self.procs = []
+
+    def tearDown(self):
+        for p in self.procs:
+            p.kill()
+            p.wait()
+        super().tearDown()
+
+    def free_port(self):
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", 0))
+            return s.getsockname()[1]
+
+    def listen(self, cwd, port, mode="plain", script=LISTENER):
+        cwd.mkdir(parents=True, exist_ok=True)
+        args = [sys.executable, "-c", script] + ([LISTENER, str(port)] if script is SUPERVISOR else [str(port), mode])
+        p = subprocess.Popen(args, cwd=cwd, stdout=subprocess.DEVNULL)
+        self.procs.append(p)
+        import time
+        for _ in range(50):
+            with socket.socket() as s:
+                if s.connect_ex(("127.0.0.1", port)) == 0:
+                    return p
+            time.sleep(0.1)
+        self.fail("the listener didn't start")
+
+    def record(self, *ports):
+        self.repo_file("benefit-be", ".data/verify/ports.json",
+                       json.dumps({"ports": {f"p{i}": p for i, p in enumerate(ports)}, "pids": []}))
+
+    def ports_freed(self):
+        with mock.patch.dict(os.environ, {"WF_DEFAULT_STACK_PORTS": ""}):
+            return self.wf("ports-freed", FD)
+
+    def test_nothing_listening(self):
+        self.record(self.free_port())
+        code, data, _ = self.ports_freed()
+        self.assertEqual((code, data["stopped"], data["foreign"], data["survivors"]), (0, [], [], []))
+        self.assertIn("all free", (self.fd / "review" / "ports.md").read_text())
+
+    def test_a_listener_this_run_started_is_stopped(self):
+        port = self.free_port()
+        p = self.listen(self.root / "repos" / "benefit-be", port, "stubborn")  # ignores SIGTERM: SIGKILL after
+        self.record(port)
+        code, data, _ = self.ports_freed()
+        self.assertEqual(code, 0)
+        self.assertEqual([s["port"] for s in data["stopped"]], [port])
+        self.assertIsNotNone(p.poll(), "the listener is gone")
+        self.assertIn(f"stopped: port {port}", (self.fd / "review" / "ports.md").read_text())
+
+    def test_a_listener_from_elsewhere_is_left_alone_and_reported(self):
+        port = self.free_port()
+        p = self.listen(self.root / "elsewhere" / "benefit-be", port)
+        self.record(port)
+        code, data, _ = self.ports_freed()
+        self.assertEqual(code, 0, "someone else's listener is a warning, not a failure")
+        self.assertEqual([(f["port"], f["pid"]) for f in data["foreign"]], [(port, p.pid)])
+        self.assertIsNone(p.poll(), "never touched")
+        self.assertIn(f"held by pid {p.pid}", (self.fd / "review" / "ports.md").read_text())
+
+    def test_a_process_of_this_run_that_survives_fails(self):
+        port = self.free_port()
+        self.listen(self.root / "repos" / "benefit-be", port, script=SUPERVISOR)
+        self.record(port)
+        code, data, _ = self.ports_freed()
+        self.assertEqual(code, 1)
+        self.assertEqual([s["port"] for s in data["survivors"]], [port])
+        self.assertIn("still listening, this run's own", (self.fd / "review" / "ports.md").read_text())
+
+
 class WorkflowFile(unittest.TestCase):
     """workflow.yml passes Spec Kit's own validator (step types, ids, expressions, gates, fan-out templates)."""
 
@@ -784,7 +961,7 @@ class Monitor(unittest.TestCase):
                                                for i, e in enumerate(events)))
         (d / "state.json").write_text(json.dumps({"status": status, "current_step_id": current,
                                                   "created_at": t.format(0), "step_results": results or {}}))
-        (d / "inputs.json").write_text(json.dumps({"inputs": {"feature": "010-demo", "pr_mode": "ask"}}))
+        (d / "inputs.json").write_text(json.dumps({"inputs": {"feature": "010-demo"}}))
         return d
 
     def watch(self):
@@ -814,11 +991,11 @@ class Monitor(unittest.TestCase):
         self.assertIn("run.sh resume abc12345", out)
 
     def test_a_paused_run_shows_the_gate_and_its_verdict_input(self):
-        self.run_dir("paused", [{"event": "step_started", "step_id": "pr_approval"},
-                                {"event": "step_started", "step_id": "pr_approval:approve_pr"}], "approve_pr")
+        self.run_dir("paused", [{"event": "step_started", "step_id": "spec_gate"},
+                                {"event": "step_started", "step_id": "spec_gate:approve_spec"}], "approve_spec")
         out = self.watch()
-        self.assertIn("Waiting for you at 'approve_pr'", out)
-        self.assertIn("-i pr_verdict=approve", out)
+        self.assertIn("Waiting for you at 'approve_spec'", out)
+        self.assertIn("-i spec_verdict=approve", out)
 
     def test_an_if_stage_counts_as_running_while_its_inner_step_runs(self):
         ev = lambda e, sid, **k: {"event": e, "step_id": sid, **k}
@@ -898,7 +1075,7 @@ class GitHubActions(WfCase):
 
     def test_a_red_check_is_reported_with_its_log_and_goes_to_the_fix_step(self):
         bin_dir = self.fake_gh(green=False)
-        code, data, _ = self.wf("ci-wait", FD, "draft", path_prefix=bin_dir)
+        code, data, _ = self.wf("ci-wait", FD, path_prefix=bin_dir)
         self.assertEqual(code, 0, "ci-wait never fails; ci-gate decides after the fix rounds")
         self.assertEqual((data["ci"], data["failing"], data["ready"]), ({"benefit-be": "fail"}, 1, []))
         report = (self.fd / "review" / "ci.md").read_text()
@@ -911,16 +1088,16 @@ class GitHubActions(WfCase):
 
     def test_all_green_marks_a_draft_ready_for_review(self):
         bin_dir = self.fake_gh(green=True)
-        code, data, _ = self.wf("ci-wait", FD, "draft", path_prefix=bin_dir)
+        code, data, _ = self.wf("ci-wait", FD, path_prefix=bin_dir)
         self.assertEqual((code, data["failing"]), (0, 0))
         self.assertEqual(data["ready"], ["https://github.com/o/benefit-be/pull/2"])
         self.assertIn("pr ready https://github.com/o/benefit-be/pull/2", self.calls())
         self.assertEqual(self.wf("ci-gate", FD)[0], 0)
 
-    def test_ask_mode_leaves_the_pr_as_it_is(self):
-        bin_dir = self.fake_gh(green=True)
-        self.assertEqual(self.wf("ci-wait", FD, "ask", path_prefix=bin_dir)[1]["ready"], [])
-        self.assertNotIn("pr ready", self.calls())
+    def test_a_run_started_before_the_modes_went_still_marks_ready(self):
+        bin_dir = self.fake_gh(green=True)  # its saved workflow still passes pr_mode: ignored
+        self.assertEqual(self.wf("ci-wait", FD, "ask", path_prefix=bin_dir)[1]["ready"],
+                         ["https://github.com/o/benefit-be/pull/2"])
 
 
 if __name__ == "__main__":

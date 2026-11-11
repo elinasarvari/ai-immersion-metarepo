@@ -40,7 +40,7 @@ python3 workflows/benefit-feature/scripts/wf.py plan-gate <feature_dir>   # plan
 Fix anything it reports before finishing. The workflow runs the same gate after this step and stops on a failure.
 
 ## 5. Open items
-Leave every `Needs decision` and `Proposed – needs amendment` ADR open, with its options and your recommendation; the plan assumes the recommendation. They're settled separately: in a workflow run by the decision-maker agent (`decision_mode=auto`, the default) or at the decision gate (`ask`); in chat, ask the user, or run the decision-maker agent if they say to decide for them (`architecture-decision` step 9).
+Leave every `Needs decision` and `Proposed – needs amendment` ADR open, with its options and your recommendation; the plan assumes the recommendation. They're settled separately: in a workflow run by the decision-maker agent; in chat, ask the user, or run the decision-maker agent if they say to decide for them (`architecture-decision` step 9).
 
 ## 6. Report
 ≤10 lines: the files written, ADR counts by status, the open questions with recommendations, and the scope.

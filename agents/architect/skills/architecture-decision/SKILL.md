@@ -123,7 +123,7 @@ Rules for choosing:
 
 1. **Report** in the format in agent file, section 6, with **Needs a decision** and **Proposed – needs amendment** first.
 2. **Get the open items answered.** You never accept them yourself:
-   - **In a workflow run:** don't ask. Leave them open; the decision-maker agent decides them (`decision_mode=auto`, the default), or the user does at the decision gate (`ask`).
+   - **In a workflow run:** don't ask. Leave them open; the decision-maker agent decides them.
    - **In chat:** ask the user and wait. When they answer, record it in the ADR: set the status to `Accepted` and write their choice and reason in the Decision section, noting "Decided by <user>, <date>". If they say to decide for them, run the decision-maker agent (`agents/decision-maker.agent.md`) as a subagent instead.
    - **`Proposed – needs amendment`:** the plan uses a compliant fallback. The decision-maker accepts the best compliant option and keeps the amendment as a suggestion; constitution and rule changes need all three team members (Governance), through a PR.
 3. **Hand over.** Return to `architecture-plan` (step 3) if it called you. The plan follows every `Accepted` ADR, uses the fallback of each `Proposed – needs amendment` ADR, and lists open ADRs as open questions.

@@ -97,7 +97,7 @@ PARALLEL  one session per lane: implement (tests first), own unit tests green, s
 CHAIN     QA step, only for what needed the lanes' code
 VERIFY    while it makes progress, ≤6 rounds: [fixers, one per repo in parallel] → tests, builds, evals, e2e,
           ownership, tasks, trace in the background, and meanwhile only the reviews that need it → status
-CHAIN     final-gate → draft PRs on feature/NNN-name (never main) · [you] first only with pr_mode=ask
+CHAIN     final-gate → draft PRs on feature/NNN-name (never main)
 GITHUB    GitHub Actions, ≤3 rounds: red → CI fix pushes to the feature branch → CI again · all green → ready for review
 ```
 
@@ -124,13 +124,9 @@ workflows/benefit-feature/run.sh check        # preflight: tools, gh login, agen
 workflows/benefit-feature/run.sh start 001
 ```
 
-| `pr_mode` (2nd argument) | What happens at the end |
-|---|---|
-| `draft` (default) | pushes the feature branch, opens draft PRs, fixes GitHub Actions failures, marks the PRs ready for review when all green |
-| `ask` | waits for your approval before pushing, then opens PRs ready for review and runs the same CI loop |
-| `none` | stops before pushing: a rehearsal |
+There are no modes: the run answers open spec questions and decides open ADRs with its agents (each listed in the PR), and once everything passes it pushes the feature branch, opens draft PRs, fixes GitHub Actions failures and marks the PRs ready for review when all green. Starting the run is your approval to push the feature branch (never `main`).
 
-Other inputs: `-i decision_mode=ask` (you answer open spec questions and decide open ADRs instead of the spec clarifier and the decision-maker), `-i review_mode=on_green` (reviews only once the tests pass: fewer tokens, usually one more round), `-i coding_model=opus` (default `sonnet` for tasks, code, fixes and PRs), `-i judgement_model=…` (default `opus` for plan, decisions, test design and reviews), `-i trace_mode=warn`.
+Optional inputs: `-i review_mode=on_green` (reviews only once the tests pass: fewer tokens, usually one more round), `-i coding_model=opus` (default `sonnet` for tasks, code, fixes and PRs), `-i judgement_model=…` (default `opus` for plan, decisions, test design and reviews), `-i trace_mode=warn`.
 
 **3. Watch it** (terminal 2). It refreshes every 5 s and shows a macOS notification when the run waits for you, fails or finishes; Ctrl+C stops only the view:
 
@@ -142,7 +138,7 @@ workflows/benefit-feature/run.sh watch 001
 
 ```bash
 workflows/benefit-feature/run.sh resume 001
-workflows/benefit-feature/run.sh resume 001 -i pr_verdict=approve    # only to answer a gate you decided
+workflows/benefit-feature/run.sh resume 001 -i spec_verdict=approve  # only after you answered the spec's open questions
 ```
 
 **5. Review and merge** on GitHub. The PR lists the requirements covered, the verify and trace results, and every decision made automatically (ADR, option chosen, the architect's recommendation, when to revisit). Branch protection needs your approval to merge.
@@ -159,7 +155,7 @@ workflows/benefit-feature/run.sh cleanup 001       # remove the feature's worktr
 | Command | What it's for |
 |---|---|
 | `run.sh check` | preflight only; changes nothing |
-| `run.sh start <NNN> [draft\|ask\|none] [-i k=v …]` | start a feature in its own worktree (`<metarepo>.worktrees/<NNN-name>/`) |
+| `run.sh start <NNN> [-i k=v …]` | start a feature in its own worktree (`<metarepo>.worktrees/<NNN-name>/`) |
 | `run.sh start --in-place <NNN>` | start in this checkout instead, e.g. to try uncommitted workflow changes |
 | `run.sh prepare <NNN>` | only create or refresh the feature's worktree, to work in it by hand |
 | `run.sh watch [<NNN>\|<run-id>] [--once]` | live progress view; `--once` prints one snapshot |
@@ -193,7 +189,7 @@ workflows/benefit-feature/run.sh cleanup 001       # remove the feature's worktr
 
 Where a run writes: `specs/<NNN-name>/` (plan, `decisions/`, `tasks.md`, `test-plan.md`, `review/verify.md`, `review/trace.md`, `review/ci.md`, `review/prs.json`) and `.specify/workflows/runs/<run-id>/` (the engine's state), both inside the feature's worktree.
 
-- **People** are asked only for a spec question only a person can answer, an ADR with no compliant option, and before pushing with `pr_mode=ask`. Everything else is reviewed on the PR.
+- **People** are asked only for a spec question only a person can answer, and an ADR with no compliant option. Everything else is reviewed on the PR.
 - **Verification** (`wf.py`): one gate after each planning stage, every check on the code inside the verify loop so the fix step can repair it, then the reviews, then each repo's GitHub Actions with its own fix loop.
 - **Copilot** users follow the same stages by hand from [workflows/feature.md](workflows/feature.md).
 

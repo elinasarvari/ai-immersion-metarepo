@@ -9,10 +9,10 @@ Runs [workflows/benefit-feature/workflow.yml](../../workflows/benefit-feature/wo
 
 ## Start
 
-The spec must already exist (write it with `/speckit-specify` first). Ask which `pr_mode` the user wants unless they said: `draft` (default) pushes and opens draft PRs once everything passes, fixes GitHub Actions failures on the feature branch, and marks the PRs ready for review when CI is green; `ask` waits for their approval first and opens PRs ready for review; `none` never pushes. Starting with `draft` is their approval to push the feature branch and open PRs; nothing is ever pushed to `main`.
+The spec must already exist (write it with `/speckit-specify` first). There are no modes, so don't ask for one: the spec clarifier answers open spec questions, the decision-maker settles open ADRs, and once everything passes the run pushes the feature branch, opens draft PRs, fixes GitHub Actions failures on the feature branch and marks the PRs ready for review when CI is green. Asking to build or run the feature is the approval to push its feature branch and open PRs; nothing is ever pushed to `main`.
 
 ```bash
-workflows/benefit-feature/run.sh start <NNN> [draft|ask|none] [-i trace_mode=strict|warn] [-i decision_mode=auto|ask] [-i coding_model=sonnet|opus] [-i judgement_model=opus] < /dev/null
+workflows/benefit-feature/run.sh start <NNN> [-i trace_mode=strict|warn] [-i coding_model=sonnet|opus] [-i judgement_model=opus] < /dev/null
 ```
 
 Always use `run.sh`, never `specify workflow run` directly: it runs the preflight, creates the feature's own git worktree, and passes `.claude/settings.json` to every agent step with `--settings`, which works even if the folder was never trusted. Without it, agent steps can't write and end with "Prompt exited with code 1". Tell the user they can follow the run live with `workflows/benefit-feature/run.sh watch <NNN>` in a second terminal.
@@ -23,17 +23,17 @@ Always use `run.sh`, never `specify workflow run` directly: it runs the prefligh
 
 `run.sh worktrees` lists them. After the PRs merge, offer `run.sh cleanup <NNN>`. It deletes folders, so ask first, then pass `--yes`. It refuses while anything is uncommitted and keeps the branches.
 
-Note the `run_id`. Never pass a `*_verdict` input when starting. `decision_mode=auto` (the default) lets the spec-clarifier agent answer open spec questions and the decision-maker agent settle open ADRs; tell the user the draft PRs list each answer and decision for review. Use `ask` only if they want to decide themselves.
+Note the `run_id`. Never pass `spec_verdict` when starting. Tell the user the draft PRs list each spec answer and ADR decision the agents made, for review there.
 
 ## Pauses (only when a person is needed)
 
 | Gate | When | Show | Resume with |
 |---|---|---|---|
-| `approve_spec` | the spec clarifier left a question only a person can answer (why: `clarifications.json`), or `decision_mode=ask` and the spec has `[NEEDS CLARIFICATION]` | `spec.md` | `spec_verdict` |
-| `approve_decisions` | only with `decision_mode=ask`: an ADR is `Needs decision` or needs an amendment | `decisions/README.md` | `decision_verdict` |
-| `approve_pr` | `pr_mode=ask` | `review/verify.md`, `review/trace.md`, the diff | `pr_verdict` |
+| `approve_spec` | the spec clarifier left a question only a person can answer (why: `clarifications.json`) | `spec.md` | `spec_verdict` |
 
-Help the user answer (edit the worktree's `spec.md`, or record the ADR answer per `architecture-decision` step 9 in the worktree's `decisions/`). Only after their explicit answer: `workflows/benefit-feature/run.sh resume <run_id> -i <input>=approve|reject < /dev/null`. Never answer for them, and never use one gate's input for another.
+Help the user answer in the worktree's `spec.md`. Only after their explicit answer: `workflows/benefit-feature/run.sh resume <run_id> -i spec_verdict=approve|reject < /dev/null`. Never answer for them. The only other stop for a person is `decisions_gate` (below), when the decision-maker finds no compliant option.
+
+A run started before the modes were removed may still pause at `approve_decisions` or `approve_pr`. For `approve_decisions`, run the decision-maker agent on the worktree's `decisions/` folder, check `wf.py decisions-gate`, then resume with `-i decision_verdict=approve`; for `approve_pr`, resume with `-i pr_verdict=approve` once `review/verify.md` shows nothing blocking.
 
 ## Failures
 

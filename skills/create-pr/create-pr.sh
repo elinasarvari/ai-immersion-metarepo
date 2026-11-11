@@ -13,6 +13,9 @@
 #   uses for this remote (no `gh auth login` needed). Checks this before pushing anything.
 # - With --no-pr, or after pushing, prints the compare URL so a PR can be opened in the browser.
 set -euo pipefail
+# Run as a git alias, git exports GIT_DIR (in a worktree: the metarepo's .git/worktrees/<name>). Left set, every
+# git command below would act on the metarepo instead of repos/<name>, even after the cd.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
 
 die() { echo "Error: $*" >&2; exit 1; }
 

@@ -4,7 +4,7 @@
 Exit codes: 0 = pass, 1 = the check failed (the workflow run stops there), 2 = usage error.
 
 Gates (one after each planning stage; the skills also run them as their self-check):
-  prepare     <feature> <pr_mode> <trace_mode> [decision_mode]  validates the inputs, selects the spec, checks spec.md
+  prepare     <feature> <trace_mode>            validates the inputs, selects the spec, checks spec.md
   clarify-gate <feature_dir>                    after the spec clarifier: answers recorded; how many questions are still open
   plan-gate   <feature_dir>                     plan.md, ADRs (decisions/) and scope.json (incl. the feature map's target repos); lists the open ADRs
   decisions-gate <feature_dir>                  after the decision-maker: none open, each recorded; does the plan need updating?
@@ -13,7 +13,7 @@ Gates (one after each planning stage; the skills also run them as their self-che
 
 Verify loop (every check runs here, so the fix step can repair any failure):
   verify-init <feature_dir>                     clears earlier results before the loop
-  needs-fix   <feature_dir> [coding judgement]  start of a round: what blocks, which fixers (one per repo, or `all`), which model
+  needs-fix   <feature_dir> [coding judgement]  start of a round: what blocks, which fixers (one per repo, or `all`), the fix model (always coding)
   behind      <feature_dir>                     the repos whose feature branch is behind origin/main (the integrator merges them)
   jobs        <feature_dir> [strict|warn]       lists this round's jobs (tests, builds, evals, script checks)
   jobs-start  <feature_dir> [strict|warn]       starts this round's jobs in the background (the reviews run meanwhile)
@@ -25,13 +25,16 @@ Verify loop (every check runs here, so the fix step can repair any failure):
                                                 new files included, independent of the git index (what a full review reads)
   delta       <feature_dir> <repo>              diff of <repo> since its last review (what a re-review reads)
   verify-status <feature_dir> [parallel|on_green]  merges jobs and reviews into review/verify.json and verify.md
+  e2e-phase   <feature_dir> [parallel|on_green] runs e2e once everything else in the round is green (else pending)
+  ports-freed <feature_dir>                     stops what this run left listening (stack and recorded ports);
+                                                reports others' listeners; fails if one of ours survives; ports.md
   final-gate  <feature_dir>                     fails unless the last round left nothing blocking
 
 Ship (CI loop: a failing check goes to a fix step, which pushes to the feature branch, then CI runs again):
   ci-needs-fix <feature_dir>                    start of a CI round: did the last CI run fail?
-  ci-wait     <feature_dir> [pr_mode]           waits for GitHub Actions on the PRs in review/prs.json; writes
+  ci-wait     <feature_dir>                     waits for GitHub Actions on the PRs in review/prs.json; writes
                                                 review/ci.md (failing checks with their log tails); never fails.
-                                                With pr_mode draft, marks the PRs ready for review once all green
+                                                Marks the draft PRs ready for review once all green
   ci-gate     <feature_dir>                     fails unless the last CI run passed
 
 Script jobs (run by `job`, also usable by hand): ownership, tasks, trace:strict, trace:warn, e2e, main.
@@ -186,12 +189,8 @@ def check_spec(d):
     return {"fr_count": len(defined), "open": len(open_items), "open_items": open_items, "problems": problems}
 
 
-def prepare(feature, pr_mode, trace_mode, decision_mode="auto"):
+def prepare(feature, trace_mode):
     problems = []
-    if decision_mode not in ("auto", "ask"):
-        problems.append(f"decision_mode must be auto or ask, got '{decision_mode}'")
-    if pr_mode not in ("draft", "ask", "none"):
-        problems.append(f"pr_mode must be draft, ask or none, got '{pr_mode}'")
     if trace_mode not in ("strict", "warn"):
         problems.append(f"trace_mode must be strict or warn, got '{trace_mode}'")
     if "/" in feature:  # specs/001-case-lifecycle
@@ -219,7 +218,7 @@ def prepare(feature, pr_mode, trace_mode, decision_mode="auto"):
     spec = check_spec(d)
     out({"feature_dir": r, "feature": d.name, "branch": f"feature/{d.name}", "spec_file": f"{r}/spec.md",
          "update": existing, "cleared_lane_reports": cleared,
-         "review_dir": f"{r}/review", "pr_mode": pr_mode, "trace_mode": trace_mode, "decision_mode": decision_mode, **spec,
+         "review_dir": f"{r}/review", "trace_mode": trace_mode, **spec,
          "problems": problems + spec["problems"]}, ok=not (problems or spec["problems"]))
 
 
@@ -681,6 +680,25 @@ def ports():
     out({"busy": [{"port": p, "holder": h} for p, h in busy_ports()]})
 
 
+def port_listening(port):
+    for fam, host in ((socket.AF_INET, "127.0.0.1"), (socket.AF_INET6, "::1")):
+        try:
+            with socket.socket(fam, socket.SOCK_STREAM) as sk:
+                sk.settimeout(0.5)
+                if sk.connect_ex((host, port)) == 0:
+                    return True
+        except OSError:
+            pass
+    return False
+
+
+def ports_still_listening(ports_file):
+    """[(name, port)] of the ports an isolated e2e run used that something still listens on."""
+    rec = load_json(ports_file, {}) or {}
+    ports = rec.get("ports") if isinstance(rec, dict) else None
+    return [(n, int(p)) for n, p in (ports or {}).items() if str(p).isdigit() and port_listening(int(p))]
+
+
 def make_has(rd, target):
     mf = rd / "Makefile"
     return mf.exists() and re.search(rf"^{re.escape(target)}:", mf.read_text(), re.M)
@@ -697,20 +715,25 @@ def repo_job_cmd(repo, kind):
     return None
 
 
+def needs_e2e(d):
+    """e2e (with the integration tests, which `make verify-stack` runs) is needed when the feature changes code."""
+    return any(repo == "benefit-fe" or any(re.match(r"(apps|packages|db)/", f) for f in files)
+               for repo in REPOS for files in [changed_files(repo)] if files)
+
+
 def job_names(d, trace_mode):
-    js, e2e = [], False
+    """The jobs of a round's first phase. e2e isn't one: it runs once, after everything else is green (e2e-phase)."""
+    js = []
     for repo in REPOS:
         files = changed_files(repo)
         if not files:
             continue
-        e2e = e2e or repo == "benefit-fe" or any(re.match(r"(apps|packages|db)/", f) for f in files)
         js.append(f"{repo}:check")
         if repo == "benefit-fe":
             js.append(f"{repo}:build")
         if repo == "benefit-be" and any(re.match(r"(packages/agents|packages/rag|evals)/", f) for f in files):
             js.append(f"{repo}:eval")
-    # e2e first: it is the longest, so it starts first
-    return (["e2e"] if e2e else []) + js + (["main"] if js else []) + ["ownership", "tasks", f"trace:{trace_mode}"]
+    return js + (["main"] if js else []) + ["ownership", "tasks", f"trace:{trace_mode}"]
 
 
 def clear_jobs(d):
@@ -724,10 +747,10 @@ def clear_jobs(d):
 
 def jobs(d, trace_mode):
     clear_jobs(d)
-    out({"jobs": job_names(d, trace_mode)})
+    out({"jobs": job_names(d, trace_mode), "e2e": bool(needs_e2e(d))})
 
 
-JOB_WORKERS = 6       # heavy jobs (check, build, eval, e2e) are at most 5; the script checks take seconds
+JOB_WORKERS = 6       # heavy jobs (check, build, eval) are at most 4; the script checks take seconds
 JOBS_TIMEOUT = 3700   # seconds jobs-wait waits for the runner (each job's command stops itself at 3600)
 
 
@@ -914,7 +937,20 @@ def job(d, name):
             f"repos/{r['repo']}: {r['behind']} commit(s) behind origin/main"
             + (f", would conflict in {', '.join(r['conflicts'])}" if r["conflicts"] else "")
             + "; the integrator merges it at the start of the next round" for r in rs])
-    elif name == "e2e":  # the stack and e2e, the way CI's e2e job runs them
+    elif name == "e2e" and make_has(repo_dir("benefit-be"), "verify-stack"):
+        # Integration, stack, api and e2e tests on an isolated stack: benefit-be's verify.py picks free ports,
+        # starts its own MongoDB, Temporal and app on them, stops all of it and checks the ports are free again.
+        # The job checks that too, from the ports file the run writes.
+        ports_file = jd / "e2e-ports.json"
+        ports_file.unlink(missing_ok=True)
+        os.environ["VERIFY_PORTS_FILE"] = str(ports_file)
+        res["cmd"] = "make verify-stack"
+        run_in_repo("benefit-be", res["cmd"], res, jd / "e2e.log", stage=REPOS)
+        still = ports_still_listening(ports_file)
+        if still:
+            res.update(status="fail", problems=[*res.get("problems", []), *[
+                f"port {p} ({n}) still in use after the e2e run: its stack didn't stop" for n, p in still]])
+    elif name == "e2e":  # an older branch: `make verify` on the default ports, the way CI's e2e job runs them
         busy = busy_ports()
         if busy:  # never borrow or wipe another stack (make verify runs make reset); CI still runs e2e on the PR
             res.update(status="warn", problems=[f"e2e didn't run here: port {p} is in use ({h}). Stop that stack to "
@@ -986,13 +1022,13 @@ def fix_items(d, st):
 
 
 def needs_fix(d, coding_model="sonnet", judgement_model="opus"):
-    """Start of a round. The first fix uses the coding model; once a fix has already been tried, what is left
-    is the hard part, so later fixes use the judgement model."""
+    """Start of a round. Every fix uses the coding model: fixing follows the plan, the tests and the review
+    findings, so it is implementation, not judgement. judgement_model is accepted for older workflow files."""
     st = load_json(d / "review" / "verify.json")
     blocking = int(st.get("blocking", 99)) if isinstance(st, dict) else 0  # no result yet = first round
     items = fix_items(d, st) if isinstance(st, dict) and blocking > 0 else []
     rounds = len(history(d))
-    model = coding_model if rounds <= 1 else judgement_model
+    model = coding_model
     out({"fix": bool(items), "blocking": blocking, "fix_items": items, "round": rounds + 1, "fix_model": model})
 
 
@@ -1009,7 +1045,7 @@ def keep_going(h):
 
 
 def failing_jobs(d):
-    res = [load_json(f, {}) or {} for f in sorted((d / "review" / "jobs").glob("*.json"))]
+    res = [load_json(f, {}) or {} for f in sorted((d / "review" / "jobs").glob("*.json")) if f.name != "e2e-ports.json"]
     return [j.get("job", "?") for j in res if j.get("status") not in ("pass", "warn")]
 
 
@@ -1072,9 +1108,15 @@ def delta(d, repo):
     print(diff or f"(no changes in {repo} since the last review)")
 
 
-def verify_status(d, mode="parallel"):
+E2E_PENDING = "pending: runs once everything else is green"
+
+
+def verify_status(d, mode="parallel", replace_last=False):
+    """verify.md and verify.json for this round. replace_last: e2e-phase adds e2e's result to the round
+    verify-status already counted, instead of counting a new round."""
     rd = d / "review"
-    job_res = [load_json(f, {}) or {} for f in sorted((rd / "jobs").glob("*.json"))]
+    job_res = [load_json(f, {}) or {} for f in sorted((rd / "jobs").glob("*.json"))
+               if f.name != "e2e-ports.json"]
     failing = [j for j in job_res if j.get("status") not in ("pass", "warn")]
     warns = [j for j in job_res if j.get("status") == "warn"]
     lines = ["# Verification", "", "## Tests, builds and checks"]
@@ -1084,6 +1126,10 @@ def verify_status(d, mode="parallel"):
         lines.append(f"- `{name}`: **{j.get('status', 'missing')}**" +
                      (f" (log: {rel(log)})" if j.get("status") == "fail" and log.exists() else ""))
         lines += [f"  - {p}" for p in j.get("problems", [])[:20]]
+    e2e_res = next((j for j in job_res if j.get("job") == "e2e"), None)
+    e2e = e2e_res.get("status", "fail") if e2e_res else ("pending" if needs_e2e(d) else "not needed")
+    if e2e == "pending":  # not a blocker in itself; the final gate still needs it to pass
+        lines.append(f"- `e2e`: **pending**: {E2E_PENDING[9:]}")
     if not job_res:
         lines.append("- no job results found")
     blocking = len(failing) + (0 if job_res else 99)
@@ -1104,15 +1150,150 @@ def verify_status(d, mode="parallel"):
     if warns:
         lines += ["", "## Warnings (not blocking; say so in the PR)"]
         lines += [f"- `{j['job']}`: {p}" for j in warns for p in j.get("problems", [])]
-    h = history(d) + [blocking]
+    h = (history(d)[:-1] if replace_last else history(d)) + [blocking]
     (rd / "history.json").write_text(json.dumps(h) + "\n")
     go, why = keep_going(h)
     lines += ["", f"Round {len(h)}: {why}."]
     st = {"blocking": blocking, "jobs_failing": [j.get("job", "?") for j in failing], "reviews": reviews,
-          "warnings": [j["job"] for j in warns], "round": len(h), "history": h, "continue": go, "why": why}
+          "warnings": [j["job"] for j in warns], "round": len(h), "history": h, "continue": go, "why": why,
+          "e2e": e2e}
     (rd / "verify.json").write_text(json.dumps(st, indent=2))
     (rd / "verify.md").write_text("\n".join(lines) + "\n")
     out(st)
+
+
+# ── Ports freed: nothing this run started keeps listening ────────────────────────────────────────
+# The default stack ports (API, worker health, Vite dev and preview, Temporal gRPC and UI, MongoDB).
+DEFAULT_STACK_PORTS = [int(p) for p in os.environ.get("WF_DEFAULT_STACK_PORTS", "8000,8001,5173,4173,7233,8233,27017")
+                       .split(",") if p]
+
+
+def run_ports_files(d):
+    """The ports files this run's isolated stacks wrote: benefit-be's .data/verify/ports*.json and e2e's own."""
+    files = [f for repo in REPOS for f in sorted((repo_dir(repo) / ".data" / "verify").glob("ports*.json"))]
+    return files + [f for f in [d / "review" / "jobs" / "e2e-ports.json"] if f.exists()]
+
+
+def pid_info(pid):
+    """(cwd, command line) of a process, '' where it can't be read."""
+    cwd = subprocess.run(["lsof", "-a", "-p", str(pid), "-d", "cwd", "-Fn"], capture_output=True, text=True).stdout
+    cwd = next((ln[1:] for ln in cwd.splitlines() if ln[:1] == "n"), "")
+    cmd = subprocess.run(["ps", "-o", "command=", "-p", str(pid)], capture_output=True, text=True).stdout.strip()
+    return cwd, cmd
+
+
+def listeners(port):
+    r = subprocess.run(["lsof", "-nP", "-t", f"-iTCP:{port}", "-sTCP:LISTEN"], capture_output=True, text=True)
+    return {int(p) for p in r.stdout.split() if p.isdigit()}
+
+
+def pid_alive(pid):
+    """True while the process runs. A zombie (exited, its parent hasn't reaped it yet) holds no port: not alive."""
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    try:
+        state = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True,
+                               timeout=5).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return True
+    return bool(state) and not state.startswith("Z")
+
+
+def stop_pid(pid, cmd):
+    """SIGTERM (a clean shutdown for mongod, which needs longer), wait, then SIGKILL. True if it's gone."""
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return True
+    except PermissionError:
+        return False
+    deadline = time.time() + (30 if "mongod" in cmd else 10)
+    while time.time() < deadline and pid_alive(pid):
+        time.sleep(0.3)
+    if pid_alive(pid):
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
+        time.sleep(0.5)
+    return not pid_alive(pid)
+
+
+def ports_freed(d):
+    """At the end of a run (the last workflow step, and run.sh after the engine exits, whatever the outcome): stop
+    every listener this run started, on the default stack ports and on every port its isolated stacks recorded.
+    Ours = its cwd or command line is under this worktree's repos/, or verify.py recorded its pid and its cwd can't
+    be read. Anything else (another checkout, the user's own `make dev`) is never touched, only reported. Fails if
+    one of this run's own processes is still listening. Writes review/ports.md."""
+    # In a feature worktree everything under its repos/ is this run's. In the main checkout (an --in-place run)
+    # repos/ are the main clones, where the user's own `make dev` runs: only pids verify.py recorded count there.
+    in_worktree = not (ROOT / ".git").is_dir()
+    repos_dir = str((ROOT / "repos").resolve()) + "/" if in_worktree else "\0no-such-dir/"
+    recorded_ports, recorded_pids = set(), set()
+    for f in run_ports_files(d):
+        rec = load_json(f, {}) or {}
+        if isinstance(rec, dict):
+            recorded_ports |= {int(p) for p in (rec.get("ports") or {}).values() if str(p).isdigit()}
+            recorded_pids |= {int(p) for p in rec.get("pids") or [] if str(p).isdigit()}
+    ports = sorted(set(DEFAULT_STACK_PORTS) | recorded_ports)
+    stopped, foreign, survivors = [], [], []
+    for port in ports:
+        for pid in sorted(listeners(port)):
+            cwd, cmd = pid_info(pid)
+            ours = (cwd + "/").startswith(repos_dir) or repos_dir in cmd or (
+                pid in recorded_pids and (not cwd or not in_worktree))
+            if not ours:
+                foreign.append({"port": port, "pid": pid, "cwd": cwd or "?", "command": cmd[:120]})
+            elif stop_pid(pid, cmd):
+                stopped.append({"port": port, "pid": pid, "command": cmd[:120]})
+            else:
+                survivors.append({"port": port, "pid": pid, "cwd": cwd or "?", "command": cmd[:120]})
+    for port in ports:  # one of ours may have held more than one port, or restarted
+        for pid in listeners(port):
+            cwd, cmd = pid_info(pid)
+            if ((cwd + "/").startswith(repos_dir) or repos_dir in cmd) and all(s["pid"] != pid for s in survivors):
+                survivors.append({"port": port, "pid": pid, "cwd": cwd or "?", "command": cmd[:120]})
+    lines = ["# Ports", "", f"Checked {len(ports)} ports: the default stack ports and every port this run's "
+             f"isolated stacks recorded ({len(recorded_ports)}).", ""]
+    lines += [f"- stopped: port {s['port']}, pid {s['pid']} (`{s['command']}`)" for s in stopped]
+    lines += [f"- **still listening, this run's own**: port {s['port']}, pid {s['pid']}, cwd {s['cwd']} "
+              f"(`{s['command']}`)" for s in survivors]
+    lines += [f"- warning: port {f['port']} is held by pid {f['pid']}, cwd {f['cwd']}, which this run didn't start; "
+              "left alone" for f in foreign]
+    if not (stopped or survivors or foreign):
+        lines.append("- all free")
+    rd = d / "review"
+    rd.mkdir(parents=True, exist_ok=True)
+    (rd / "ports.md").write_text("\n".join(lines) + "\n")
+    out({"ports": ports, "stopped": stopped, "foreign": foreign, "survivors": survivors,
+         "report": rel(rd / "ports.md")}, ok=not survivors)
+
+
+E2E_TIMEOUT = 3700  # seconds; the job's own command stops itself at 3600
+
+
+def e2e_phase(d, mode="parallel"):
+    """A round's second phase. e2e (with the integration tests) runs only once everything else in the round is
+    green: every job passed and no review blocks. Then it runs here, and its result joins the round's status.
+    Otherwise it stays pending and runs in a later round under the same rule."""
+    st = load_json(d / "review" / "verify.json", {}) or {}
+    if st.get("e2e") != "pending":
+        out({"ran": False, "e2e": st.get("e2e", "not needed"), **st})
+    if int(st.get("blocking", 99)) > 0:
+        out({"ran": False, "reason": E2E_PENDING, **st})
+    me = [sys.executable, str(Path(__file__).resolve()), "job", rel(d), "e2e"]
+    try:
+        subprocess.run(me, capture_output=True, text=True, timeout=E2E_TIMEOUT, env={**os.environ, "WF_ROOT": str(ROOT)})
+    except subprocess.TimeoutExpired:
+        pass
+    if not job_file(d, "e2e").exists():  # never a silent pass
+        job_file(d, "e2e").write_text(json.dumps({"job": "e2e", "status": "fail", "problems": [
+            f"the e2e job didn't finish (no result after {E2E_TIMEOUT}s)"]}))
+    verify_status(d, mode, replace_last=True)
 
 
 def final_gate(d):
@@ -1120,6 +1301,9 @@ def final_gate(d):
     if not isinstance(st, dict):
         st = {"blocking": 99, "error": "review/verify.json missing or invalid"}
     st["blocking"] = int(st.get("blocking", 99))
+    if st.get("e2e") in ("pending", "fail", "missing"):  # e2e must have passed (or warned on an older branch)
+        st["blocking"] = max(st["blocking"], 1)
+        st["why"] = f"e2e is {st['e2e']}: it has to pass before the PRs"
     if st["blocking"] > 0:
         print(json.dumps(st))
         print(f"Still {st['blocking']} blocking ({st.get('why', 'last round')}); see {rel(d)}/review/verify.md. Fix them, "
@@ -1161,10 +1345,10 @@ def failing_checks(url):
     return found
 
 
-def ci_wait(d, pr_mode="draft"):
+def ci_wait(d):
     """Wait for GitHub Actions on every PR. A red check is reported (review/ci.md), not raised, so the CI fix
-    step can repair it; ci-gate decides after the loop. When everything is green and the PRs were opened as
-    drafts, they are marked ready for review."""
+    step can repair it; ci-gate decides after the loop. When everything is green, the draft PRs are marked
+    ready for review."""
     rd = d / "review"
     prs = load_json(rd / "prs.json")
     if not isinstance(prs, dict) or not prs:
@@ -1188,7 +1372,7 @@ def ci_wait(d, pr_mode="draft"):
         if results[repo] != "fail":
             report.append(f"- {repo}: {results[repo]} ({url})")
     ready = []
-    if failing == 0 and pr_mode == "draft":
+    if failing == 0:
         for repo, url in prs.items():
             code, text = gh("pr", "view", url, "--json", "isDraft", "-q", ".isDraft")
             if text.strip() == "true" and gh("pr", "ready", url)[0] == 0:
@@ -1222,20 +1406,22 @@ def ci_gate(d):
 
 def main(argv):
     cmd, pos = (argv[1], argv[2:]) if len(argv) > 1 else ("", [])
-    one = {"clarify-gate": clarify_gate, "qa-remaining": qa_remaining, "jobs-wait": jobs_wait, "plan-gate": plan_gate, "decisions-gate": decisions_gate, "tasks-gate": tasks_gate, "verify-init": verify_init, "needs-fix": needs_fix,
+    one = {"ports-freed": ports_freed, "clarify-gate": clarify_gate, "qa-remaining": qa_remaining, "jobs-wait": jobs_wait, "plan-gate": plan_gate, "decisions-gate": decisions_gate, "tasks-gate": tasks_gate, "verify-init": verify_init, "needs-fix": needs_fix,
            "review-list": review_list, "behind": behind, "verify-status": verify_status, "final-gate": final_gate, "ci-wait": ci_wait,
            "ci-needs-fix": ci_needs_fix, "ci-gate": ci_gate}
     if cmd in one and len(pos) == 1:
         return one[cmd](fdir(pos[0]))
-    if cmd == "ci-wait" and len(pos) == 2:
-        return ci_wait(fdir(pos[0]), pos[1])
+    if cmd == "ci-wait" and len(pos) == 2:  # a run started before pr_mode was removed still passes it: ignored
+        return ci_wait(fdir(pos[0]))
+    if cmd == "e2e-phase" and len(pos) in (1, 2):
+        return e2e_phase(fdir(pos[0]), pos[1] if len(pos) == 2 else "parallel")
     if cmd in ("review-list", "verify-status") and len(pos) == 2:
         if pos[1] not in REVIEW_MODES:
             out({"problems": [f"review mode must be parallel or on_green, got '{pos[1]}'"]}, ok=False)
         return (review_list if cmd == "review-list" else verify_status)(fdir(pos[0]), pos[1])
     if cmd == "needs-fix" and len(pos) == 3:
         return needs_fix(fdir(pos[0]), pos[1], pos[2])
-    if cmd == "prepare" and len(pos) in (3, 4):
+    if cmd == "prepare" and len(pos) == 2:
         return prepare(*pos)
     if cmd in ("jobs", "jobs-start") and len(pos) in (1, 2):
         mode = pos[1] if len(pos) == 2 else "strict"

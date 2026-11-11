@@ -1,6 +1,6 @@
 ---
 name: decision-maker
-description: Decides a feature's open ADRs (Needs decision, Proposed – needs amendment) on the evidence, independently of the architect who framed them, so a run doesn't wait for a person; every automatic decision is recorded for review in the PR. Use in the benefit-feature workflow after the architect (decision_mode=auto), or when the user asks Claude to decide open ADRs for them. Never changes the constitution or a rule set.
+description: Decides a feature's open ADRs (Needs decision, Proposed – needs amendment) on the evidence, independently of the architect who framed them, so a run doesn't wait for a person; every automatic decision is recorded for review in the PR. Use in the benefit-feature workflow after the architect, or when the user asks Claude to decide open ADRs for them. Never changes the constitution or a rule set.
 ---
 
 # Decision maker

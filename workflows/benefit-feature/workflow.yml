@@ -22,10 +22,6 @@ inputs:
     required: true
     prompt: "Spec to build: its number (e.g. 003) or folder (specs/003-name)"
   integration: {type: string, default: "auto"}
-  pr_mode:
-    type: string
-    default: "draft"
-    prompt: "draft = when everything passes, push and open draft PRs, marked ready for review once GitHub Actions is green; ask = approve before pushing (PRs open ready for review); none = stop before pushing"
   trace_mode:
     type: string
     default: "strict"
@@ -34,20 +30,18 @@ inputs:
   # code, fixes, PRs). Any value `claude --model` accepts: an alias (opus, sonnet) or a full model ID.
   judgement_model: {type: string, default: "opus"}
   coding_model: {type: string, default: "sonnet"}
-  decision_mode:
-    type: string
-    default: "auto"
-    prompt: "auto = agents answer open spec questions (spec clarifier) and decide open ADRs (decision-maker); review them in the PR. ask = you decide both at gates"
   review_mode:
     type: string
     default: "parallel"
     prompt: "parallel = reviews run while the tests do, so one fix handles both (faster, more review tokens on red rounds); on_green = reviews only once the tests pass"
-  # Gate answers for runs without a terminal. One per gate; set only on resume, after a person decided.
+  # Answer to the spec gate for runs without a terminal; set only on resume, after a person decided.
   spec_verdict: {type: string, default: ""}
-  decision_verdict: {type: string, default: ""}
-  pr_verdict: {type: string, default: ""}
 
-# Run:     specify workflow run workflows/benefit-feature/workflow.yml -i feature=003
+# Run:     workflows/benefit-feature/run.sh start 003 (never the engine directly)
+# One way: agents answer open spec questions and decide open ADRs (each listed in the PR for review), and once
+#          everything passes the run pushes the feature branch, opens draft PRs, fixes CI and marks them ready.
+#          Starting a run is the approval to push. A person is asked only when the spec clarifier leaves a question
+#          only a person can answer, or the decision-maker finds no compliant option.
 # Checks:  one `wf.py` gate after each planning stage; every check on the code runs inside the verify loop, so
 #          the fix step can repair it. A failed gate stops the run: fix, then `specify workflow resume <id>`.
 # AI steps: each one is a separate agent session (agents/). 5 fixed (architect, tasks, quality engineer, contracts,
@@ -65,14 +59,14 @@ steps:
 
   - id: feature
     type: shell
-    run: "python3 workflows/benefit-feature/scripts/wf.py prepare {{ inputs.feature }} {{ inputs.pr_mode }} {{ inputs.trace_mode }} {{ inputs.decision_mode }}"
+    run: "python3 workflows/benefit-feature/scripts/wf.py prepare {{ inputs.feature }} {{ inputs.trace_mode }}"
     output_format: json
 
-  # Open [NEEDS CLARIFICATION] questions: the spec clarifier answers them (decision_mode=auto), each recorded for
-  # review in the PR; a person is asked only for what it couldn't answer safely, or for all of them with ask.
+  # Open [NEEDS CLARIFICATION] questions: the spec clarifier answers them, each recorded for review in the PR;
+  # a person is asked only for what it couldn't answer safely.
   - id: spec_questions
     type: if
-    condition: "{{ steps.feature.output.data.open > 0 and inputs.decision_mode == 'auto' }}"
+    condition: "{{ steps.feature.output.data.open > 0 }}"
     then:
       - id: spec_clarifier
         type: prompt
@@ -95,9 +89,8 @@ steps:
       - id: approve_spec
         type: gate
         message: >-
-          The spec still has open [NEEDS CLARIFICATION] questions (the ones the spec clarifier left open are in
-          clarifications.json with why; with decision_mode=ask, all of them). Answer them in spec.md, then approve;
-          reject stops the run.
+          The spec clarifier left [NEEDS CLARIFICATION] questions that only a person can answer (why is in
+          clarifications.json). Answer them in spec.md, then approve; reject stops the run.
         show_file: "{{ steps.feature.output.data.spec_file }}"
         options: [approve, reject]
         on_reject: abort
@@ -121,7 +114,7 @@ steps:
 
   - id: decide
     type: if
-    condition: "{{ steps.plan_gate.output.data.open > 0 and inputs.decision_mode == 'auto' }}"
+    condition: "{{ steps.plan_gate.output.data.open > 0 }}"
     then:
       - id: decision_maker
         type: prompt
@@ -158,20 +151,6 @@ steps:
             type: shell
             run: "python3 workflows/benefit-feature/scripts/wf.py plan-gate {{ steps.feature.output.data.feature_dir }}"
             output_format: json
-
-  - id: decision_questions
-    type: if
-    condition: "{{ steps.plan_gate.output.data.open > 0 and inputs.decision_mode == 'ask' }}"
-    then:
-      - id: approve_decisions
-        type: gate
-        message: >-
-          Some decisions are yours, listed first in decisions/README.md. Answer each (ask the assistant to record it
-          in the ADR) or accept the ADR's fallback, then approve; reject stops the run.
-        show_file: "{{ steps.feature.output.data.feature_dir }}/decisions/README.md"
-        options: [approve, reject]
-        on_reject: abort
-        verdict_input: decision_verdict
 
   # ── 3. Tasks, then the quality engineer as its own agent (it judges coverage independently) ──────
   - id: tasks
@@ -334,11 +313,12 @@ steps:
     output_format: json
 
   # Keeps going while the blocking count falls (up to 6 rounds; wf.py MAX_ROUNDS) and stops early once two
-  # rounds in a row make no progress. Later fixes switch to the judgement model.
+  # rounds in a row make no progress. Each round has two phases: the jobs and reviews, then e2e (with the
+  # integration tests) only once everything else in the round is green.
   - id: verify_loop
     type: do-while
     max_iterations: 6
-    condition: "{{ steps.verify_status.output.data.continue }}"
+    condition: "{{ steps.e2e_phase.output.data.continue }}"
     steps:
       - id: needs_fix
         type: shell
@@ -415,7 +395,7 @@ steps:
               plan artefacts, record the resolutions in one ADR, run the checks, commit the merge. Never push.
               Write {{ steps.feature.output.data.review_dir }}/integrate.md. Reply in ≤5 lines.
 
-      # Tests, builds, evals, e2e and the script checks start in the background (longest first) and return at once;
+      # Tests, builds, evals and the script checks start in the background and return at once;
       # nothing edits the code until jobs_wait, so the reviews below see the same code the jobs test.
       - id: jobs_start
         type: shell
@@ -459,84 +439,85 @@ steps:
         run: "python3 workflows/benefit-feature/scripts/wf.py verify-status {{ steps.feature.output.data.feature_dir }} {{ inputs.review_mode }}"
         output_format: json
 
+      # Second phase: e2e runs once, when every other job passed and no review blocks, on an isolated stack
+      # (free ports, its own MongoDB and Temporal, all stopped afterwards). Until then it is pending, not a
+      # blocker in itself; the final gate still needs it to pass.
+      - id: e2e_phase
+        type: shell
+        run: "python3 workflows/benefit-feature/scripts/wf.py e2e-phase {{ steps.feature.output.data.feature_dir }} {{ inputs.review_mode }}"
+        output_format: json
+        timeout: 3800
+
   - id: final_gate
     type: shell
     run: "python3 workflows/benefit-feature/scripts/wf.py final-gate {{ steps.feature.output.data.feature_dir }}"
     output_format: json
 
   # ── 6. Ship: PRs, then the repos' own GitHub Actions ─────────────────────────────────────────────────
-  - id: pr_approval
-    type: if
-    condition: "{{ inputs.pr_mode == 'ask' }}"
-    then:
-      - id: approve_pr
-        type: gate
-        message: "Everything passed. Review review/verify.md, review/trace.md and the diff, then approve to push and open PRs."
-        show_file: "{{ steps.feature.output.data.review_dir }}/verify.md"
-        options: [approve, reject]
-        on_reject: abort
-        verdict_input: pr_verdict
+  - id: create_pr
+    type: prompt
+    integration: "{{ inputs.integration }}"
+    model: "{{ inputs.coding_model }}"
+    timeout: 900
+    prompt: >-
+      Use the create-pr skill for {{ steps.feature.output.data.feature_dir }}, branch {{ steps.feature.output.data.branch }},
+      for every repo with changes. Starting this run is the user's approval to push; don't ask again. Open draft PRs
+      (--draft); the workflow marks them ready once GitHub Actions is green. Fill the PR template with the
+      FR IDs covered, the results in review/verify.md (including its Warnings section) and review/trace.md, and a
+      "Decided automatically - please review" section listing each entry in decisions/auto-decisions.json (ADR,
+      option chosen, the architect's recommendation, revisit-if) and any amendment suggested, and each spec
+      question in {{ steps.feature.output.data.feature_dir }}/clarifications.json that the spec clarifier answered (question, answer, revisit-if). If the
+      API contract changed, open the benefit-be PR first and link the two. Write
+      {{ steps.feature.output.data.review_dir }}/prs.json as {"<repo>": "<PR URL>"}. Reply with the URLs.
 
-  - id: ship
-    type: if
-    condition: "{{ inputs.pr_mode != 'none' }}"
-    then:
-      - id: create_pr
-        type: prompt
-        integration: "{{ inputs.integration }}"
-        model: "{{ inputs.coding_model }}"
-        timeout: 900
-        prompt: >-
-          Use the create-pr skill for {{ steps.feature.output.data.feature_dir }}, branch {{ steps.feature.output.data.branch }},
-          for every repo with changes. Starting this run with pr_mode={{ inputs.pr_mode }} is the user's approval to push;
-          don't ask again. pr_mode "draft" → draft PRs (--draft; the workflow marks them ready once GitHub Actions is
-          green); "ask" → PRs ready for review (no --draft). Fill the PR template with the
-          FR IDs covered, the results in review/verify.md (including its Warnings section) and review/trace.md, and a
-          "Decided automatically - please review" section listing each entry in decisions/auto-decisions.json (ADR,
-          option chosen, the architect's recommendation, revisit-if) and any amendment suggested, and each spec
-          question in {{ steps.feature.output.data.feature_dir }}/clarifications.json that the spec clarifier answered (question, answer, revisit-if). If the
-          API contract changed, open the benefit-be PR first and link the two. Write
-          {{ steps.feature.output.data.review_dir }}/prs.json as {"<repo>": "<PR URL>"}. Reply with the URLs.
-
-      # GitHub Actions loop: wait for CI; if a check fails, a fix step reads its log, fixes, pushes to the
-      # feature branch (never main) and CI runs again, up to 3 times. Green drafts are marked ready for review.
-      - id: ci_loop
-        type: do-while
-        max_iterations: 3
-        condition: "{{ steps.ci.output.data.failing > 0 }}"
-        steps:
-          - id: ci_needs_fix
-            type: shell
-            run: "python3 workflows/benefit-feature/scripts/wf.py ci-needs-fix {{ steps.feature.output.data.feature_dir }}"
-            output_format: json
-
-          - id: maybe_ci_fix
-            type: if
-            condition: "{{ steps.ci_needs_fix.output.data.fix }}"
-            then:
-              - id: ci_fix
-                type: prompt
-                integration: "{{ inputs.integration }}"
-                model: "{{ inputs.judgement_model }}"
-                timeout: 2400
-                prompt: >-
-                  GitHub Actions failed on the PRs in {{ steps.feature.output.data.review_dir }}/prs.json; the failing
-                  checks and their log tails are in {{ steps.feature.output.data.review_dir }}/ci.md. Work in each repo
-                  under repos/ on branch {{ steps.feature.output.data.branch }}. Find the cause (CI differs from local:
-                  no .env, and services such as MongoDB only in the integration job), reproduce it locally where you can,
-                  and fix it the way the lane rules and Accepted ADRs require, adding the test that would have caught
-                  it. Run make check in each repo you changed. Then commit with a conventional message ending with the
-                  line "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>", and push with
-                  git push origin {{ steps.feature.output.data.branch }}. Never push to main, force-push or skip hooks.
-                  Reply in ≤5 lines.
-
-          - id: ci
-            type: shell
-            run: "python3 workflows/benefit-feature/scripts/wf.py ci-wait {{ steps.feature.output.data.feature_dir }} {{ inputs.pr_mode }}"
-            output_format: json
-            timeout: 5600
-
-      - id: ci_gate
+  # GitHub Actions loop: wait for CI; if a check fails, a fix step reads its log, fixes, pushes to the
+  # feature branch (never main) and CI runs again, up to 3 times. Green drafts are marked ready for review.
+  - id: ci_loop
+    type: do-while
+    max_iterations: 3
+    condition: "{{ steps.ci.output.data.failing > 0 }}"
+    steps:
+      - id: ci_needs_fix
         type: shell
-        run: "python3 workflows/benefit-feature/scripts/wf.py ci-gate {{ steps.feature.output.data.feature_dir }}"
+        run: "python3 workflows/benefit-feature/scripts/wf.py ci-needs-fix {{ steps.feature.output.data.feature_dir }}"
         output_format: json
+
+      - id: maybe_ci_fix
+        type: if
+        condition: "{{ steps.ci_needs_fix.output.data.fix }}"
+        then:
+          - id: ci_fix
+            type: prompt
+            integration: "{{ inputs.integration }}"
+            model: "{{ inputs.coding_model }}"
+            timeout: 2400
+            prompt: >-
+              GitHub Actions failed on the PRs in {{ steps.feature.output.data.review_dir }}/prs.json; the failing
+              checks and their log tails are in {{ steps.feature.output.data.review_dir }}/ci.md. Work in each repo
+              under repos/ on branch {{ steps.feature.output.data.branch }}. Find the cause (CI differs from local:
+              no .env, and services such as MongoDB only in the integration job), reproduce it locally where you can
+              (integration and e2e: `make verify-stack` in repos/benefit-be, which runs them on its own free ports and
+              stops its stack; never start a stack on the default ports, and stop any process you started before you
+              finish), and fix it the way the lane rules and Accepted ADRs require, adding the test that would have caught
+              it. Run make check in each repo you changed. Then commit with a conventional message ending with the
+              line "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>", and push with
+              git push origin {{ steps.feature.output.data.branch }}. Never push to main, force-push or skip hooks.
+              Reply in ≤5 lines.
+
+      - id: ci
+        type: shell
+        run: "python3 workflows/benefit-feature/scripts/wf.py ci-wait {{ steps.feature.output.data.feature_dir }}"
+        output_format: json
+        timeout: 5600
+
+  - id: ci_gate
+    type: shell
+    run: "python3 workflows/benefit-feature/scripts/wf.py ci-gate {{ steps.feature.output.data.feature_dir }}"
+    output_format: json
+
+  # Last: nothing this run started keeps listening (review/ports.md). run.sh runs the same check after the engine
+  # exits, so a run that stops early is cleaned up too.
+  - id: ports_freed
+    type: shell
+    run: "python3 workflows/benefit-feature/scripts/wf.py ports-freed {{ steps.feature.output.data.feature_dir }}"
+    output_format: json

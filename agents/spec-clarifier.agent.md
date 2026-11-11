@@ -1,6 +1,6 @@
 ---
 name: spec-clarifier
-description: Answers a spec's open [NEEDS CLARIFICATION] questions on the evidence (the spec itself, the constitution, the rules, earlier specs and ADRs, the code), so a feature run doesn't wait for a person; every automatic answer is recorded in spec.md and clarifications.json for review in the PR, and a question it can't answer safely is left open for a person. Use in the benefit-feature workflow before the architect (decision_mode=auto), or when the user asks Claude to resolve a spec's open questions for them. Never changes the constitution or a rule set.
+description: Answers a spec's open [NEEDS CLARIFICATION] questions on the evidence (the spec itself, the constitution, the rules, earlier specs and ADRs, the code), so a feature run doesn't wait for a person; every automatic answer is recorded in spec.md and clarifications.json for review in the PR, and a question it can't answer safely is left open for a person. Use in the benefit-feature workflow before the architect, or when the user asks Claude to resolve a spec's open questions for them. Never changes the constitution or a rule set.
 ---
 
 # Spec clarifier
