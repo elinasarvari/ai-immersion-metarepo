@@ -21,17 +21,17 @@ Central store for shared AI-assisted development assets (see README.md for folde
 - **Rule sets** (`project-rules/`): every rule has an ID (`TW-3`, `AG-6`, …). `project-rules/README.md` maps each repo path to its lane and rule files. Generated code must satisfy them as hard constraints. Lanes (workflows, agents, data, platform-ui) are folder ownership, used for parallel work and rule mapping; three team members rotate between them (`specs/README.md`).
 - **Agents** (`agents/`, summary and shared conventions in `agents/README.md`). Each is a separate subagent with its own context, working through files; the workflow engine (or, in chat, the main session) starts them, in parallel where the work is independent:
   - **spec-clarifier**: answers a spec's open `[NEEDS CLARIFICATION]` questions on the evidence before planning, each answer recorded for review in the PR; leaves open only what a person alone can know.
-  - **architect**: plans the feature and records significant decisions as ADRs. Skills: `architecture-plan`, `architecture-decision`, `architecture-capabilities`.
+  - **architect**: plans the feature, records significant decisions as ADRs, and writes `brief.md` for the agents after it. Skills: `architecture-plan`, `architecture-decision`, `architecture-capabilities`.
   - **decision-maker**: decides the open ADRs (product, policy, cost, scope, amendments) independently of the architect, and records each for review in the PR.
-  - **quality-engineer**: the test plan, and test and QA tasks. Skill: `test-strategy`.
+  - **spectator**: the test plan, after the plan and its decisions and before any task, so the tasks are written once with their test tasks. Skill: `test-strategy`.
   - **compliance-reviewer**: checks the implementation against the constitution, rules, ADRs and test plan. Skill: `compliance-review`.
   - **integrator**: when another feature lands on main during a run, merges `origin/main` into the feature branch and resolves the clashes (main wins unless that breaks this feature's requirements), recorded in one ADR for the PR.
   - **backend-reviewer**, **frontend-reviewer**: senior code review per repo.
 
   An agent is a `*.agent.md` file (its rules), with its own procedures in `<agent>/skills/`. Only the user, or the decision-maker agent (in a workflow run, or when the user asks it to decide), may accept a `Needs decision` or `Proposed – needs amendment` ADR. Nobody changes the constitution or a rule set without all three team members (Governance): the decision-maker picks a compliant option and leaves the amendment as a suggestion.
 - **Workflows** (`workflows/`): `feature.md` describes the stages. `benefit-feature/workflow.yml` runs them from an existing spec with Spec Kit's workflow engine:
-  1. the spec clarifier answers open spec questions, then the architect plans, then the decision-maker settles any open ADR
-  2. tasks, then the quality engineer's test plan and QA tasks
+  1. the spec clarifier answers open spec questions, then the architect plans and writes the brief, then the decision-maker settles any open ADR
+  2. the spectator's test plan, then tasks, written once from the plan and the test plan (test-first and `[qa]` tasks included)
   3. contracts, after the integrator merges main into an earlier run's branch that main has passed
   4. lanes and the QA tests in parallel (one `speckit.implement` session each; a lane gets its own unit tests green), then a QA step only for what needed the lanes' code
   5. verify loop, while it makes progress (at most 6 rounds; it stops after 2 rounds without progress): fixers from round 2 (one per repo in parallel when every blocker belongs to one repo; every fix on the coding model), the integrator if `origin/main` moved, then tests, builds, evals, e2e and the script checks (branch contains main, ownership, open tasks, traceability) in the background while the code and compliance reviews that need rerunning run (`review_mode=parallel`; `on_green` waits for green jobs)
@@ -76,7 +76,7 @@ Rules:
 - Don't edit `.specify/templates` or `.specify/scripts` unless asked. Update them with `specify integration upgrade`.
 - `plan.md` must name the target repo(s) (`repos/<name>`). `/speckit-implement` writes code only inside those clones, never in the metarepo. The one exception is feature 009 (delivery factory), whose plan may also target the metarepo's `scripts/factory/` and `templates/`.
 - For backend work, the "Project Structure" section of `plan.md` must use the layout and import boundaries in `project-rules/backend-architecture.md`. Don't invent a different structure.
-- Plan through the **architecture-plan** skill rather than a bare `/speckit-plan`; it adds the decisions and scope. After `/speckit-tasks`, run the **test-strategy** skill. Tag every task with one lane and its repo (`[contracts]`, `[workflows]`, `[agents]`, `[data]`, `[platform-ui]`, `[qa]`).
+- Plan through the **architecture-plan** skill rather than a bare `/speckit-plan`; it adds the decisions and scope. Before `/speckit-tasks`, run the **test-strategy** skill (the spectator's test plan), so the tasks include a task for every test case. Tag every task with one lane and its repo (`[contracts]`, `[workflows]`, `[agents]`, `[data]`, `[platform-ui]`, `[qa]`).
 - `/speckit-implement`: before each task, read the rule files for its lane. Before any PR, the code reviewers and the compliance review (**review-changes** skill) must have no critical or major findings.
 
 ## Pushing code and opening PRs

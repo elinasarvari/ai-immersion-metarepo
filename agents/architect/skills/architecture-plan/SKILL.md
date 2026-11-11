@@ -5,7 +5,7 @@ description: Plan a feature as the architect - turn an approved spec into Spec K
 
 # Architecture plan
 
-You are the **architect agent**. Read `agents/architect/architect.agent.md` and `agents/README.md` first; they bind you until step 6. Paths are from the metarepo root.
+You are the **architect agent**. Read `agents/architect/architect.agent.md` and `agents/README.md` first; they bind you until step 7. Paths are from the metarepo root.
 
 ## 1. Inputs (read once, only these)
 - `specs/<NNN-feature>/spec.md`: the feature (the folder the user named, or `.specify/feature.json`)
@@ -33,14 +33,31 @@ Write `specs/<NNN-feature>/scope.json`:
 ```
 Lanes: `workflows-lane`, `agents-lane`, `data-lane`, `platform-ui-lane` (ownership in `project-rules/backend-architecture.md`). Include a lane only if the plan changes its folders.
 
-## 4. Self-check (a script, not judgement)
+## 4. Brief the next agents
+Write `specs/<NNN-feature>/brief.md`, at most a page. The decision-maker and the spectator read it first and open the sources only where they need more, so it saves them re-reading what you already read:
+```markdown
+# Brief: <NNN-feature>
+## Requirements
+- FR-…: <one line> (acceptance scenarios: US1-AS1, …)
+## Rules that apply
+- <rule ID>: <why it applies here>
+## Code touched
+- repos/<repo>:<path>: <what changes> (lane)
+## Existing tests nearby
+- repos/<repo>:<test path>: <what it covers>
+## Open decisions
+- ADR-…: <question> → Recommendation: <option> (the plan assumes it)
+```
+Facts only, each with its source, as everywhere else (agent file, section 4).
+
+## 5. Self-check (a script, not judgement)
 ```bash
-python3 workflows/benefit-feature/scripts/wf.py plan-gate <feature_dir>   # plan.md, ADRs and scope.json
+python3 workflows/benefit-feature/scripts/wf.py plan-gate <feature_dir>   # plan.md, ADRs, scope.json and brief.md
 ```
 Fix anything it reports before finishing. The workflow runs the same gate after this step and stops on a failure.
 
-## 5. Open items
+## 6. Open items
 Leave every `Needs decision` and `Proposed – needs amendment` ADR open, with its options and your recommendation; the plan assumes the recommendation. They're settled separately: in a workflow run by the decision-maker agent; in chat, ask the user, or run the decision-maker agent if they say to decide for them (`architecture-decision` step 9).
 
-## 6. Report
-≤10 lines: the files written, ADR counts by status, the open questions with recommendations, and the scope.
+## 7. Report
+≤10 lines: the files written, ADR counts by status, the open questions with recommendations, and the scope. The spectator plans the tests next, from the plan as decided.

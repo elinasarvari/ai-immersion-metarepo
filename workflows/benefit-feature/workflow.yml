@@ -2,12 +2,12 @@ schema_version: "1.0"
 workflow:
   id: "benefit-feature"
   name: "Benefits Case feature"
-  version: "0.9.0"
+  version: "0.10.0"
   author: "ai-immersion-metarepo"
   description: >-
     From an existing spec to draft PRs, each AI step a separate agent: spec clarifier answers open spec
-    questions → architect plan → decision-maker settles open ADRs → tasks → quality engineer's test plan and QA
-    tasks → contracts → merge main if it moved → lanes and the QA tests in parallel → verify loop (fixers, one per
+    questions → architect plan and brief → decision-maker settles open ADRs → spectator's test plan → tasks, written
+    once from the plan and the test plan → contracts → merge main if it moved → lanes and the QA tests in parallel → verify loop (fixers, one per
     repo where they can → tests, builds and script checks in the background while the reviews run, only where
     something changed) → draft PRs → GitHub Actions. People are asked only when automation can't decide.
 
@@ -30,6 +30,9 @@ inputs:
   # code, fixes, PRs). Any value `claude --model` accepts: an alias (opus, sonnet) or a full model ID.
   judgement_model: {type: string, default: "opus"}
   coding_model: {type: string, default: "sonnet"}
+  # The spectator's test plan: maps requirements to named cases from the architect's brief; test-gate and the
+  # verify loop's trace check it. Set to opus if reviews keep finding cases a test plan should have had.
+  test_plan_model: {type: string, default: "sonnet"}
   review_mode:
     type: string
     default: "parallel"
@@ -44,8 +47,8 @@ inputs:
 #          only a person can answer, or the decision-maker finds no compliant option.
 # Checks:  one `wf.py` gate after each planning stage; every check on the code runs inside the verify loop, so
 #          the fix step can repair it. A failed gate stops the run: fix, then `specify workflow resume <id>`.
-# AI steps: each one is a separate agent session (agents/). 5 fixed (architect, tasks, quality engineer, contracts,
-#           PR) + the spec clarifier if the spec has open questions + the decision-maker if an ADR is open (+ an
+# AI steps: each one is a separate agent session (agents/). 5 fixed (architect, spectator, tasks, contracts, PR)
+#           + the spec clarifier if the spec has open questions + the decision-maker if an ADR is open (+ an
 #           architect update if it chose differently) + the integrator if main moved + 1 per lane + the qa item
 #           (+ the QA step if it left work) + per verify round: the reviews that need rerunning and one fixer per
 #           repo (or one for everything).
@@ -104,8 +107,8 @@ steps:
     timeout: 2400
     prompt: >-
       You are the architect agent (agents/architect/architect.agent.md). Use its architecture-plan skill for
-      {{ steps.feature.output.data.feature_dir }}. Unattended run: don't ask questions; leave open ADRs open with a
-      recommendation. Reply in ≤10 lines.
+      {{ steps.feature.output.data.feature_dir }}, including brief.md for the agents after you. Unattended run: don't
+      ask questions; leave open ADRs open with a recommendation. Reply in ≤10 lines.
 
   - id: plan_gate
     type: shell
@@ -144,7 +147,7 @@ steps:
               You are the architect agent (agents/architect/architect.agent.md). The decision-maker accepted options
               other than your recommendation for {{ steps.decisions_gate.output.data.plan_update_needed }} (see
               {{ steps.feature.output.data.feature_dir }}/decisions/auto-decisions.json). Update plan.md, research.md,
-              data-model.md, contracts/ and scope.json to follow those ADRs as decided. Don't change any ADR. Reply in
+              data-model.md, contracts/, scope.json and brief.md to follow those ADRs as decided. Don't change any ADR. Reply in
               ≤5 lines.
 
           - id: plan_recheck
@@ -152,41 +155,53 @@ steps:
             run: "python3 workflows/benefit-feature/scripts/wf.py plan-gate {{ steps.feature.output.data.feature_dir }}"
             output_format: json
 
-  # ── 3. Tasks, then the quality engineer as its own agent (it judges coverage independently) ──────
+  # ── 3. The spectator plans the tests from the plan as decided; then the tasks are written once ────
+  - id: spectator
+    type: prompt
+    integration: "{{ inputs.integration }}"
+    model: "{{ inputs.test_plan_model }}"
+    timeout: 1800
+    prompt: >-
+      You are the spectator agent (agents/spectator/spectator.agent.md). Use its test-strategy skill for
+      {{ steps.feature.output.data.feature_dir }}: write test-plan.md from brief.md, the spec and the plan as decided.
+      Every case needs an exact Lane / repo, because the tasks step turns each one into a task. If test-plan.md
+      already exists (an earlier run), extend it: keep every existing case and its ID and test name, correct a case
+      only where the spec changed it, and add cases, with the next free TC numbers, for the new or changed
+      requirements. Each quickstart step a person would check in the browser becomes an e2e case (the verify loop's
+      e2e job runs them), not a task. Reply in ≤10 lines.
+
+  - id: test_gate
+    type: shell
+    run: "python3 workflows/benefit-feature/scripts/wf.py test-gate {{ steps.feature.output.data.feature_dir }}"
+    output_format: json
+
   - id: tasks
     type: prompt
     integration: "{{ inputs.integration }}"
     model: "{{ inputs.coding_model }}"
     timeout: 1800
     prompt: >-
-      For {{ steps.feature.output.data.feature_dir }}: follow the speckit-tasks skill to write tasks.md from the plan
-      and the Accepted ADRs (each ADR's "Work this creates" becomes tasks). Tag every task with one lane and its repo:
-      [contracts], [workflows], [agents], [data] or [platform-ui], then [benefit-be] or [benefit-fe]. [contracts] is
-      only the shared changes the lanes build on (packages/domain, OpenAPI paths and schemas, dependencies, lockfiles,
-      Makefile/Procfile), done first and alone, so a [contracts] task never depends on a lane task. Work that has to
-      run after the lanes (regenerating openapi.json, running make check, walking the quickstart, cross-lane tests) is
-      [qa]. Every other task touches only its lane's folders. Mention the FR IDs each task serves; every FR in the
-      spec needs at least one task. Running checks, starting the stack, e2e tests or walking quickstart.md is not a
-      task: the verify loop's jobs do it (check, build, e2e); write the test that proves the step instead. UPDATE MODE when tasks.md already exists (an earlier run of this feature): don't
-      rewrite it. Like the speckit-converge skill, compare it with the spec, the plan and the code already on branch
-      {{ steps.feature.output.data.branch }} in each repo (git -C repos/<repo> diff origin/main...HEAD): keep each [X]
-      task that the code still satisfies; set back to [ ] any task whose code no longer matches the spec or plan, and
-      say why on the task; add new tasks, with the next free numbers, only for what isn't built yet (new or changed
-      requirements, stories and screens). Never renumber or delete a task; mark an open task whose only work is
-      running checks, the stack, e2e or the quickstart [X] with "covered by the verify loop's jobs". Reply in ≤5 lines.
-
-  - id: quality_engineer
-    type: prompt
-    integration: "{{ inputs.integration }}"
-    model: "{{ inputs.judgement_model }}"
-    timeout: 1800
-    prompt: >-
-      You are the quality-engineer agent (agents/quality-engineer/quality-engineer.agent.md). Use its test-strategy
-      skill for {{ steps.feature.output.data.feature_dir }}: write test-plan.md, add the test-first and [qa] tasks
-      to tasks.md, and check the tasks cover the plan (its step 3). If test-plan.md already exists (an earlier run),
-      extend it: keep every existing case and its ID and test name, correct a case only where the spec changed it,
-      and add cases, with the next free TC numbers, for the new or changed requirements. Each quickstart step
-      a person would check in the browser becomes an e2e case (the verify loop's e2e job runs them), not a task. Reply in ≤10 lines.
+      For {{ steps.feature.output.data.feature_dir }}: follow the speckit-tasks skill to write tasks.md, in one pass,
+      from the plan, the Accepted ADRs and test-plan.md. Each ADR's "Work this creates" becomes tasks that name the
+      ADR ID. Every test case in test-plan.md becomes a task that names its TC ID: a test-first task in the case's
+      lane, placed before the implementation task it proves, or a [qa] task for a case whose lane is qa (contract,
+      cross-lane integration, end-to-end and eval tests; they run after all lanes). Tag every task with one lane and
+      its repo: [contracts], [workflows], [agents], [data], [platform-ui] or [qa], then [benefit-be] or [benefit-fe].
+      [contracts] is only the shared changes the lanes build on (packages/domain, OpenAPI paths and schemas,
+      dependencies, lockfiles, Makefile/Procfile), done first and alone, so a [contracts] task never depends on a lane
+      task. Work that has to run after the lanes (regenerating openapi.json, cross-lane tests) is [qa]. Every other
+      task touches only its lane's folders. Mention the FR IDs each task serves; every FR in the spec and every module
+      in plan.md's Project Structure needs at least one task. Running checks, starting the stack, e2e tests or walking
+      quickstart.md is not a task: the verify loop's jobs do it (check, build, e2e). UPDATE MODE when tasks.md already
+      exists (an earlier run of this feature): don't rewrite it. Like the speckit-converge skill, compare it with the
+      spec, the plan, test-plan.md and the code already on branch {{ steps.feature.output.data.branch }} in each repo
+      (git -C repos/<repo> diff origin/main...HEAD): keep each [X] task that the code still satisfies; set back to [ ]
+      any task whose code no longer matches the spec or plan, and say why on the task; add new tasks, with the next
+      free numbers, only for what isn't built yet (new or changed requirements, test cases, stories and screens).
+      Never renumber or delete a task; mark an open task whose only work is running checks, the stack, e2e or the
+      quickstart [X] with "covered by the verify loop's jobs". Before finishing, run python3
+      workflows/benefit-feature/scripts/wf.py tasks-gate {{ steps.feature.output.data.feature_dir }} and fix every
+      problem and warning it reports. Reply in ≤5 lines.
 
   - id: tasks_gate
     type: shell

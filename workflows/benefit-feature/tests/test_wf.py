@@ -44,9 +44,9 @@ c
 tests
 """
 TASKS = """# Tasks
-- [ ] T001 [contracts][benefit-be] Add Deadline model (FR-010-01)
-- [ ] T002 [workflows][benefit-be] Extend deadline activity (FR-010-01)
-- [ ] T003 [platform-ui][benefit-fe] Show deadline (FR-010-02)
+- [ ] T001 [contracts][benefit-be] Add Deadline model (FR-010-01, ADR-010-01)
+- [ ] T002 [workflows][benefit-be] Extend deadline activity (FR-010-01, TC-01 first)
+- [ ] T003 [platform-ui][benefit-fe] Show deadline (FR-010-02, TC-02 first)
 - [ ] T004 [qa][benefit-be] Contract test
 """
 TEST_PLAN = """# Test plan
@@ -73,6 +73,7 @@ class WfCase(unittest.TestCase):
         self.write("decisions/ADR-010-01-store.md", ADR.format(status="Accepted"))
         self.write("scope.json", json.dumps({"lanes": ["workflows-lane", "platform-ui-lane"],
                                              "repos": ["benefit-be", "benefit-fe"]}))
+        self.write("brief.md", "# Brief: 010-demo\n## Requirements\n- FR-010-01, FR-010-02\n")
         self.write("tasks.md", TASKS)
         self.write("test-plan.md", TEST_PLAN)
         for repo in ("benefit-be", "benefit-fe"):
@@ -182,6 +183,7 @@ class Gates(WfCase):
             "Accepted ADR not in plan": ("plan.md", "Targets repos/benefit-be and repos/benefit-fe.\n"),
             "scope repo not in plan": ("plan.md", PLAN.replace(" and repos/benefit-fe", "")),
             "unknown lane": ("scope.json", json.dumps({"lanes": ["magic"], "repos": ["benefit-be"]})),
+            "no brief for the next agents": ("brief.md", ""),
         }
         for label, (rel, text) in cases.items():
             with self.subTest(label):
@@ -257,6 +259,7 @@ class Gates(WfCase):
             "test name not starting with FR": ("test-plan.md", TEST_PLAN.replace("test_FR_010_01_", "test_")),
             "unknown level": ("test-plan.md", TEST_PLAN.replace("| unit | workflows", "| smoke | workflows")),
             "no test plan": ("test-plan.md", ""),
+            "test case without a task": ("tasks.md", TASKS.replace(", TC-02 first", "")),
         }
         for label, (rel, text) in cases.items():
             with self.subTest(label):
@@ -265,6 +268,27 @@ class Gates(WfCase):
                 self.write(rel, text)
                 code, data, _ = self.wf("tasks-gate", FD)
                 self.assertEqual(code, 1, f"{label}: {data}")
+
+    def test_tasks_gate_warns_about_an_accepted_adr_no_task_names(self):
+        self.write("tasks.md", TASKS.replace(", ADR-010-01", ""))
+        code, data, _ = self.wf("tasks-gate", FD)
+        self.assertEqual(code, 0, data)
+        self.assertTrue(any("ADR-010-01" in w for w in data["warnings"]), data)
+
+    def test_test_gate_checks_the_test_plan_before_any_task_exists(self):
+        (self.fd / "tasks.md").unlink()
+        code, data, _ = self.wf("test-gate", FD)
+        self.assertEqual((code, data["cases"], data["by_level"]), (0, 2, {"unit": 2}), data)
+        cases = {
+            "FR without a test case": TEST_PLAN.split("| TC-02")[0],
+            "test name not starting with FR": TEST_PLAN.replace("test_FR_010_01_", "test_"),
+            "no repo": TEST_PLAN.replace("workflows-lane / benefit-be", "workflows-lane"),
+            "no test plan": "",
+        }
+        for label, text in cases.items():
+            with self.subTest(label):
+                self.write("test-plan.md", text)
+                self.assertEqual(self.wf("test-gate", FD)[0], 1, label)
 
 
 AUTO_DECISION = """
@@ -726,7 +750,7 @@ class VerifyLoop(WfCase):
         text = (WF.parents[1] / "workflow.yml").read_text()
         steps = re.findall(r"- id: (\w+)\n(?:(?!- id:).)*?model: \"\{\{ inputs\.judgement_model \}\}\"", text, re.S)
         self.assertEqual(sorted(set(steps)), sorted({"spec_clarifier", "architect", "decision_maker", "architect_update",
-                                                     "quality_engineer", "start_integrator", "integrate", "reviews"}))
+                                                     "start_integrator", "integrate", "reviews"}))
 
     def test_first_round_needs_no_fix(self):
         self.wf("verify-init", FD)
@@ -1093,11 +1117,6 @@ class GitHubActions(WfCase):
         self.assertEqual(data["ready"], ["https://github.com/o/benefit-be/pull/2"])
         self.assertIn("pr ready https://github.com/o/benefit-be/pull/2", self.calls())
         self.assertEqual(self.wf("ci-gate", FD)[0], 0)
-
-    def test_a_run_started_before_the_modes_went_still_marks_ready(self):
-        bin_dir = self.fake_gh(green=True)  # its saved workflow still passes pr_mode: ignored
-        self.assertEqual(self.wf("ci-wait", FD, "ask", path_prefix=bin_dir)[1]["ready"],
-                         ["https://github.com/o/benefit-be/pull/2"])
 
 
 if __name__ == "__main__":

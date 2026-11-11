@@ -4,10 +4,10 @@ Every agent is a separate subagent: its own session and context, started by a wo
 
 | Agent | Does | Writes | Skills |
 |---|---|---|---|
-| [`architect`](architect/architect.agent.md) | plans the feature: technical details, decisions (ADRs), scope; hands product, policy, cost and amendment questions to the decision-maker | `plan.md`, `research.md`, `data-model.md`, `contracts/`, `decisions/`, `scope.json` | `architecture-plan`, `architecture-decision`, `architecture-capabilities` |
+| [`architect`](architect/architect.agent.md) | plans the feature: technical details, decisions (ADRs), scope; hands product, policy, cost and amendment questions to the decision-maker | `plan.md`, `research.md`, `data-model.md`, `contracts/`, `decisions/`, `scope.json`, `brief.md` | `architecture-plan`, `architecture-decision`, `architecture-capabilities` |
 | [`spec-clarifier`](spec-clarifier.agent.md) | answers the spec's open `[NEEDS CLARIFICATION]` questions independently, on the evidence; leaves open only what a person alone can know | the answers in `spec.md` (`## Clarifications`, automated session), `clarifications.json` | — |
 | [`decision-maker`](decision-maker.agent.md) | decides the open ADRs independently, on the evidence; never amends rules | open ADRs' decision, `decisions/README.md`, `decisions/auto-decisions.json` | — |
-| [`quality-engineer`](quality-engineer/quality-engineer.agent.md) | test strategy: every requirement mapped to test cases and QA tasks | `test-plan.md`, test tasks in `tasks.md` | `test-strategy` |
+| [`spectator`](spectator/spectator.agent.md) | test strategy, after the plan and decisions and before the tasks: every requirement mapped to named test cases, each with its lane and repo, so the tasks step writes their tasks in its one pass | `test-plan.md` | `test-strategy` |
 | [`compliance-reviewer`](compliance-reviewer/compliance-reviewer.agent.md) | checks the implementation against the constitution, rules, ADRs, security and data rules | `review/compliance.md`, `review/compliance.json` | `compliance-review` |
 | [`integrator`](integrator.agent.md) | merges `origin/main` into the feature branch when another feature landed; resolves textual and semantic clashes by intent (main wins unless that breaks this feature's requirements) | the merge commit, `decisions/ADR-…-align-with-main.md`, `review/integrate.md` | — |
 | [`backend-reviewer`](backend-reviewer.agent.md) | senior code review of `benefit-be` | `review/code-benefit-be.md`, `review/code-benefit-be.json` | — |

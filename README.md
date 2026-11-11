@@ -6,7 +6,7 @@ Central store for the AI-assisted development assets shared by the Benefit proje
 |---|---|
 | `docs/` | How the workflow works, with diagrams: start with [docs/workflow-architecture.md](docs/workflow-architecture.md) |
 | `workflows/` | `feature.md` (the stages) and the automated workflow `benefit-feature/` (its checks in `scripts/wf.py`, their tests in `tests/`) |
-| `agents/` | The agents, each a separate subagent: spec clarifier, architect, decision-maker, integrator, quality engineer, compliance reviewer, backend and frontend reviewers; see `agents/README.md` |
+| `agents/` | The agents, each a separate subagent: spec clarifier, architect, decision-maker, spectator (test plan), integrator, compliance reviewer, backend and frontend reviewers; see `agents/README.md` |
 | `skills/` | Reusable skills / slash commands (one folder per skill, with `SKILL.md`) |
 | `specs/` | Functional specs and technical plans per feature |
 | `project-rules/` | Rule sets with IDs, mapped to repo paths in `project-rules/README.md` |
@@ -88,9 +88,10 @@ One command takes an approved spec to PRs that are green on GitHub Actions and r
 ```
 CHAIN     sync → prepare (inputs + spec) → SPEC CLARIFIER (if the spec has open questions): answers them on the evidence
           → clarify-gate ─(a question only a person can answer?)→ [you]
-          → ARCHITECT: plan, research, data model, contracts, ADRs, scope → plan-gate
+          → ARCHITECT: plan, research, data model, contracts, ADRs, scope, brief → plan-gate
           → DECISION-MAKER (if an ADR is open): decides it on the evidence → decisions-gate (→ architect updates the plan if needed)
-          → TASKS → QUALITY ENGINEER: test plan, failure paths, QA tasks, checks tasks cover the plan → tasks-gate
+          → SPECTATOR: test plan, failure paths, a lane and repo per case → test-gate
+          → TASKS, once: plan + ADRs + test plan, a task for every case and ADR → tasks-gate
           → branches → INTEGRATOR (if an earlier run's branch is behind main) → contracts (shared models and API, alone)
 PARALLEL  one session per lane: implement (tests first), own unit tests green, self-review against the reviewers' checklist
           + the QA tests (contract, integration, e2e, eval) written beside them
@@ -126,7 +127,7 @@ workflows/benefit-feature/run.sh start 001
 
 There are no modes: the run answers open spec questions and decides open ADRs with its agents (each listed in the PR), and once everything passes it pushes the feature branch, opens draft PRs, fixes GitHub Actions failures and marks the PRs ready for review when all green. Starting the run is your approval to push the feature branch (never `main`).
 
-Optional inputs: `-i review_mode=on_green` (reviews only once the tests pass: fewer tokens, usually one more round), `-i coding_model=opus` (default `sonnet` for tasks, code, fixes and PRs), `-i judgement_model=…` (default `opus` for plan, decisions, test design and reviews), `-i trace_mode=warn`.
+Optional inputs: `-i review_mode=on_green` (reviews only once the tests pass: fewer tokens, usually one more round), `-i coding_model=opus` (default `sonnet` for tasks, code, fixes and PRs), `-i judgement_model=…` (default `opus` for plan, decisions and reviews), `-i test_plan_model=opus` (default `sonnet` for the spectator's test plan), `-i trace_mode=warn`.
 
 **3. Watch it** (terminal 2). It refreshes every 5 s and shows a macOS notification when the run waits for you, fails or finishes; Ctrl+C stops only the view:
 
@@ -168,10 +169,11 @@ workflows/benefit-feature/run.sh cleanup 001       # remove the feature's worktr
 
 | `python3 workflows/benefit-feature/scripts/wf.py …` | Checks |
 |---|---|
-| `plan-gate specs/<NNN-name>` | plan, ADRs and `scope.json`; lists open ADRs |
+| `plan-gate specs/<NNN-name>` | plan, ADRs, `scope.json` and `brief.md`; lists open ADRs |
 | `decisions-gate specs/<NNN-name>` | after the decision-maker: nothing open, each decision recorded |
 | `clarify-gate specs/<NNN-name>` | after the spec clarifier: each answer recorded; open questions left for a person |
-| `tasks-gate specs/<NNN-name>` | task tags, test-plan coverage, `[contracts]` tasks that wait for lane work |
+| `test-gate specs/<NNN-name>` | after the spectator: every FR has a test case, with a valid level, repo and test name |
+| `tasks-gate specs/<NNN-name>` | task tags, a task for every test case (and every Accepted ADR, as a warning), `[contracts]` tasks that wait for lane work |
 | `qa-remaining specs/<NNN-name>` | the `[qa]` and late `[contracts]` tasks left for the QA step after the parallel build |
 | `jobs specs/<NNN-name>` · `job specs/<NNN-name> <job>` | list or run one verify job (`benefit-be:check`, `ownership`, `tasks`, `trace:strict`, …) |
 | `jobs-start specs/<NNN-name>` · `jobs-wait specs/<NNN-name>` | run a round's jobs in the background · wait for them |

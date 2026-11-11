@@ -6,9 +6,10 @@ Exit codes: 0 = pass, 1 = the check failed (the workflow run stops there), 2 = u
 Gates (one after each planning stage; the skills also run them as their self-check):
   prepare     <feature> <trace_mode>            validates the inputs, selects the spec, checks spec.md
   clarify-gate <feature_dir>                    after the spec clarifier: answers recorded; how many questions are still open
-  plan-gate   <feature_dir>                     plan.md, ADRs (decisions/) and scope.json (incl. the feature map's target repos); lists the open ADRs
+  plan-gate   <feature_dir>                     plan.md, ADRs (decisions/), scope.json (incl. the feature map's target repos) and brief.md; lists the open ADRs
   decisions-gate <feature_dir>                  after the decision-maker: none open, each recorded; does the plan need updating?
-  tasks-gate  <feature_dir>                     every task tagged with a lane; test-plan.md covers every FR; the build items
+  test-gate   <feature_dir>                     after the spectator: test-plan.md covers every FR, with valid levels, repos and test names
+  tasks-gate  <feature_dir>                     every task tagged with a lane; every test case and Accepted ADR named by a task; the build items
   qa-remaining <feature_dir>                    after the parallel build: the [qa] and late [contracts] tasks left for the QA step
 
 Verify loop (every check runs here, so the fix step can repair any failure):
@@ -302,6 +303,9 @@ def plan_gate(d):
         if "benefit-fe" in mapped and "platform-ui-lane" not in lanes:
             problems.append("the feature map lists benefit-fe for this feature (its screens), "
                             "so scope.json needs platform-ui-lane, which owns benefit-fe")
+    # brief.md: what the decision-maker and the spectator read instead of the spec, rules and code again.
+    if p and not read(d / "brief.md").strip():
+        problems.append("brief.md missing (architecture-plan step 4)")
     out({**counts, "open": len(open_adrs), "open_adrs": open_adrs, "accepted_adrs": accepted,
          "lanes": lanes, "repos": sc_repos, "problems": problems}, ok=not problems)
 
@@ -355,6 +359,56 @@ def test_cases(d):
     return cases
 
 
+def test_plan_problems(d):
+    """test-plan.md: every case has a known level, a repo, a unique test name that starts with its FR
+    (testing.md), and every FR in the spec has at least one case."""
+    problems, frs = [], spec_frs(d)
+    cases = test_cases(d)
+    if not read(d / "test-plan.md"):
+        problems.append("test-plan.md missing")
+    elif not cases:
+        problems.append("test-plan.md has no TC-<n> rows in its cases table")
+    names = {}
+    for c in cases:
+        if c["level"] not in LEVELS:
+            problems.append(f"{c['id']}: unknown level '{c['level']}'")
+        if not c["repo"]:
+            problems.append(f"{c['id']}: no repo in its 'Lane / repo' column")
+        if not c["name"]:
+            problems.append(f"{c['id']}: no test name")
+        elif c["frs"] and c["level"] != "eval":
+            a, b = c["frs"][0][3:].split("-")
+            if not (c["name"].startswith(f"test_FR_{a}_{b}") or c["name"].startswith(f"FR-{a}-{b}:")):
+                problems.append(f"{c['id']}: test name '{c['name']}' doesn't start with {c['frs'][0]} (testing.md)")
+        if c["name"] and c["name"] in names:
+            problems.append(f"{c['id']}: same test name as {names[c['name']]}")
+        names.setdefault(c["name"], c["id"])
+    covered = {f for c in cases for f in c["frs"]}
+    missing = [f for f in frs if f not in covered]
+    if cases and missing:
+        problems.append(f"requirements without a test case: {', '.join(missing)}")
+    return cases, problems
+
+
+def accepted_adrs(d):
+    """IDs of the feature's Accepted (or auto-decided) ADRs."""
+    ids = []
+    for f in sorted((d / "decisions").glob("ADR-*.md")):
+        m = re.match(r"(ADR-\d{3}-\d{2})", f.name)
+        if m and adr_status(f.read_text()) in ("accepted", "auto_decided"):
+            ids.append(m.group(1))
+    return ids
+
+
+def test_gate(d):
+    """After the spectator: the test plan alone, so a gap is fixed before any task is written."""
+    cases, problems = test_plan_problems(d)
+    levels = {}
+    for c in cases:
+        levels[c["level"]] = levels.get(c["level"], 0) + 1
+    out({"cases": len(cases), "by_level": dict(sorted(levels.items())), "problems": problems}, ok=not problems)
+
+
 def tasks_gate(d):
     problems, warnings = [], []
     t = read(d / "tasks.md")
@@ -384,31 +438,17 @@ def tasks_gate(d):
     unmentioned = [f for f in frs if f not in mentioned]
     if unmentioned:
         warnings.append(f"no task mentions {', '.join(unmentioned)}")
-    # test-plan.md
-    cases = test_cases(d)
-    if not read(d / "test-plan.md"):
-        problems.append("test-plan.md missing")
-    elif not cases:
-        problems.append("test-plan.md has no TC-<n> rows in its cases table")
-    names = {}
-    for c in cases:
-        if c["level"] not in LEVELS:
-            problems.append(f"{c['id']}: unknown level '{c['level']}'")
-        if not c["repo"]:
-            problems.append(f"{c['id']}: no repo in its 'Lane / repo' column")
-        if not c["name"]:
-            problems.append(f"{c['id']}: no test name")
-        elif c["frs"] and c["level"] != "eval":
-            a, b = c["frs"][0][3:].split("-")
-            if not (c["name"].startswith(f"test_FR_{a}_{b}") or c["name"].startswith(f"FR-{a}-{b}:")):
-                problems.append(f"{c['id']}: test name '{c['name']}' doesn't start with {c['frs'][0]} (testing.md)")
-        if c["name"] and c["name"] in names:
-            problems.append(f"{c['id']}: same test name as {names[c['name']]}")
-        names.setdefault(c["name"], c["id"])
-    covered = {f for c in cases for f in c["frs"]}
-    missing = [f for f in frs if f not in covered]
-    if cases and missing:
-        problems.append(f"requirements without a test case: {', '.join(missing)}")
+    # test-plan.md (written by the spectator before the tasks; re-checked in case it was edited since)
+    cases, tp_problems = test_plan_problems(d)
+    problems += tp_problems
+    # The tasks are written once, from the plan and the test plan: every case needs its test-first or [qa]
+    # task, and every Accepted ADR's "Work this creates" a task that names the ADR.
+    untasked = [c["id"] for c in cases if not re.search(rf"\b{re.escape(c['id'])}\b", t)]
+    if t and untasked:
+        problems.append(f"test cases no task names (each needs a test-first or [qa] task): {', '.join(untasked)}")
+    unworked = [a for a in accepted_adrs(d) if t and a not in t]
+    if unworked:
+        warnings.append(f"no task names {', '.join(unworked)} (its 'Work this creates' needs tasks, unless it creates none)")
     # A [contracts] task that has to wait for lane work ("after T020") can't run in the contracts step, which
     # comes before the lanes. The QA step, after the lanes, does it instead, so no fix round is spent on it.
     late = []
@@ -1406,13 +1446,11 @@ def ci_gate(d):
 
 def main(argv):
     cmd, pos = (argv[1], argv[2:]) if len(argv) > 1 else ("", [])
-    one = {"ports-freed": ports_freed, "clarify-gate": clarify_gate, "qa-remaining": qa_remaining, "jobs-wait": jobs_wait, "plan-gate": plan_gate, "decisions-gate": decisions_gate, "tasks-gate": tasks_gate, "verify-init": verify_init, "needs-fix": needs_fix,
+    one = {"ports-freed": ports_freed, "clarify-gate": clarify_gate, "qa-remaining": qa_remaining, "jobs-wait": jobs_wait, "plan-gate": plan_gate, "decisions-gate": decisions_gate, "test-gate": test_gate, "tasks-gate": tasks_gate, "verify-init": verify_init, "needs-fix": needs_fix,
            "review-list": review_list, "behind": behind, "verify-status": verify_status, "final-gate": final_gate, "ci-wait": ci_wait,
            "ci-needs-fix": ci_needs_fix, "ci-gate": ci_gate}
     if cmd in one and len(pos) == 1:
         return one[cmd](fdir(pos[0]))
-    if cmd == "ci-wait" and len(pos) == 2:  # a run started before pr_mode was removed still passes it: ignored
-        return ci_wait(fdir(pos[0]))
     if cmd == "e2e-phase" and len(pos) in (1, 2):
         return e2e_phase(fdir(pos[0]), pos[1] if len(pos) == 2 else "parallel")
     if cmd in ("review-list", "verify-status") and len(pos) == 2:

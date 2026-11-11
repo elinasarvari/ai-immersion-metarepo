@@ -54,14 +54,15 @@ flowchart TB
     sc["Spec clarifier, only if the spec has open questions<br/>answers on the evidence · each answer listed in the PR"]:::ai
     g0["clarify-gate"]:::script
     q1{{"A question only a person can answer?<br/>you answer in spec.md (rare)"}}:::you
-    arch["Architect<br/>plan · research · data model · contracts<br/>ADRs · scope.json"]:::ai
+    arch["Architect<br/>plan · research · data model · contracts<br/>ADRs · scope.json · brief.md"]:::ai
     g1["plan-gate"]:::script
     dm["Decision-maker, only if an ADR is open<br/>decides on the evidence · never amends rules<br/>each decision listed in the PR"]:::ai
     g3["decisions-gate"]:::script
     upd["Architect again<br/>only if another option was chosen"]:::ai
     q2{{"No compliant option?<br/>you decide (rare)"}}:::you
-    tasks["Tasks<br/>tagged by lane"]:::ai
-    qe["Quality engineer<br/>test-plan.md · QA tasks"]:::ai
+    spect["Spectator<br/>test-plan.md · a lane and repo per case<br/>from the brief and the plan as decided"]:::ai
+    gt["test-gate"]:::script
+    tasks["Tasks, written once<br/>plan + ADRs + test plan · tagged by lane<br/>a task for every case and ADR"]:::ai
     g2["tasks-gate"]:::script
     sint["Branches · integrator, only if an earlier<br/>run's branch is behind main"]:::ai
     contracts["Contracts, alone<br/>packages/domain · OpenAPI · dependencies"]:::ai
@@ -98,11 +99,11 @@ flowchart TB
     ready["Ready for review<br/>gh pr ready when all green"]:::script
     cigate["ci-gate<br/>still red after 3 rounds: stop"]:::script
 
-    spec --> sc --> g0 --> arch --> g1 --> dm --> g3 --> tasks --> qe --> g2 --> sint --> contracts --> lanes --> qa --> verify
+    spec --> sc --> g0 --> arch --> g1 --> dm --> g3 --> spect --> gt --> tasks --> g2 --> sint --> contracts --> lanes --> qa --> verify
     spec -- "no open questions" --> g0
     g0 -.-> q1
-    g1 -- "nothing open" --> tasks
-    g3 -. "chose differently" .-> upd -.-> tasks
+    g1 -- "nothing open" --> spect
+    g3 -. "chose differently" .-> upd -.-> spect
     dm -.-> q2
     verify -- "clean" --> final --> pr --> gha
     gha -- "all green" --> ready
@@ -148,9 +149,10 @@ flowchart LR
 |---|---|---|---|---|
 | 0 | Spec (you) | You write the spec with `/speckit-specify` (and `/speckit-clarify` if you want to answer its questions yourself). The run starts from it. | `spec.md` | `prepare` |
 | 0b | Clarify (AI) | Only if the spec has `[NEEDS CLARIFICATION]` markers: the spec-clarifier agent, which didn't write the spec, answers each one on the evidence (the spec's goal, the constitution, the rules, earlier specs, policy sources, the code) and records the answer and when to revisit it. A question only a person can answer stays open for the spec gate. | answered `spec.md`, `clarifications.json` | `clarify-gate` |
-| 1 | Plan (AI) | The architect agent plans against the real code, the constitution and earlier decisions, records significant decisions as ADRs, and decides which lanes and repos are involved. Product, policy, cost, scope and amendment questions stay open, with options and a recommendation. | `plan.md`, `research.md`, `data-model.md`, `contracts/`, `decisions/`, `scope.json` | `plan-gate` |
-| 1b | Decide (AI) | Only if an ADR is open: the decision-maker agent, which didn't plan the feature, decides each one on the evidence and records why and when to revisit. If it chose other than the recommendation, the architect updates the plan. | decided ADRs, `decisions/auto-decisions.json` | `decisions-gate`, `plan-gate` |
-| 2 | Tasks, then QA (AI ×2) | Spec Kit's tasks, each tagged with one lane and repo; then, in its own session, the quality-engineer agent maps every requirement to named test cases and adds test-first and cross-lane QA tasks. | `tasks.md`, `test-plan.md` | `tasks-gate` |
+| 1 | Plan (AI) | The architect agent plans against the real code, the constitution and earlier decisions, records significant decisions as ADRs, and decides which lanes and repos are involved. Product, policy, cost, scope and amendment questions stay open, with options and a recommendation. It ends with `brief.md` (requirements, rules, code and tests involved, open decisions), which the decision-maker and spectator read first. | `plan.md`, `research.md`, `data-model.md`, `contracts/`, `decisions/`, `scope.json`, `brief.md` | `plan-gate` |
+| 1b | Decide (AI) | Only if an ADR is open: the decision-maker agent, which didn't plan the feature, decides each one on the evidence and records why and when to revisit. If it chose other than the recommendation, the architect updates the plan, before the test plan is written. | decided ADRs, `decisions/auto-decisions.json` | `decisions-gate`, `plan-gate` |
+| 1c | Test plan (AI) | The spectator agent, which didn't plan the feature or decide its ADRs, maps every requirement and acceptance scenario to named test cases at the lowest level that proves them, including the failure paths, each with the lane and repo that will own it. It starts from the architect's `brief.md` instead of reading everything again. | `test-plan.md` | `test-gate` |
+| 2 | Tasks, once (AI) | Spec Kit's tasks, written in one pass from the plan, the decided ADRs and the test plan: a test-first task in its lane for each lane case, a `[qa]` task for each cross-lane case, tasks for each ADR's "Work this creates", each tagged with one lane and repo. Nothing adds tasks afterwards. | `tasks.md` | `tasks-gate` |
 | 3 | Contracts (AI) | Feature branches from `origin/main` in the repos in `scope.json` (an existing branch with no commits of its own is fast-forwarded; one with its own work that main has passed goes to the integrator first), then the shared changes every lane depends on, done first and alone. | domain models, OpenAPI, dependencies | verify loop |
 | 4 | Lanes and QA tests (AI ×5) | Each lane implements its own tasks, tests first, in its own folders, and gets its own unit tests green in the same session. At the same time the qa item writes the planned contract, integration, end-to-end and eval tests against the contracts and plan, in the QA test folders only. | code per lane, QA tests, `lanes/<lane>/done.json` | verify loop |
 | 5 | QA step (AI) | Only if there is work left for it: the `[qa]` tasks that needed the lanes' code (in `lanes/qa/blocked.md`) and the late `[contracts]` tasks; it also wires the QA tests to what the lanes built, never weakening an assertion. | tests | `qa-remaining`, verify loop |
@@ -163,16 +165,16 @@ Every AI step is an **agent**: a `*.agent.md` file with its rules (role, scope, 
 
 | Agent | Does | Writes | Skills |
 |---|---|---|---|
-| [Architect](../agents/architect/architect.agent.md) | Turns the spec into a buildable plan; makes the decisions that are its to make; frames the rest with options and a recommendation | plan artefacts, ADRs, `scope.json` | `architecture-plan`, `architecture-decision`, `architecture-capabilities` |
+| [Architect](../agents/architect/architect.agent.md) | Turns the spec into a buildable plan; makes the decisions that are its to make; frames the rest with options and a recommendation | plan artefacts, ADRs, `scope.json`, `brief.md` | `architecture-plan`, `architecture-decision`, `architecture-capabilities` |
 | [Spec clarifier](../agents/spec-clarifier.agent.md) | Answers the spec's open questions independently, on the evidence: product by the spec's goal and earlier features, policy by its sources (else a caseworker decides), data by the most conservative option; leaves open only what a person alone can know | answered `spec.md`, `clarifications.json` | — |
 | [Decision-maker](../agents/decision-maker.agent.md) | Decides the open ADRs independently, on the evidence: product and scope by the spec, policy by its sources, cost by the cheapest compliant option; never amends the constitution or a rule | decided ADRs, `decisions/auto-decisions.json` | — |
-| [Quality engineer](../agents/quality-engineer/quality-engineer.agent.md) | Decides how each requirement is proven: test level, edge cases, synthetic data, eval thresholds | `test-plan.md`, test and QA tasks | `test-strategy` |
+| [Spectator](../agents/spectator/spectator.agent.md) | Decides how each requirement is proven, after the plan and its decisions and before any task: test level, edge cases, synthetic data, eval thresholds, and the lane and repo of each case | `test-plan.md` | `test-strategy` |
 | [Compliance reviewer](../agents/compliance-reviewer/compliance-reviewer.agent.md) | Checks the implementation against the constitution, the rules for each changed path, Accepted ADRs and the test plan | `review/compliance.md` + `.json` | `compliance-review` |
 | [Integrator](../agents/integrator.agent.md) | Merges `origin/main` into the feature branch when another feature has landed, and resolves every clash, textual or semantic (the same collection, migration number, contract or worker defined twice), by intent: main wins unless that breaks one of this feature's requirements | the merge commit, one `ADR-…-align-with-main`, `review/integrate.md` | — |
 | [Backend reviewer](../agents/backend-reviewer.agent.md) | Senior code review of `benefit-be`: bugs, async and MongoDB mistakes, Temporal in practice, security, tests, design | `review/code-benefit-be.md` + `.json` | — |
 | [Frontend reviewer](../agents/frontend-reviewer.agent.md) | Senior code review of `benefit-fe`: state and data bugs, security, accessibility, tests, API-contract fit | `review/code-benefit-fe.md` + `.json` | — |
 
-The decision-maker is separate from the architect on purpose: the agent that framed the options doesn't grade them. Its decisions aren't hidden: each one is in `decisions/README.md` and in a "Decided automatically" section of the PR, with what the architect recommended and when to revisit it. The spec clarifier works the same way for the spec's questions: each answer is in the spec's `## Clarifications` section (an `(automated)` session) and in the same PR section.
+The decision-maker is separate from the architect on purpose: the agent that framed the options doesn't grade them. Its decisions aren't hidden: each one is in `decisions/README.md` and in a "Decided automatically" section of the PR, with what the architect recommended and when to revisit it. The spectator is separate for the same reason: the tests are designed from the spec by an agent that didn't write the plan, and before the tasks, so every task can name the test that proves it and no step goes back to add tasks. The spec clarifier works the same way for the spec's questions: each answer is in the spec's `## Clarifications` section (an `(automated)` session) and in the same PR section.
 
 **Lanes** (workflows, agents, data, platform-ui) are folder ownership, not agents ([backend-architecture.md](../project-rules/backend-architecture.md)). They decide which rules apply (`TW-*`, `AG-*`, `KD-*`, `PL-*`, `FE-*`) and what can run in parallel.
 
@@ -188,27 +190,29 @@ There are no modes, so nothing else stops for you: starting the run is the appro
 ## 6. How it stays correct, and cheap
 
 **Verification**
-- Each check runs once. One gate per planning stage (`prepare`, `plan-gate`, `tasks-gate`); the skills run the same gate as their self-check so they can fix their own output first.
+- Each check runs once. One gate per planning stage (`prepare`, `plan-gate`, `decisions-gate`, `test-gate`, `tasks-gate`); the skills run the same gate as their self-check so they can fix their own output first.
 - Every check on the code runs inside the verify loop, so the fix step can repair it: tests, builds, evals, `e2e`, `main`, `ownership`, open `tasks` (including work a lane recorded in `blocked.md`) and `trace`.
 - `trace` checks the requirements the feature's own spec defines (its `- **FR-<NNN>-xx**` items); IDs the spec only refers to, such as another spec's requirements, are left to that spec, and the task and test-plan checks count the same set. It counts a planned test only where it is defined (a Python `def`, a `test(`/`it(` title, an eval case id), in the repo the test plan names, and not skipped. A name in a comment, a skipped test or a renamed test doesn't count.
 - Parallel lanes share one working tree, so `ownership` fails any file a lane doesn't own.
 - Never a silent pass: a missing or unreadable result counts as blocking, and a job that couldn't run (no `make` target) is a warning in `verify.md` and the PR.
 - Each repo's own GitHub Actions must pass on the PR. CI differs from a laptop (no `.env`, services only in the integration job), so a red check goes to a CI fix step that pushes to the feature branch until it's green (up to 3 rounds). Only then is a draft marked ready for review, so nobody reviews code CI hasn't passed. `trace` also flags a planned unit test placed in a folder whose tests need MongoDB or Temporal (`tests/db/`, `tests/integration/`), the mistake behind feature 001's first red CI.
-- Tasks are checked twice before any code: the quality engineer checks they cover the plan (every ADR's "Work this creates", every module in the Project Structure, every requirement) and adds what's missing; `tasks-gate` checks their tags and coverage, and moves a `[contracts]` task that waits for lane work ("after T020") to the QA step, which runs after the lanes.
+- Tasks are written once and checked by a script before any code: `tasks-gate` fails if a test case in `test-plan.md` has no task, warns if an Accepted ADR or a requirement has none (the tasks step runs it as its self-check and fixes both), checks the lane tags, and moves a `[contracts]` task that waits for lane work ("after T020") to the QA step, which runs after the lanes.
 - The verify loop keeps going while the blocking count falls, up to 6 rounds, and stops early after 2 rounds without progress (`review/history.json`); every fix uses `coding_model`, and every fix adds the test that would have caught its finding.
 - The stack is started by a script, not by an agent: when a feature changes code, the `e2e` job runs benefit-be's `make verify-stack` (`make verify` where the repo doesn't have it yet), which starts MongoDB, Temporal and the app and runs the integration, API and `pnpm e2e` tests the way CI's e2e job does. It skips the static, unit, workflow and contract stages, which the `check` and `build` jobs run beside it. Running the stack, e2e or the quickstart is never a task, so no task stays open because an agent couldn't keep a server up. If a stack port (8000, 8001, 5173, 7233, 8233, 27017) is already taken, for example by your own `make dev`, the job doesn't run, because `make verify` resets the database. It leaves a non-blocking warning that the PR repeats, and CI's e2e job still runs on the PR. `run.sh` lists the taken ports at start.
 - The branch never ships against an outdated main, and the lanes never build on one. Before the lanes, an earlier run's branch that main has passed goes to the integrator, and one with no commits of its own is fast-forwarded. Each verify round, `wf.py behind` fetches `origin/main` (only main, so other features' branches never land in the clone) and, if another feature merged meanwhile, the integrator agent commits the feature's work, merges main and resolves the clashes before the round's checks, which then test the merged code. Main wins (it's merged, may hold data, and other code depends on it): the feature takes main's names and fields, renumbers its migrations after main's, and replaces anything main marks as a stand-in for it. Every resolution goes in one ADR, listed for review in the PR like the decision-maker's. If keeping both sides' requirements is impossible, it aborts the merge, records the clash as `Needs decision`, and the `main` job keeps blocking. The integrator only commits on the feature branch; nothing is pushed before the PR step.
 - The fix step fixes the code to meet the requirement, never the test. For each failing test it first looks up what the test proves: its case in `test-plan.md`, the requirement in `spec.md`, and any ADR. Then it changes the code to meet that requirement. It never weakens a test (expected values, pins, thresholds, names, skips), and changes a test only where it contradicts the spec, plan or an ADR. A failure caused by the machine (a missing tool, an unpinned version, a missing login) is recorded as an environment problem, not patched in the code. Each round's reasoning is in `review/fixes-<scope>.md` (`fixes-benefit-be.md`, `fixes-benefit-fe.md`, or `fixes-all.md`). A fixer reruns the tests that failed and those of the code it changed, plus lint and types; the full suites run in the jobs right after it.
-- Before handing over, each lane reviews its own diff against the reviewer's checklist and the ADRs' "How we verify it", and the quality engineer plans the failure paths reviewers block on (retries running out, every API error body, recorded refusals), so fewer findings reach the reviews at all.
-- Running a feature again (its spec changed) updates instead of starting over: `prepare` clears the earlier run's lane reports, the tasks step keeps each ticked task the code on the branch still satisfies, reopens the ones that no longer match and adds tasks only for what isn't built, and the quality engineer extends `test-plan.md`, keeping existing case IDs.
+- Before handing over, each lane reviews its own diff against the reviewer's checklist and the ADRs' "How we verify it", and the spectator plans the failure paths reviewers block on (retries running out, every API error body, recorded refusals), so fewer findings reach the reviews at all.
+- Running a feature again (its spec changed) updates instead of starting over: `prepare` clears the earlier run's lane reports, the tasks step keeps each ticked task the code on the branch still satisfies, reopens the ones that no longer match and adds tasks only for what isn't built (including new test cases), and the spectator extends `test-plan.md` first, keeping existing case IDs.
 - Jobs run side by side and share each repo's git index (they stage the working tree so a generated-file check means "regenerating changed something"): the first job in saves the real index, the last one out puts it back, under a lock. The reviewers, running at the same time, read the change with `wf.py changes` and `wf.py delta`, which don't use the index. A job that never reports (killed, crashed, timed out) counts as failed.
 - After the code, the `tasks` job in every verify round blocks while any task is open; the tests, `trace` and the reviews prove the ticked ones were really done.
 - The checks are tested themselves: `python3 -m unittest discover -s workflows/benefit-feature/tests` runs the tests for every `wf.py` command plus Spec Kit's validator on `workflow.yml`.
 
 **Token economy**
-- Four agent sessions plan the whole feature (architect; tasks; quality engineer; contracts), plus the spec clarifier only when the spec has open questions, the decision-maker only when an ADR is open, and the architect again only if it chose another option.
+- Four agent sessions plan the whole feature (architect; spectator; tasks; contracts), plus the spec clarifier only when the spec has open questions, the decision-maker only when an ADR is open, and the architect again only if it chose another option. Tasks are written once: no session goes back to add test tasks.
+- The architect's `brief.md` lists the requirements, rules, code and tests it found, so the decision-maker and spectator open a source only when a choice or a case turns on it, instead of each reading the spec, rules and code again.
+- The decision-maker and spectator run one after the other, not side by side: the test plan follows the decisions as made, so nothing is redone when the decision-maker overrules a recommendation.
 - Each lane is one session: it fixes its own unit tests with its context still loaded, instead of in extra fix sessions.
-- Two models: `judgement_model` (default `opus`) for the architect, decision-maker, quality engineer, integrator and reviewers; `coding_model` (default `sonnet`, much faster) for everything that implements, tests or verifies against a written plan: tasks, contracts, lanes, QA tests, every fix, PRs and CI fixes. Tests, builds and checks are scripts and use no model. Override either with `-i coding_model=opus`, for example.
+- Three model inputs: `judgement_model` (default `opus`) for the spec clarifier, architect, decision-maker, integrator and reviewers; `test_plan_model` (default `sonnet`) for the spectator, whose output `test-gate` and the verify loop's `trace` check (set it to `opus` if reviews keep finding cases a test plan should have had); `coding_model` (default `sonnet`, much faster) for everything that implements, tests or verifies against a written plan: tasks, contracts, lanes, QA tests, every fix, PRs and CI fixes. Tests, builds and checks are scripts and use no model. Override either with `-i coding_model=opus`, for example.
 - Later rounds rerun only the reviews with no result, still blocking, or whose repo changed. With the default `review_mode=parallel` a review can also run on a round whose jobs fail, which costs review tokens but saves a round; `on_green` saves those tokens.
 - Re-reviews read only `wf.py delta`, the change since they last looked.
 - Each agent reads only the rule files mapped to the paths it touches, and the diff.
@@ -287,7 +291,7 @@ ai-immersion-metarepo/
 │   ├── spec-clarifier.agent.md
 │   ├── decision-maker.agent.md
 │   ├── integrator.agent.md
-│   ├── quality-engineer/              quality-engineer.agent.md + test-strategy
+│   ├── spectator/                     spectator.agent.md + test-strategy
 │   ├── compliance-reviewer/           compliance-reviewer.agent.md + compliance-review
 │   ├── backend-reviewer.agent.md
 │   └── frontend-reviewer.agent.md

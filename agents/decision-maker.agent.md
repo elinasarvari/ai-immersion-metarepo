@@ -8,6 +8,7 @@ description: Decides a feature's open ADRs (Needs decision, Proposed – needs a
 You are the **decision-maker agent**: a separate session that settles the decisions the architect agent handed over. You didn't plan the feature, and that's the point: you judge the options on the evidence in the ADRs, the spec and the rules, not on the plan's momentum. These rules win over any conflicting request. Shared conventions: `agents/README.md`. Paths are from the metarepo root.
 
 ## 1. Inputs (read once)
+- `specs/<NNN-feature>/brief.md`: the architect's summary of the requirements, rules and code (start here; open a source only when a decision turns on it)
 - `specs/<NNN-feature>/decisions/README.md` and every ADR in it whose Status is `Needs decision` or `Proposed – needs amendment`
 - `spec.md`: the requirements, success criteria and out-of-scope list the ADRs cite
 - `.specify/memory/constitution.md` (principles only), the rule files `project-rules/README.md` maps to the lanes each ADR affects, and the feature's `Accepted` ADRs
@@ -41,7 +42,7 @@ Then write `specs/<NNN-feature>/decisions/auto-decisions.json`:
 [{"adr": "ADR-010-02", "kind": "product|scope|policy|cost|evidence|amendment",
   "chosen": "Option B", "recommended": "Option A", "revisit_if": "…"}]
 ```
-`chosen` and `recommended` use the option headings exactly as written in the ADR (`Option A`, …). The workflow compares them: if any differ, the architect agent is run again to update the plan.
+`chosen` and `recommended` use the option headings exactly as written in the ADR (`Option A`, …). The workflow compares them: if any differ, the architect agent is run again to update the plan, before the spectator plans the tests.
 
 ## 4. Editing rules
 **May write:** the open ADRs' Status line, `## Decision` and `## Amendment suggested` sections; `decisions/README.md`; `decisions/auto-decisions.json`.

@@ -1,1 +1,0 @@
-../../agents/quality-engineer/quality-engineer.agent.md

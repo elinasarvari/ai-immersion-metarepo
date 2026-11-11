@@ -1,6 +1,6 @@
 ---
 name: feature-workflow
-description: Build an existing Benefits Case spec end to end with the Spec Kit workflow engine, each AI step a separate agent - spec clarifier for open spec questions, architect plan, decision-maker for open ADRs, tasks and QA tasks, contracts, lanes and QA tests in parallel, verify loop (fixers per repo, the integrator if main moved, then tests, builds, e2e and script checks in the background while the code and compliance reviews run), draft PRs and GitHub Actions - asking a person only when automation can't decide. Use when the user asks to build, implement, deliver or ship a spec or feature, or to start, resume or check a feature run.
+description: Build an existing Benefits Case spec end to end with the Spec Kit workflow engine, each AI step a separate agent - spec clarifier for open spec questions, architect plan and brief, decision-maker for open ADRs, the spectator's test plan, tasks written once from both, contracts, lanes and QA tests in parallel, verify loop (fixers per repo, the integrator if main moved, then tests, builds, e2e and script checks in the background while the code and compliance reviews run), draft PRs and GitHub Actions - asking a person only when automation can't decide. Use when the user asks to build, implement, deliver or ship a spec or feature, or to start, resume or check a feature run.
 ---
 
 # Feature workflow
@@ -9,10 +9,10 @@ Runs [workflows/benefit-feature/workflow.yml](../../workflows/benefit-feature/wo
 
 ## Start
 
-The spec must already exist (write it with `/speckit-specify` first). There are no modes, so don't ask for one: the spec clarifier answers open spec questions, the decision-maker settles open ADRs, and once everything passes the run pushes the feature branch, opens draft PRs, fixes GitHub Actions failures on the feature branch and marks the PRs ready for review when CI is green. Asking to build or run the feature is the approval to push its feature branch and open PRs; nothing is ever pushed to `main`.
+The spec must already exist (write it with `/speckit-specify` first). There are no modes, so don't ask for one: the spec clarifier answers open spec questions, the decision-maker settles open ADRs, the spectator plans the tests, and once everything passes the run pushes the feature branch, opens draft PRs, fixes GitHub Actions failures on the feature branch and marks the PRs ready for review when CI is green. Asking to build or run the feature is the approval to push its feature branch and open PRs; nothing is ever pushed to `main`.
 
 ```bash
-workflows/benefit-feature/run.sh start <NNN> [-i trace_mode=strict|warn] [-i coding_model=sonnet|opus] [-i judgement_model=opus] < /dev/null
+workflows/benefit-feature/run.sh start <NNN> [-i trace_mode=strict|warn] [-i coding_model=sonnet|opus] [-i judgement_model=opus] [-i test_plan_model=sonnet|opus] < /dev/null
 ```
 
 Always use `run.sh`, never `specify workflow run` directly: it runs the preflight, creates the feature's own git worktree, and passes `.claude/settings.json` to every agent step with `--settings`, which works even if the folder was never trusted. Without it, agent steps can't write and end with "Prompt exited with code 1". Tell the user they can follow the run live with `workflows/benefit-feature/run.sh watch <NNN>` in a second terminal.
@@ -33,8 +33,6 @@ Note the `run_id`. Never pass `spec_verdict` when starting. Tell the user the dr
 
 Help the user answer in the worktree's `spec.md`. Only after their explicit answer: `workflows/benefit-feature/run.sh resume <run_id> -i spec_verdict=approve|reject < /dev/null`. Never answer for them. The only other stop for a person is `decisions_gate` (below), when the decision-maker finds no compliant option.
 
-A run started before the modes were removed may still pause at `approve_decisions` or `approve_pr`. For `approve_decisions`, run the decision-maker agent on the worktree's `decisions/` folder, check `wf.py decisions-gate`, then resume with `-i decision_verdict=approve`; for `approve_pr`, resume with `-i pr_verdict=approve` once `review/verify.md` shows nothing blocking.
-
 ## Failures
 
 `python3 workflows/benefit-feature/scripts/watch.py <run_id> --once` shows every stage, the failed step, its last output and the usual cause (`run.sh status <run_id>` gives the engine's own view; always pass the id, since without one it lists every run). Fix it in the worktree, then `workflows/benefit-feature/run.sh resume <run_id> < /dev/null` (`run.sh` finds the run's worktree by its id, or by the feature number).
@@ -42,7 +40,7 @@ A run started before the modes were removed may still pause at `approve_decision
 | Step | Usually means |
 |---|---|
 | `sync`, `branches` | a repo isn't cloned, or a clone worktree isn't clean or isn't on the feature branch |
-| `feature`, `plan_gate`, `plan_recheck`, `tasks_gate` | a bad input, or the previous AI step's output is incomplete; fix the file it names |
+| `feature`, `plan_gate`, `plan_recheck`, `test_gate`, `tasks_gate` | a bad input, or the previous AI step's output is incomplete (plan or `brief.md`; `test-plan.md`; `tasks.md`, including a test case or ADR no task names); fix the file it names |
 | `spec_check` | the spec clarifier left an answer incomplete in `clarifications.json` (no answer, kind or revisit-if) or the spec no longer passes `prepare`'s checks. Fix the record or the spec, then resume |
 | `decisions_gate` | the decision-maker found no compliant option for an ADR (see `decisions/README.md`), or didn't record a decision fully. Help the user decide it (`architecture-decision` step 9), then resume |
 | `final_gate` | still blocking when the verify loop stopped, after 2 rounds without progress or 6 rounds (a failing job, an open task, a missing or skipped planned test, a file outside its lane, or a review finding); see `review/verify.md` |
