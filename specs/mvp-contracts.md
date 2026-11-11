@@ -54,7 +54,7 @@ denial, coverage_ended, request_for_information            # wait for caseworker
 - `NOTICE_NEEDS_APPROVAL` in `packages/domain/notice.py` says which types wait. The API and the
   worker read the same table.
 - `NoticeStatus`: `pending_approval`, `delivered`.
-- `Notice`: `notice_id`, `case_id`, `household_id`, `notice_type`, `status`, `text`,
+- `Notice`: `id` (stored as `_id`, `uuid5(case_id, notice_type)`; the API calls it `notice_id`), `case_id`, `household_id`, `notice_type`, `status`, `text`,
   `items: list[RequestedItem]` (requests and forms only), `due_case_date: date | None`,
   `created_at`, `delivered_at`, `synthetic`.
 - `RequestedItem`: `item_id`, `kind` (`pay_stub`, `confirm_member`, `confirm_job`,
@@ -76,11 +76,13 @@ VerificationResult:
   needs_review: bool
 
 Finding:
-  finding_id: UUID                 # uuid5(case_id, cause, member_id, job_id) so re-runs are identical
+  finding_id: UUID                 # uuid5(case_id, cause, member_id, job_id, document_id): re-runs give
+                                   # the same ID, and two "different person" stubs differ
   cause: income_mismatch | different_person | conflicting_stubs | identity_mismatch
   member_id: UUID | None
   job_id: UUID | None
   document_id: UUID | None
+  identity: match | no_match | no_record | None   # identity mismatches only
   declared_monthly: Decimal | None
   documented_monthly: Decimal | None
   conversion: str | None           # e.g. "weekly 300.00 × 52 ÷ 12 = 1300.00"
@@ -109,7 +111,7 @@ The routing below is built as `next_step(result, *, request_already_sent)` in
 4. Otherwise → determine.
 
 **No identity record.** If the reference lookup has no record for a member, the check records
-an `identity_mismatch` finding with the text "no identity record". When a caseworker dismisses
+an `identity_mismatch` finding with `identity: no_record`. When a caseworker dismisses
 an `identity_mismatch` finding (with a reason), that member counts as identity verified.
 
 ### Pay stub details (002, FR-002-21)
