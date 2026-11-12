@@ -27,7 +27,7 @@ case "$name" in
 esac
 
 target="$repos_dir/$name"
-if [ -d "$target/.git" ]; then
+if [ -e "$target/.git" ]; then
   echo "Already cloned: $target — pulling latest"
   git -C "$target" pull --ff-only
 elif [ -e "$target" ]; then

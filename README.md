@@ -5,8 +5,8 @@ Central store for the AI-assisted development assets shared by the Benefit proje
 | Folder | Purpose |
 |---|---|
 | `docs/` | How the workflow works, with diagrams: start with [docs/workflow-architecture.md](docs/workflow-architecture.md) |
-| `workflows/` | `feature.md` (the stages) and the automated workflows `benefit-feature/` and `lane-chain/` |
-| `agents/` | Roles (architect, quality engineer, compliance reviewer) and code-review agents; see `agents/README.md` |
+| `workflows/` | `feature.md` (the stages) and the automated workflow `benefit-feature/` (its checks in `scripts/wf.py`, their tests in `tests/`) |
+| `agents/` | The agents, each a separate subagent: spec clarifier, architect, decision-maker, spectator (test plan), integrator, compliance reviewer, backend and frontend reviewers; see `agents/README.md` |
 | `skills/` | Reusable skills / slash commands (one folder per skill, with `SKILL.md`) |
 | `specs/` | Functional specs and technical plans per feature |
 | `project-rules/` | Rule sets with IDs, mapped to repo paths in `project-rules/README.md` |
@@ -83,29 +83,117 @@ Type `/sync-repos` or ask "sync the repos". It brings each clean clone in `repos
 
 ## Automated feature workflow
 
-Full explanation with architecture and pipeline diagrams: [docs/workflow-architecture.md](docs/workflow-architecture.md).
+One command takes an approved spec to PRs that are green on GitHub Actions and ready for review. Separate agents plan, decide, build, test and review; scripts check every step; you're asked only when automation can't decide. Full explanation with diagrams: [docs/workflow-architecture.md](docs/workflow-architecture.md).
 
-Write the spec (`/speckit-specify`), then build it end to end:
+```
+CHAIN     sync → prepare (inputs + spec) → SPEC CLARIFIER (if the spec has open questions): answers them on the evidence
+          → clarify-gate ─(a question only a person can answer?)→ [you]
+          → ARCHITECT: plan, research, data model, contracts, ADRs, scope, brief → plan-gate
+          → DECISION-MAKER (if an ADR is open): decides it on the evidence → decisions-gate (→ architect updates the plan if needed)
+          → SPECTATOR: test plan, failure paths, a lane and repo per case → test-gate
+          → TASKS, once: plan + ADRs + test plan, a task for every case and ADR → tasks-gate
+          → branches → INTEGRATOR (if an earlier run's branch is behind main) → contracts (shared models and API, alone)
+PARALLEL  one session per lane: implement (tests first), own unit tests green, self-review against the reviewers' checklist
+          + the QA tests (contract, integration, e2e, eval) written beside them
+CHAIN     QA step, only for what needed the lanes' code
+VERIFY    while it makes progress, ≤6 rounds: [fixers, one per repo in parallel] → tests, builds, evals, e2e,
+          ownership, tasks, trace in the background, and meanwhile only the reviews that need it → status
+CHAIN     final-gate → draft PRs on feature/NNN-name (never main)
+GITHUB    GitHub Actions, ≤3 rounds: red → CI fix pushes to the feature branch → CI again · all green → ready for review
+```
+
+### Run a feature from the beginning
+
+**0. Once per machine**
 
 ```bash
-specify workflow run workflows/benefit-feature/workflow.yml -i feature=003            # or /feature-workflow in chat
-specify workflow status <run-id>      ·      specify workflow resume <run-id> [-i <gate>_verdict=approve]
+brew install uv pnpm gh                       # plus Claude Code (claude) and Spec Kit (specify)
+gh auth login                                 # the workflow opens PRs and reads GitHub Actions with gh
+skills/clone-repo/clone-repo.sh <benefit-be git url>
+skills/clone-repo/clone-repo.sh <benefit-fe git url>
+git config --local include.path ../.gitconfig # the git create-pr alias
+workflows/benefit-feature/run.sh check        # preflight: tools, gh login, agent permissions, clones (changes nothing)
 ```
 
-```
-CHAIN     pick up spec → spec check ─(open questions?)→ [you]
-          → ARCHITECT: plan, research, data model, contracts, ADRs, scope → checks ─(a decision that's yours?)→ [you]
-          → TASKS + QUALITY ENGINEER: tasks by lane, test plan, QA tasks → checks → branches → contracts
-PARALLEL  one chain per lane: implement (tests first) → lane unit tests → fix
-CHAIN     QA tests (contract, integration, e2e, eval) → ownership check
-VERIFY    ≤3 rounds: tests and builds in parallel → if green: code + compliance reviews in parallel → fix
-CHAIN     traceability → draft PRs (pr_mode=draft) · [you] first (pr_mode=ask) · stop (none) → GitHub Actions
+`.claude/settings.json` (committed) holds the permissions the unattended agent steps need; `run.sh` passes it to every step, so the folder doesn't need to be trusted first. `check` names any rule that's missing.
+
+**1. Write the spec** in Claude Code: `/speckit-specify <what to build>`, then optionally `/speckit-clarify` to answer its `[NEEDS CLARIFICATION]` questions yourself (otherwise the run's spec clarifier answers them, and the PR lists each answer). Commit it: each run builds from the committed workflow, agents and rules.
+
+**2. Start the run** (terminal 1):
+
+```bash
+workflows/benefit-feature/run.sh start 001
 ```
 
-- **People** are asked only for open spec questions, decisions that are theirs, and before pushing with `pr_mode=ask`. By default your review happens on the draft PRs in GitHub.
-- **Verification** is by script after every stage (`workflows/benefit-feature/scripts/wf.py`): spec, plan, decisions, scope, task tags, test plan coverage, file ownership, tests and builds, reviews, requirement traceability and CI. A failed check stops the run; fix it and `resume`.
-- **Tokens:** three AI sessions plan the whole feature (architect; tasks with quality engineering; contracts), reviews only run on green builds, re-reviews read only the change, and every role writes results to files and replies in a few lines (`agents/README.md`).
-- **Before the first run:** `gh auth login`; both repos cloned in `repos/`; and allow the scripts, `git`, `make`, `uv`, `pnpm`, `python3` and `gh` in your Claude Code settings (AI steps run unattended, up to four at once). The engine runs Claude Code; Copilot users follow [workflows/feature.md](workflows/feature.md) by hand.
+There are no modes: the run answers open spec questions and decides open ADRs with its agents (each listed in the PR), and once everything passes it pushes the feature branch, opens draft PRs, fixes GitHub Actions failures and marks the PRs ready for review when all green. Starting the run is your approval to push the feature branch (never `main`).
+
+Optional inputs: `-i review_mode=on_green` (reviews only once the tests pass: fewer tokens, usually one more round), `-i coding_model=opus` (default `sonnet` for tasks, code, fixes and PRs), `-i judgement_model=…` (default `opus` for plan, decisions and reviews), `-i test_plan_model=opus` (default `sonnet` for the spectator's test plan), `-i trace_mode=warn`.
+
+**3. Watch it** (terminal 2). It refreshes every 5 s and shows a macOS notification when the run waits for you, fails or finishes; Ctrl+C stops only the view:
+
+```bash
+workflows/benefit-feature/run.sh watch 001
+```
+
+**4. If it stops**, `watch` shows the step, its last output, the usual cause and the command to continue. Fix what it names, then:
+
+```bash
+workflows/benefit-feature/run.sh resume 001
+workflows/benefit-feature/run.sh resume 001 -i spec_verdict=approve  # only after you answered the spec's open questions
+```
+
+**5. Review and merge** on GitHub. The PR lists the requirements covered, the verify and trace results, and every decision made automatically (ADR, option chosen, the architect's recommendation, when to revisit). Branch protection needs your approval to merge.
+
+**6. After the merge:**
+
+```bash
+skills/sync-repos/sync-repos.sh                    # fast-forward the clones to the new main
+workflows/benefit-feature/run.sh cleanup 001       # remove the feature's worktrees (asks; keeps the branches)
+```
+
+### Helper commands
+
+| Command | What it's for |
+|---|---|
+| `run.sh check` | preflight only; changes nothing |
+| `run.sh start <NNN> [-i k=v …]` | start a feature in its own worktree (`<metarepo>.worktrees/<NNN-name>/`) |
+| `run.sh start --in-place <NNN>` | start in this checkout instead, e.g. to try uncommitted workflow changes |
+| `run.sh prepare <NNN>` | only create or refresh the feature's worktree, to work in it by hand |
+| `run.sh watch [<NNN>\|<run-id>] [--once]` | live progress view; `--once` prints one snapshot |
+| `run.sh status [<NNN>\|<run-id>]` | the engine's own summary of a run |
+| `run.sh resume [<NNN>\|<run-id>] [-i k=v …]` | continue a stopped or paused run |
+| `run.sh worktrees` | each feature worktree: branches, changed files, latest run |
+| `run.sh cleanup <NNN> [--yes]` | remove a feature's worktrees after its PRs merge |
+
+`run.sh` lives in `workflows/benefit-feature/`. The checks it runs are `wf.py` commands, usable by hand from the metarepo root (or the feature's worktree):
+
+| `python3 workflows/benefit-feature/scripts/wf.py …` | Checks |
+|---|---|
+| `plan-gate specs/<NNN-name>` | plan, ADRs, `scope.json` and `brief.md`; lists open ADRs |
+| `decisions-gate specs/<NNN-name>` | after the decision-maker: nothing open, each decision recorded |
+| `clarify-gate specs/<NNN-name>` | after the spec clarifier: each answer recorded; open questions left for a person |
+| `test-gate specs/<NNN-name>` | after the spectator: every FR has a test case, with a valid level, repo and test name |
+| `tasks-gate specs/<NNN-name>` | task tags, a task for every test case (and every Accepted ADR, as a warning), `[contracts]` tasks that wait for lane work |
+| `qa-remaining specs/<NNN-name>` | the `[qa]` and late `[contracts]` tasks left for the QA step after the parallel build |
+| `jobs specs/<NNN-name>` · `job specs/<NNN-name> <job>` | list or run one verify job (`benefit-be:check`, `ownership`, `tasks`, `trace:strict`, …) |
+| `jobs-start specs/<NNN-name>` · `jobs-wait specs/<NNN-name>` | run a round's jobs in the background · wait for them |
+| `review-list specs/<NNN-name>` · `changes`/`delta specs/<NNN-name> <repo>` | which reviews need rerunning · the branch's whole change, or the change since a review last looked |
+| `verify-status specs/<NNN-name>` · `final-gate specs/<NNN-name>` | merge jobs and reviews into `review/verify.md` · is anything still blocking? |
+| `ci-wait specs/<NNN-name> [draft]` · `ci-gate specs/<NNN-name>` | wait for GitHub Actions (failing logs to `review/ci.md`; marks green drafts ready) · did CI pass? |
+
+| Also | |
+|---|---|
+| `python3 -m unittest discover -s workflows/benefit-feature/tests` | the workflow's own tests, plus Spec Kit's validator on `workflow.yml`; run after changing the workflow or `wf.py` |
+| `python3 workflows/benefit-feature/scripts/check_permissions.py .claude/settings.json` | which allow rules the agents lack |
+| `python3 scripts/sync-copilot.py [--check]` | regenerate Copilot's copies after changing `CLAUDE.md`, a skill or an agent |
+| `/review-changes` | the three reviewers on the current changes, outside a run |
+| `/feature-workflow` | start, resume or check a run from Claude Code chat |
+
+Where a run writes: `specs/<NNN-name>/` (plan, `decisions/`, `tasks.md`, `test-plan.md`, `review/verify.md`, `review/trace.md`, `review/ci.md`, `review/prs.json`) and `.specify/workflows/runs/<run-id>/` (the engine's state), both inside the feature's worktree.
+
+- **People** are asked only for a spec question only a person can answer, and an ADR with no compliant option. Everything else is reviewed on the PR.
+- **Verification** (`wf.py`): one gate after each planning stage, every check on the code inside the verify loop so the fix step can repair it, then the reviews, then each repo's GitHub Actions with its own fix loop.
+- **Copilot** users follow the same stages by hand from [workflows/feature.md](workflows/feature.md).
 
 ## Claude Code and GitHub Copilot
 

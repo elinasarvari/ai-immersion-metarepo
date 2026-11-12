@@ -13,6 +13,9 @@
 #   uses for this remote (no `gh auth login` needed). Checks this before pushing anything.
 # - With --no-pr, or after pushing, prints the compare URL so a PR can be opened in the browser.
 set -euo pipefail
+# Run as a git alias, git exports GIT_DIR (in a worktree: the metarepo's .git/worktrees/<name>). Left set, every
+# git command below would act on the metarepo instead of repos/<name>, even after the cd.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
 
 die() { echo "Error: $*" >&2; exit 1; }
 
@@ -42,7 +45,7 @@ case "$body_file" in ""|/*) ;; *) body_file="$PWD/${GIT_PREFIX:-}$body_file" ;; 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 root="$(cd "$script_dir/../.." && pwd -P)"
 dir="$root/repos/$name"
-[ -d "$dir/.git" ] || die "repos/$name is not a git clone (clone it with skills/clone-repo/clone-repo.sh <url>)"
+[ -e "$dir/.git" ] || die "repos/$name is not a git clone (clone it with skills/clone-repo/clone-repo.sh <url>)"
 cd "$dir"
 remote_url="$(git remote get-url origin 2>/dev/null)" || die "repos/$name has no 'origin' remote"
 echo "Repository: repos/$name -> $remote_url"

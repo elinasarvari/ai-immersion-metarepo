@@ -1,6 +1,6 @@
 # ADR-<NNN>-<nn>: <Short decision title>
 
-- **Status:** Accepted | Proposed – needs amendment | Needs decision | Superseded by ADR-…
+- **Status:** Accepted | Accepted – auto-decided | Proposed – needs amendment | Needs decision | Superseded by ADR-…
 - **Date:** YYYY-MM-DD
 - **Feature:** specs/<NNN-feature>/ · **Requirements:** FR-…
 - **Lanes affected:** Workflows | Agents | Knowledge & data | Platform & UI
@@ -43,7 +43,11 @@ We choose **Option …** because … (the deciding criteria, in 2–4 sentences)
 
 For `Proposed – needs amendment`: the rule or principle, its current wording, the proposed wording, and the fallback option if the amendment isn't approved.
 
-For `Needs decision`: the question for the team, the options, and the recommendation.
+For `Needs decision`: the question, the options, and the recommendation, with the evidence someone who didn't plan the feature needs to decide it.
+
+For `Accepted – auto-decided` (set only by the decision-maker agent), end with:
+**Decided by:** decision-maker (automated), YYYY-MM-DD; architect recommended Option …
+**Revisit if:** the observable condition that would make another option better
 
 ## Consequences
 

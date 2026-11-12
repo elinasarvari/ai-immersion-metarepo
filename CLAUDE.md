@@ -12,30 +12,33 @@ Central store for shared AI-assisted development assets (see README.md for folde
   If the clone already exists, the script fast-forward pulls it instead.
 - To check or update the clones (after a fresh checkout, after PRs merge, or before starting work), use the **sync-repos** skill: `skills/sync-repos/sync-repos.sh [--check]`. It only fast-forwards clean clones on `main`, and leaves feature branches and local changes alone.
 - Never clone outside `repos/`, never embed credentials in URLs, and never delete a clone without asking.
+- Feature runs use git worktrees, not extra clones: `run.sh start` makes `../ai-immersion-metarepo.worktrees/<NNN-feature>/`, a worktree of the metarepo on `feature/<NNN-feature>` whose `repos/<name>` are worktrees of the main clones on the same branch. Inside it all paths are as here. The main clones stay free. Remove one only with `run.sh cleanup <NNN>`, after asking.
 - When working inside a cloned repo, follow that repo's own `CLAUDE.md` / rules plus the rule sets that `project-rules/README.md` maps to the paths you touch. Commits for that project are made inside `repos/<name>` and pushed to its own `origin`.
 - The project has two repos: `benefit-be` (API, Temporal worker, agents, rules, RAG, MCP servers, DB, evals, analytics) and `benefit-fe` (React UI).
 
-## Rules, roles, agents and workflows
+## Rules, agents and workflows
 
 - **Rule sets** (`project-rules/`): every rule has an ID (`TW-3`, `AG-6`, …). `project-rules/README.md` maps each repo path to its lane and rule files. Generated code must satisfy them as hard constraints. Lanes (workflows, agents, data, platform-ui) are folder ownership, used for parallel work and rule mapping; three team members rotate between them (`specs/README.md`).
-- **Roles and agents** (`agents/`, summary and shared conventions in `agents/README.md`):
-  - **architect** (role): plans the feature and records significant decisions as ADRs. Skills: `architecture-plan`, `architecture-decision`, `architecture-capabilities`.
-  - **quality-engineer** (role): the test plan, and test and QA tasks. Skill: `test-strategy`.
-  - **compliance-reviewer** (role): checks the implementation against the constitution, rules, ADRs and test plan. Skill: `compliance-review`.
-  - **backend-reviewer**, **frontend-reviewer** (agents): senior code review per repo.
+- **Agents** (`agents/`, summary and shared conventions in `agents/README.md`). Each is a separate subagent with its own context, working through files; the workflow engine (or, in chat, the main session) starts them, in parallel where the work is independent:
+  - **spec-clarifier**: answers a spec's open `[NEEDS CLARIFICATION]` questions on the evidence before planning, each answer recorded for review in the PR; leaves open only what a person alone can know.
+  - **architect**: plans the feature, records significant decisions as ADRs, and writes `brief.md` for the agents after it. Skills: `architecture-plan`, `architecture-decision`, `architecture-capabilities`.
+  - **decision-maker**: decides the open ADRs (product, policy, cost, scope, amendments) independently of the architect, and records each for review in the PR.
+  - **spectator**: the test plan, after the plan and its decisions and before any task, so the tasks are written once with their test tasks. Skill: `test-strategy`.
+  - **compliance-reviewer**: checks the implementation against the constitution, rules, ADRs and test plan. Skill: `compliance-review`.
+  - **integrator**: when another feature lands on main during a run, merges `origin/main` into the feature branch and resolves the clashes (main wins unless that breaks this feature's requirements), recorded in one ADR for the PR.
+  - **backend-reviewer**, **frontend-reviewer**: senior code review per repo.
 
-  A role is `rules/behavior.md` plus `skills/`; whoever runs one of its skills takes it on, bound by that behavior file. Never mark a `Needs decision` or `Proposed – needs amendment` ADR as accepted without the user's explicit answer.
+  An agent is a `*.agent.md` file (its rules), with its own procedures in `<agent>/skills/`. Only the user, or the decision-maker agent (in a workflow run, or when the user asks it to decide), may accept a `Needs decision` or `Proposed – needs amendment` ADR. Nobody changes the constitution or a rule set without all three team members (Governance): the decision-maker picks a compliant option and leaves the amendment as a suggestion.
 - **Workflows** (`workflows/`): `feature.md` describes the stages. `benefit-feature/workflow.yml` runs them from an existing spec with Spec Kit's workflow engine:
-  1. architect plan
-  2. tasks and QA tasks
-  3. contracts
-  4. lanes in parallel (`lane-chain/workflow.yml`), then QA tests
-  5. verify loop: tests and builds in parallel, then code and compliance reviews in parallel, then fix
-  6. traceability
-  7. draft PRs, then GitHub Actions
+  1. the spec clarifier answers open spec questions, then the architect plans and writes the brief, then the decision-maker settles any open ADR
+  2. the spectator's test plan, then tasks, written once from the plan and the test plan (test-first and `[qa]` tasks included)
+  3. contracts, after the integrator merges main into an earlier run's branch that main has passed
+  4. lanes and the QA tests in parallel (one `speckit.implement` session each; a lane gets its own unit tests green), then a QA step only for what needed the lanes' code
+  5. verify loop, while it makes progress (at most 6 rounds; it stops after 2 rounds without progress): fixers from round 2 (one per repo in parallel when every blocker belongs to one repo; every fix on the coding model), the integrator if `origin/main` moved, then tests, builds, evals, e2e and the script checks (branch contains main, ownership, open tasks, traceability) in the background while the code and compliance reviews that need rerunning run (`review_mode=parallel`; `on_green` waits for green jobs)
+  6. final gate, draft PRs, then GitHub Actions
 
-  A script check (`benefit-feature/scripts/wf.py`) follows every stage. It asks a person only for open spec questions, decisions that are theirs, or before pushing with `pr_mode=ask`. Start, resume or check a run with the **feature-workflow** skill. Never answer a gate (`spec_verdict`, `decision_verdict`, `pr_verdict`) unless the user explicitly decided what it shows.
-- **Docs:** `docs/workflow-architecture.md` explains the workflow with Mermaid diagrams. Update it in the same change whenever the workflow, roles, agents or gates change.
+  `benefit-feature/scripts/wf.py` holds every check: one gate after each planning stage, and every check on the code inside the verify loop, so the fix step can repair it. Its tests are in `benefit-feature/tests/` (`python3 -m unittest discover -s workflows/benefit-feature/tests`); run them after changing the workflow or `wf.py`. A run always works one way: agents answer the spec questions and decide the ADRs (each listed in the PR for review), and once everything passes it pushes the feature branch, opens draft PRs, fixes CI and marks them ready. It stops for a person only for a spec question the spec clarifier can't answer safely, or an ADR the decision-maker finds no compliant option for. Start, resume or check a run with the **feature-workflow** skill, which uses `workflows/benefit-feature/run.sh` (`start`, `resume`, `watch`, `status`, `worktrees`, `cleanup`, `check`); never start the engine directly, because `run.sh` creates the feature's worktree and passes the agents' permissions (`.claude/settings.json`) to every `claude -p` step. Never answer the spec gate (`spec_verdict`) unless the user explicitly decided what it shows.
+- **Docs:** `docs/workflow-architecture.md` explains the workflow with Mermaid diagrams. Update it in the same change whenever the workflow, agents or gates change.
 - **Token economy:** follow `agents/README.md`. Read only the mapped rule files and the diff, write results to files, reply briefly, and on re-reviews read only what changed.
 
 ## Keeping Claude Code and Copilot in step
@@ -73,7 +76,7 @@ Rules:
 - Don't edit `.specify/templates` or `.specify/scripts` unless asked. Update them with `specify integration upgrade`.
 - `plan.md` must name the target repo(s) (`repos/<name>`). `/speckit-implement` writes code only inside those clones, never in the metarepo. The one exception is feature 009 (delivery factory), whose plan may also target the metarepo's `scripts/factory/` and `templates/`.
 - For backend work, the "Project Structure" section of `plan.md` must use the layout and import boundaries in `project-rules/backend-architecture.md`. Don't invent a different structure.
-- Plan through the **architecture-plan** skill rather than a bare `/speckit-plan`; it adds the decisions and scope. After `/speckit-tasks`, run the **test-strategy** skill. Tag every task with one lane and its repo (`[contracts]`, `[workflows]`, `[agents]`, `[data]`, `[platform-ui]`, `[qa]`).
+- Plan through the **architecture-plan** skill rather than a bare `/speckit-plan`; it adds the decisions and scope. Before `/speckit-tasks`, run the **test-strategy** skill (the spectator's test plan), so the tasks include a task for every test case. Tag every task with one lane and its repo (`[contracts]`, `[workflows]`, `[agents]`, `[data]`, `[platform-ui]`, `[qa]`).
 - `/speckit-implement`: before each task, read the rule files for its lane. Before any PR, the code reviewers and the compliance review (**review-changes** skill) must have no critical or major findings.
 
 ## Pushing code and opening PRs
@@ -89,11 +92,11 @@ git create-pr <repo-name> --branch feature/<NNN-feature> --message "<conventiona
 
 - It runs inside `repos/<name>` and pushes to that clone's own `origin`, then opens a PR against `main`: with `gh` if it is logged in, otherwise through GitHub's API with the token git already uses. With `--no-pr` it only pushes and prints the compare link.
 - Branch name = Spec Kit feature folder name with a type prefix (`feature/003-user-login`). Use the same branch in every repo the feature touches, with one PR per repo, and link the PRs to each other.
-- Confirm the repo, branch, files and PR title with the user before pushing, unless the push is part of a `benefit-feature` run the user started with `pr_mode=draft`; that start is their approval. Never push to `main`, force-push or skip hooks.
+- Confirm the repo, branch, files and PR title with the user before pushing, unless the push is part of a `benefit-feature` run: starting the run is the approval to push its feature branch and open draft PRs, including the CI fix step's pushes to the same feature branch. Never push to `main`, force-push or skip hooks.
 - The metarepo commits only its own files (`specs/`, feature 009's `scripts/factory/`, `templates/`, rules and skills), never the clones. After the PRs merge, fast-forward the clones with `sync-repos.sh`.
 
 ## Skills
 
-Shared skills live in `skills/<name>/SKILL.md`. A skill that belongs to one agent or role lives only in that folder, as `agents/<agent>/skills/<name>/SKILL.md` (see `agents/architect/`); don't copy or link it into `skills/`. `.claude/skills/` and `.github/skills/` hold one generated link per skill from both places, so both tools find all of them. Inside skill files, write paths from the metarepo root, because they're read through those links.
+Shared skills live in `skills/<name>/SKILL.md`. A skill that belongs to one agent lives only in that folder, as `agents/<agent>/skills/<name>/SKILL.md` (see `agents/architect/`); don't copy or link it into `skills/`. `.claude/skills/` and `.github/skills/` hold one generated link per skill from both places, so both tools find all of them. Inside skill files, write paths from the metarepo root, because they're read through those links.
 
-Agents are `*.agent.md` files anywhere under `agents/`. `.claude/agents/` and `.github/agents/` hold one generated link per agent file, so neither tool loads an agent's or role's `rules/` or `skills/` files as agents. Never link the whole `agents/` or `skills/` folder; run `python3 scripts/sync-copilot.py` instead.
+Agents are `*.agent.md` files anywhere under `agents/`. `.claude/agents/` and `.github/agents/` hold one generated link per agent file, so neither tool loads an agent's `skills/` files as agents. Never link the whole `agents/` or `skills/` folder; run `python3 scripts/sync-copilot.py` instead.

@@ -1,0 +1,1 @@
+../../agents/spectator/spectator.agent.md

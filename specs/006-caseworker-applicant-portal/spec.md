@@ -1,195 +1,58 @@
-# Feature Specification: Caseworker Console and Applicant Portal
+# Feature Specification: Caseworker Console and Applicant Portal (retired)
 
 **Feature Branch**: `feature/006-caseworker-applicant-portal`
 
 **Created**: 2026-11-09
 
-**Status**: Draft
+**Status**: Retired (2026-11-10)
 
-**Input**: User description: "Caseworker console and applicant portal"
+## Why it was retired
 
-## Lane & Dependencies
+This feature held every screen of the product, while the features that provide the data and
+operations behind those screens were backend only. Nothing was visible in the browser until
+almost every feature was built, and no feature could be checked end to end through its screens.
 
-- **Lane**: Platform & UI
-- **Provides**: the screens caseworkers and applicants use, and the operations behind them.
-- **Depends on**: 000 (sign-in, errors), 001 (case states), 010 (review tasks, actions), 011
-  (notices, demo clock), 003 (determinations), 004 (explanations), 007 (redetermination
-  responses). Builds against stub operations returning seed data until those land.
-- **Out of scope**: mobile apps, languages other than English, notifications by email or text,
-  the program metrics page (008).
+Each screen now lives in the feature whose operations it uses, so every feature is built and
+tested from the screen down. The rules every screen follows moved to 000.
 
-## User Scenarios & Testing *(mandatory)*
+## Moved user stories
 
-### User Story 1 - Caseworker works the review queue (Priority: P1)
+| Was | Now |
+|---|---|
+| US1 Caseworker works the review queue | 010 US4; overriding AI output is 002 US6 |
+| US2 Caseworker approves notices | 011 US4 |
+| US3 Applicant applies and uploads documents | 001 US4 (the form), 002 US5 (pay stubs) |
+| US4 Applicant sees status, requests and history | 001 US5 (status), 011 US5 (requests), 004 US5 (history), 007 US5 (renewals) |
+| US5 Applicants see only their own records | FR-000-31, tested on every screen; 001 US5 scenario 2 |
 
-A caseworker sees open review tasks ordered by decision deadline, opens one, sees the finding
-with its evidence and citations, and approves, edits or overrides it with a reason.
+## Moved requirements
 
-**Why this priority**: This is how human control actually happens.
+IDs are not reused. References elsewhere point to the new IDs.
 
-**Independent Test**: With seeded review tasks, sign in as a caseworker, act on each task type
-and confirm the case resumes.
+| Old ID | Now | Topic |
+|---|---|---|
+| FR-006-01 | FR-010-07, FR-010-08 | Review queue and task screen |
+| FR-006-02 | FR-002-19 | Overriding AI output, with a reason, into the evaluation set |
+| FR-006-03 | FR-001-26 (status), FR-011-10 (open requests) | Applicant's view on sign-in |
+| FR-006-04 | FR-004-16 | Applicant's past decisions with explanations |
+| FR-006-05 | FR-000-31 | Household isolation on every screen |
+| FR-006-06 | FR-011-08 | Notice approval |
+| FR-006-07 | FR-001-24 (form), FR-002-17 (pay stub upload) | Application |
+| FR-006-08 | FR-011-10 (request for information), FR-007-19 (redetermination) | Applicant responses |
+| FR-006-09 | FR-001-27 (states, history), FR-002-18 (documents, findings), FR-003-23 (determinations), FR-004-15 (explanations), 010 and 011 (actions, notices) | Case page |
+| FR-006-10 | FR-000-30 | WCAG 2.1 AA |
+| FR-006-11 | FR-000-29 | Synthetic data banner |
+| FR-006-12 | FR-010-08 | Task already actioned |
+| FR-006-13 | FR-011-11 | Advance clock button |
+| FR-006-14 | FR-002-20, FR-004-17 | AI activity |
+| FR-006-15 | FR-011-09 | Applicant's notices |
+| FR-006-16 | FR-007-17 | Upcoming redeterminations |
+| FR-006-17 | FR-007-18 | Start a redetermination from the household page |
+| FR-006-18 | FR-001-25 | Refused application with a link to the open case |
+| SC-006-01 | SC-010-05 | Review in under 2 minutes |
+| SC-006-02 | SC-001-06, SC-002-06 | Apply with a pay stub in under 5 minutes |
+| SC-006-03 | SC-000-10 | Cross-household access refused |
+| SC-006-04 | SC-000-11 | Automated accessibility check |
 
-**Acceptance Scenarios**:
-
-1. **Given** open review tasks, **When** the caseworker opens the queue, **Then** tasks are listed
-   by soonest decision deadline, showing reason, days remaining and at-risk status.
-2. **Given** an open task, **When** the caseworker opens it, **Then** they see the finding, the
-   document values and policy passages cited, and approve, edit and override actions.
-3. **Given** an override, **When** the caseworker submits it, **Then** a reason is required and
-   the action is recorded; an override of AI output (a corrected value or dismissed finding) is
-   also added to the evaluation set.
-4. **Given** a task open for 4 days, **When** a supervisor opens the queue, **Then** the task is
-   flagged as escalated, showing how long it has been open.
-
----
-
-### User Story 2 - Caseworker approves notices (Priority: P1)
-
-A caseworker reviews each drafted request for information, edits it if needed, and approves it
-before it reaches the applicant.
-
-**Why this priority**: No notice reaches an applicant without approval.
-
-**Independent Test**: Approve one draft and edit another; confirm only approved versions appear
-to the applicant.
-
-**Acceptance Scenarios**:
-
-1. **Given** a drafted notice, **When** the caseworker approves it unchanged, **Then** it is
-   delivered to the applicant's portal.
-2. **Given** a drafted notice, **When** the caseworker edits and approves it, **Then** the edited
-   version is delivered and both versions are kept in the case history.
-
----
-
-### User Story 3 - Applicant applies and uploads documents (Priority: P1)
-
-An applicant signs in, submits a Medicaid application with declared household and income, and
-uploads pay stubs.
-
-**Why this priority**: Starts every new case.
-
-**Independent Test**: Sign in as a demo applicant, submit an application with a pay stub and
-confirm a case is opened.
-
-**Acceptance Scenarios**:
-
-1. **Given** a signed-in applicant, **When** they submit a complete application with a pay stub,
-   **Then** they see a confirmation with the case reference and decision deadline.
-2. **Given** an incomplete application, **When** they try to submit, **Then** each missing field is
-   identified and nothing is submitted.
-
----
-
-### User Story 4 - Applicant sees status, requests and history (Priority: P2)
-
-An applicant sees the status of each open case, any open requests for information with due
-dates, and past applications and decisions with explanations.
-
-**Why this priority**: Reduces "what's happening with my case" contacts; shows transparency.
-
-**Independent Test**: Sign in as a returning demo applicant and confirm status, open requests and
-history across years.
-
-**Acceptance Scenarios**:
-
-1. **Given** an applicant with an open request for information, **When** they sign in, **Then**
-   they see what is needed, the due date, and can upload a response.
-2. **Given** an applicant with past decisions, **When** they open their history, **Then** they see
-   each coverage period's decision with its plain-language explanation as recorded at the time.
-3. **Given** an applicant due for redetermination, **When** they sign in, **Then** they see what
-   they need to confirm, if anything, and the deadline.
-
----
-
-### User Story 5 - Applicants see only their own records (Priority: P1)
-
-An applicant can only ever see their own household's information.
-
-**Why this priority**: Privacy is non-negotiable even with synthetic data.
-
-**Independent Test**: Signed in as applicant A, try to open applicant B's case by changing a
-reference; confirm refusal.
-
-**Acceptance Scenarios**:
-
-1. **Given** applicant A is signed in, **When** they request any record belonging to another
-   household, **Then** the request is refused, logged, and reveals nothing about whether the
-   record exists.
-
-### Edge Cases
-
-- Two caseworkers open the same task: the second action is refused with "already actioned by …".
-- An upload is too large or an unsupported type: refused with the allowed sizes and types.
-- A session expires mid-form: the applicant's entries are kept and they are asked to sign in.
-- Keyboard-only and screen reader users can complete every flow.
-
-## Requirements *(mandatory)*
-
-### Functional Requirements
-
-- **FR-006-01**: The review queue MUST list open tasks sorted by decision deadline (for
-  redeterminations, which have none, by coverage end date), showing reason, days remaining or
-  coverage end date, at-risk status, and the reminder and escalation flags (FR-010-02). Each task
-  offers only the actions its reason allows (FR-010-01). It is one shared queue for all
-  caseworkers; supervisors can filter it to escalated tasks.
-- **FR-006-02**: When a caseworker overrides AI output (corrects a value or dismisses a finding),
-  the system MUST require a reason, record it, and store it as an evaluation example read by the
-  evaluation command (FR-002-11).
-- **FR-006-03**: When an applicant signs in, the system MUST show the status of each open case and
-  any open requests for information with their due dates.
-- **FR-006-04**: The system MUST show the applicant's past applications and decisions for every
-  coverage period, with the explanation as recorded at the time.
-- **FR-006-05**: Applicants MUST see only records belonging to their own household; any other
-  request MUST be refused, logged and reveal nothing about whether the record exists.
-  Caseworkers and supervisors can see all cases.
-- **FR-006-06**: AI-drafted and adverse notices MUST be delivered only after caseworker approval;
-  favourable template notices are delivered directly. Edited and original versions MUST both be
-  kept.
-- **FR-006-07**: Applicants MUST be able to submit an application and upload pay stubs (PDF, PNG
-  or JPEG, up to 10 MB each, up to 10 files). The application collects, for each household
-  member: name, date of birth, relationship to the applicant, citizenship or qualifying
-  immigration status (attested), Medicare entitlement (yes or no), and each job with employer, pay
-  frequency and declared monthly gross income, or zero income; plus the household's Illinois
-  address. Each submission carries a reference so a repeated submit opens one case (FR-001-23).
-- **FR-006-08**: Applicants MUST be able to respond to a request for information or a
-  redetermination by uploading documents and confirming details.
-- **FR-006-09**: Caseworkers MUST be able to view a case's full history: states, findings,
-  determinations with their explanations, documents, notices and actions.
-- **FR-006-10**: All screens MUST meet WCAG 2.1 AA.
-- **FR-006-11**: Every screen MUST show a visible "synthetic data" banner.
-- **FR-006-12**: A task already actioned MUST refuse further actions and say who acted.
-- **FR-006-13**: In the demo profile only, supervisors MUST be able to advance a case's clock
-  (FR-011-05) from the case view.
-- **FR-006-14**: Caseworkers MUST be able to see a case's AI activity: each verification and
-  explanation run with its steps, model, provider and cost, every tool call (FR-005-08), each
-  finding with its citations, and any caseworker overrides of it.
-- **FR-006-15**: Applicants MUST see a list of the notices delivered to them, with type and date,
-  and be able to open each one.
-- **FR-006-16**: Caseworkers MUST be able to view upcoming redeterminations (FR-007-09).
-- **FR-006-17**: Caseworkers and supervisors MUST be able to start a household's redetermination
-  on demand from the household view (FR-007-10).
-- **FR-006-18**: An application refused because the household already has an open case or active
-  coverage (FR-001-23) MUST say why and link to that case.
-
-### Key Entities
-
-- **Review queue item**: review task with case reference, reason, days remaining, at-risk flag.
-- **Application**: declared household, income and uploaded documents for a new case.
-- **Applicant view**: open cases, open requests, notices, history by coverage period.
-
-## Success Criteria *(mandatory)*
-
-### Measurable Outcomes
-
-- **SC-006-01**: A caseworker completes a review (open, read evidence, act) in under 2 minutes.
-- **SC-006-02**: A demo applicant submits an application with a pay stub in under 5 minutes.
-- **SC-006-03**: 100% of cross-household access attempts in testing are refused.
-- **SC-006-04**: An automated accessibility check reports zero serious or critical issues on every
-  screen.
-
-## Assumptions
-
-- English only; desktop browser first, usable at phone width.
-- Applicants use seeded demo accounts linked to synthetic households (000, 003).
+Edge cases moved with their stories: "already actioned by …" to 010, upload limits to 002, a
+session expiring mid-form to 001, keyboard and screen reader use to 000.

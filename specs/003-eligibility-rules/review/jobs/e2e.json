@@ -1,0 +1,9 @@
+{
+  "job": "e2e",
+  "status": "warn",
+  "problems": [
+    "e2e didn't run here: port 7233 is in use (temporal pid 57462). Stop that stack to run it locally; CI's e2e job runs it on the PR",
+    "e2e didn't run here: port 8233 is in use (temporal pid 57462). Stop that stack to run it locally; CI's e2e job runs it on the PR",
+    "e2e didn't run here: port 27017 is in use (mongod pid 55098). Stop that stack to run it locally; CI's e2e job runs it on the PR"
+  ]
+}

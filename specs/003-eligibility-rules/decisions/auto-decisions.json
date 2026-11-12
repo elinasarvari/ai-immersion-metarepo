@@ -1,0 +1,16 @@
+[
+  {
+    "adr": "ADR-003-06",
+    "kind": "scope",
+    "chosen": "Option A",
+    "recommended": "Option A",
+    "revisit_if": "004 or 011 lands on main with its explanation store or wider notice types before 003 merges, or they cannot load the generated history files without reshaping them"
+  },
+  {
+    "adr": "ADR-003-07",
+    "kind": "scope",
+    "chosen": "Option A",
+    "recommended": "Option A",
+    "revisit_if": "T023 replaces the stub determination activity (T011 then drops stub_result and household_stub_results), or the data lane wants a different household as demo household C"
+  }
+]

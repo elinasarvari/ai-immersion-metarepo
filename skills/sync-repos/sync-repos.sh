@@ -8,7 +8,8 @@
 # Safety: a clone is only moved when its working tree is clean and it is on the default
 # branch (or detached at a commit already contained in it). Feature branches, local changes and
 # unpushed commits are reported and left alone. Never force, never reset.
-# repos/ holds plain clones (see clone-repo skill) - nothing here is tracked by the metarepo.
+# repos/ holds plain clones (see clone-repo skill) - nothing here is tracked by the metarepo. Inside a feature
+# worktree (workflows/benefit-feature/run.sh) they are git worktrees of those clones, on the feature branch.
 set -uo pipefail
 
 check="" only=()
@@ -37,7 +38,12 @@ if [ -d repos ]; then
     d="${d%/}"
     [ -e "$d/.gitkeep" ] && [ "$(ls -A "$d")" = ".gitkeep" ] && continue
     if [ ! -e "$d/.git" ]; then bad "$d: not a git repo"; continue; fi
-    if [ -f "$d/.git" ]; then bad "$d: looks like a submodule gitlink, expected a plain clone (run: skills/clone-repo/clone-repo.sh to recreate)"; continue; fi
+    if [ -f "$d/.git" ]; then
+      # A feature worktree (workflows/benefit-feature/run.sh) has repos/<name> as git worktrees of the main
+      # clones: fine, and on a feature branch, so the loop below leaves them alone.
+      if grep -q '^gitdir: .*/worktrees/' "$d/.git"; then paths+=("$d"); continue; fi
+      bad "$d: looks like a submodule gitlink, expected a plain clone (run: skills/clone-repo/clone-repo.sh to recreate)"; continue
+    fi
     paths+=("$d")
   done
 fi
@@ -49,6 +55,7 @@ echo "== Syncing repos"
 for p in "${paths[@]}"; do
   echo "-- $p"
   if ! git -C "$p" fetch -q origin; then bad "fetch failed (auth/network?)"; continue; fi
+  [ -n "$check" ] || git -C "$p" worktree prune  # forget worktrees whose folder was deleted by hand
   git -C "$p" remote set-head origin --auto >/dev/null 2>&1 || true
   def="$(git -C "$p" symbolic-ref --short -q refs/remotes/origin/HEAD || echo origin/main)"; def="${def#origin/}"
   target="origin/$def"

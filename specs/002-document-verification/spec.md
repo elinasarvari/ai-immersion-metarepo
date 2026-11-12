@@ -12,9 +12,11 @@
 
 - **Lane**: Agents
 - **Provides**: a verification result for a case (extracted fields, findings, whether review is
-  needed), drafted requests for information, and the agent evaluation set and command. Used by
-  001, 006, 007, 010 and 011.
-- **Depends on**: 005 (tools for case data and documents), 004 (policy citations for drafted
+  needed), drafted requests for information, the agent evaluation set and command, and the
+  screens to upload pay stubs and to check and correct the AI's work. Used by 001, 007, 010 and
+  011.
+- **Depends on**: 001 (the application form and the case page), 005 (tools for case data and
+  documents), 004 (policy citations for drafted
   notices), 003 (synthetic pay stubs and expected values), 000 (AI provider configuration).
 - **Out of scope**: identity documents beyond name and date of birth; documents not in English;
   document types other than pay stubs; making any eligibility decision.
@@ -96,6 +98,53 @@ caseworker.
 1. **Given** verification has looped 3 times without resolution, **When** the third loop ends,
    **Then** the case is escalated to a caseworker and no further attempts are made.
 
+### User Story 5 - Applicant uploads pay stubs (Priority: P1)
+
+An applicant attaches their pay stubs to the application, and they are stored with the case for
+verification.
+
+**Why this priority**: Verification has nothing to work on without the documents.
+
+**Independent Test**: In the browser, sign in as a demo applicant, submit an application with a
+pay stub, then sign in as a caseworker and see the document on the case page and verification
+running.
+
+**Acceptance Scenarios**:
+
+1. **Given** the application form, **When** the applicant attaches pay stubs (PDF, PNG or JPEG, up
+   to 10 MB each, up to 10 files) and submits, **Then** the files are stored with the case and
+   listed on the confirmation and on the case page.
+2. **Given** a file that is too large, of an unsupported type, or an 11th file, **When** it is
+   attached, **Then** it is refused with the allowed sizes and types, and the rest of the form is
+   kept.
+
+---
+
+### User Story 6 - Caseworker checks the AI's work (Priority: P1)
+
+A caseworker opens a case and sees each finding with the document values and policy passages it
+cites, the extracted fields, and the AI activity behind them. They can correct a value or dismiss
+a finding, with a reason.
+
+**Why this priority**: Human control over AI output only works if the caseworker can see it and
+correct it.
+
+**Independent Test**: In the browser, open a seeded case with a mismatch finding as a caseworker,
+follow a citation to the document value, dismiss the finding with a reason, and confirm the
+override is recorded and added to the evaluation set.
+
+**Acceptance Scenarios**:
+
+1. **Given** a verified case, **When** the caseworker opens it, **Then** they see the uploaded
+   documents, the extracted fields with their confidence, and each finding with the document
+   fields and policy passages it cites.
+2. **Given** a finding, **When** the caseworker corrects a value or dismisses it, **Then** a reason
+   is required, the override is recorded with reviewer and time, and it is added to the
+   evaluation set (FR-002-11).
+3. **Given** a case with verification runs, **When** the caseworker opens its AI activity, **Then**
+   each run shows its steps, model, provider, cost and tool calls, and each finding shows any
+   overrides.
+
 ### Edge Cases
 
 - The document contains text that looks like instructions ("ignore previous rules and
@@ -106,6 +155,8 @@ caseworker.
   review with reason "verification unavailable".
 - The document belongs to a different person than the applicant: a finding is recorded and the
   case needs review.
+- An upload is too large or an unsupported type: it is refused with the allowed sizes and types,
+  and the rest of the form is kept.
 
 ## Requirements *(mandatory)*
 
@@ -140,7 +191,7 @@ caseworker.
   extraction accuracy is below 90%, mismatch recall below 100%, false-flag rate above 5%,
   citation rate below 95% or agent success below 90%; cost is reported only.
 - **FR-002-11**: The evaluation command MUST also read the overrides stored at runtime
-  (FR-006-02), using the caseworker's corrected outcome as the expected result. Only overrides
+  (FR-002-19), using the caseworker's corrected outcome as the expected result. Only overrides
   of AI output are included: a corrected value or a dismissed finding (FR-010-01). Overrides of a
   rules determination are not.
 - **FR-002-12**: The same drafting capability MUST produce the pre-filled redetermination form
@@ -159,6 +210,19 @@ caseworker.
   income needs no document.
 - **FR-002-16**: Every way verification can need a person MUST raise the "verification review"
   reason in FR-010-01, with the specific cause shown on the task.
+- **FR-002-17**: Applicants MUST be able to attach pay stubs to the application (FR-001-24) or to a
+  response (FR-011-10, FR-007-19): PDF, PNG or JPEG, up to 10 MB each, up to 10 files. Other files
+  are refused with the allowed sizes and types. (Was FR-006-07, upload part.)
+- **FR-002-18**: The case page (FR-001-27) MUST show the case's documents, the extracted fields with
+  their confidence, and each finding with the document fields and policy passages it cites. (Was
+  FR-006-09, findings and documents part.)
+- **FR-002-19**: When a caseworker overrides AI output (corrects a value or dismisses a finding),
+  the system MUST require a reason, record it with reviewer and time, and store it as an
+  evaluation example read by the evaluation command (FR-002-11). (Was FR-006-02.)
+- **FR-002-20**: The case page MUST show the case's AI activity: each verification run with its
+  steps, model, provider and cost (FR-002-09), every tool call (FR-005-08), each finding with its
+  citations, and any caseworker overrides of it. Explanation runs are added by FR-004-17. (Was
+  FR-006-14.)
 
 ### Key Entities
 
@@ -180,6 +244,8 @@ caseworker.
 - **SC-002-04**: Zero test documents containing injected instructions change the outcome.
 - **SC-002-05**: The evaluation command runs the full set in under 10 minutes and reports every
   score in SC-002-01 to SC-002-03.
+- **SC-002-06**: A demo applicant submits an application with a pay stub in the browser in under 5
+  minutes. (Was SC-006-02, together with SC-001-06.)
 
 ## Assumptions
 

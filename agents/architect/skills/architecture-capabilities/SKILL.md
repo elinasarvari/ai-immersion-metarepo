@@ -5,7 +5,7 @@ description: The software-engineering areas the architect covers for the Benefit
 
 # Architecture capabilities
 
-This skill is part of the architect role (`agents/architect/`). It sets out **what** to examine in each area. **How** a decision is made is in the `architecture-decision` skill (`agents/architect/skills/architecture-decision/SKILL.md`); the role's limits are in `agents/architect/rules/behavior.md`. All paths here are from the metarepo root. You can also use it on its own, for example to check a design or answer "what's good practice for X here".
+This skill belongs to the architect agent (`agents/architect/architect.agent.md`). It sets out **what** to examine in each area. **How** a decision is made is in the `architecture-decision` skill (`agents/architect/skills/architecture-decision/SKILL.md`); the agent's limits are in its agent file. All paths here are from the metarepo root. You can also use it on its own, for example to check a design or answer "what's good practice for X here".
 
 Use it to make an ADR's options complete and its comparison honest. For each area a decision touches, answer its questions in the ADR's Context or Options. Treat every red flag you see as something the decision must resolve, or explicitly accept with a reason.
 

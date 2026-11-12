@@ -5,11 +5,11 @@ description: Make the significant architecture decisions for a feature, or answe
 
 # Architecture decision
 
-When this skill runs, **you take on the architect role** (or keep it, when called from `architecture-plan`). That's true whether a person typed `/architecture-decision` or a workflow step called it. There is no separate architect agent; the role is defined by three files in `agents/architect/` (paths here are from the metarepo root):
+When this skill runs, **you are the architect agent** (`agents/architect/architect.agent.md`), whether a person typed `/architecture-decision`, the agent was started as a subagent, or a workflow step called it. Paths here are from the metarepo root:
 
 | File | What it gives you |
 |---|---|
-| `agents/architect/rules/behavior.md` | Role, scope, responsibilities, evidence rules, editing rules, communication. **Binding while this skill runs.** |
+| `agents/architect/architect.agent.md` | Role, scope, responsibilities, evidence rules, editing rules, communication. **Binding while this skill runs.** |
 | this skill | How to make and record a decision (steps 0–9 below) |
 | `agents/architect/skills/architecture-capabilities/SKILL.md` | What to examine in each engineering area |
 
@@ -17,20 +17,20 @@ The record format is `templates/adr-template.md`.
 
 ---
 
-### 0. Load the role
+### 0. Load the agent
 
-Read `agents/architect/rules/behavior.md` and `agents/architect/skills/architecture-capabilities/SKILL.md` in full before anything else. If either can't be read, stop and say so; don't work from memory of them. Until you hand over (step 9), the behavior rules' scope, evidence and editing rules apply to you.
+Read `agents/architect/architect.agent.md` and `agents/architect/skills/architecture-capabilities/SKILL.md` in full before anything else. If either can't be read, stop and say so; don't work from memory of them. Until you hand over (step 9), the agent file's scope, evidence and editing rules apply to you.
 
 Then find the input:
 - **Feature:** the folder the user names, or `.specify/feature.json`. It needs `spec.md`; `plan.md`, `data-model.md` and `contracts/` are used when they exist.
 - **Single question** with no feature: see "One-off question" at the end.
-- **Missing input** (no spec, repos not cloned): stop and say what's missing (behavior rules, section 6).
+- **Missing input** (no spec, repos not cloned): stop and say what's missing (agent file, section 6).
 
 ---
 
 ### 1. Find the decisions
 
-From `spec.md` and the plan artefacts, list every choice that meets the scope in behavior rules, section 2. For each one, note which areas in `architecture-capabilities` it touches. Out-of-scope choices go into the "For research.md" list.
+From `spec.md` and the plan artefacts, list every choice that meets the scope in agent file, section 2. For each one, note which areas in `architecture-capabilities` it touches. Out-of-scope choices go into the "For research.md" list.
 
 Before deciding anything new, search the decision log:
 
@@ -82,9 +82,10 @@ Rules for choosing:
 
 | Status | When |
 |---|---|
-| `Accepted` | Within the constitution and rules, in the architect role's scope, evidence sufficient |
+| `Accepted` | Within the constitution and rules, in the architect agent's scope, evidence sufficient |
 | `Proposed – needs amendment` | The best option needs a rule or constitution change. Give the rule or principle, current wording, proposed wording, and the fallback option the plan uses meanwhile. |
-| `Needs decision` | A product, policy, cost or scope question, or evidence that can't be obtained now. Give the options and a recommendation. |
+| `Needs decision` | A product, policy, cost or scope question, or evidence that can't be obtained now. Give the options and a recommendation, with the evidence someone who didn't plan the feature needs to decide it. |
+| `Accepted – auto-decided` | Set only by the decision-maker agent, never by the architect |
 | `Superseded by ADR-…` | Set on an older ADR when a new one replaces it |
 
 ### 7. Write the records
@@ -95,8 +96,10 @@ Rules for choosing:
   ```
   # Architecture decisions: <NNN-feature>
 
-  ## Needs your decision
+  ## Needs a decision
   - ADR-…: <question> → Recommendation: <option>
+  ## Decided automatically (review in the PR)
+  - (filled in by the decision-maker agent)
   ## Proposed – needs amendment
   - ADR-…: <rule/principle> → fallback in use: <option>
   ## Decisions
@@ -111,22 +114,22 @@ Rules for choosing:
 
 - [ ] Every in-scope choice has an ADR, or a reference to an earlier one
 - [ ] Each ADR has two or more real options, a filled comparison table, a decision with reasons, consequences per lane, and a verification method
-- [ ] Every factual claim is cited (behavior rules, section 4); judgements are labelled
+- [ ] Every factual claim is cited (agent file, section 4); judgements are labelled
 - [ ] No ADR contradicts an `Accepted` ADR without superseding it
-- [ ] Nothing is `Accepted` that needs a person's decision or an amendment
-- [ ] Only allowed files were written (behavior rules, section 5)
+- [ ] Nothing is `Accepted` that is a product, policy, cost or scope call, or needs an amendment (those stay open for the decision-maker or the user)
+- [ ] Only allowed files were written (agent file, section 5)
 
 ### 9. Report and hand over
 
-1. **Report** in the format in behavior rules, section 6, with **Needs your decision** and **Proposed – needs amendment** first.
-2. **Get the open items answered:**
-   - **`Needs decision`, in chat:** ask the user and wait. When they answer, record it in the ADR: set the status to `Accepted` and write their choice and reason in the Decision section, noting "Decided by <user>, <date>". This is the only way such an ADR becomes `Accepted`.
-   - **`Needs decision`, in an unattended workflow step:** don't ask and don't accept anything. Leave it open; the user answers it at the workflow's decision gate.
-   - **`Proposed – needs amendment`:** the plan uses the ADR's fallback until the amendment is approved. Constitution changes need all three team members (Governance); rule changes need the team at the decision gate.
+1. **Report** in the format in agent file, section 6, with **Needs a decision** and **Proposed – needs amendment** first.
+2. **Get the open items answered.** You never accept them yourself:
+   - **In a workflow run:** don't ask. Leave them open; the decision-maker agent decides them.
+   - **In chat:** ask the user and wait. When they answer, record it in the ADR: set the status to `Accepted` and write their choice and reason in the Decision section, noting "Decided by <user>, <date>". If they say to decide for them, run the decision-maker agent (`agents/decision-maker.agent.md`) as a subagent instead.
+   - **`Proposed – needs amendment`:** the plan uses a compliant fallback. The decision-maker accepts the best compliant option and keeps the amendment as a suggestion; constitution and rule changes need all three team members (Governance), through a PR.
 3. **Hand over.** Return to `architecture-plan` (step 3) if it called you. The plan follows every `Accepted` ADR, uses the fallback of each `Proposed – needs amendment` ADR, and lists open ADRs as open questions.
 
 ---
 
 ## One-off question
 
-Same role (step 0), then steps 2–6 on the single question. Return the ADR in chat. Write a file only if the question belongs to a feature, or the user asks.
+Same agent (step 0), then steps 2–6 on the single question. Return the ADR in chat. Write a file only if the question belongs to a feature, or the user asks.
